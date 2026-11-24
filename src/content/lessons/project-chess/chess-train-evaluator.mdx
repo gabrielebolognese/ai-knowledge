@@ -223,8 +223,9 @@ Measured on the course's test machine (numbers vary by machine and data):
 |---|---|---|---|
 | `--smoke`, 2,255 positions, about 15 s | 0.023 | 0.013 (epoch 5) | keeps falling |
 | 300,000 positions, 20 epochs, about 4 min | 0.0205 | 0.0090 (about epoch 7) | 0.0021 |
+| 1,000,000 positions, 20 epochs, about 19 min | 0.0211 | 0.0085 (epoch 11) | 0.0039 |
 
-In both runs the validation loss falls, reaches a minimum and then rises while the training loss keeps falling. That widening gap is the classic sign of **overfitting**: the network starts memorising its training positions instead of learning rules that carry over to new ones.<Cite id="cs231n-nn3" /> Saving the best-validation epoch limits the damage, but the real fix is more data. One to two million positions should take an estimated 20 to 60 minutes of CPU training.
+In every run the validation loss falls, reaches a minimum and then rises while the training loss keeps falling. That widening gap is the classic sign of **overfitting**: the network starts memorising its training positions instead of learning rules that carry over to new ones.<Cite id="cs231n-nn3" /> Saving the best-validation epoch limits the damage, but the real fix is more data: with a million positions the gap between training and validation loss is much smaller, and the network learns material far better (next section).
 
 ## Sanity checks
 
@@ -235,7 +236,7 @@ A low loss does not prove that the network learned chess. `train.py` therefore a
 - White a queen down: **−343 cp** (clearly negative);
 - mirror check: **exact**.
 
-The queen-up score is well below a queen's usual 900 cp, a sign that 300,000 positions teach material only roughly; the check tests the sign and the order of magnitude. The mirror check plays 1.e4, then flips the board and swaps the colours. Seen from the side to move's chair both positions produce identical features, so their side-to-move scores must match exactly, which from White's point of view means the score is negated.
+The queen-up score is well below a queen's usual 900 cp, a sign that 300,000 positions teach material only roughly; the check tests the sign and the order of magnitude. Trained on 1,000,000 positions, the same checks gave +38, **+861** and **−749** cp: more data, much better material sense. Passing these checks is necessary, not sufficient. The next lesson measures whether the network actually plays better than the hand-written tables. The mirror check plays 1.e4, then flips the board and swaps the colours. Seen from the side to move's chair both positions produce identical features, so their side-to-move scores must match exactly, which from White's point of view means the score is negated.
 
 <Callout type="warning">
 Sign bugs are the most common failure in this project: a White-relative score fed into a side-to-move search makes Black play for White. If the queen-up check comes out negative, look for a sign error before touching the network.

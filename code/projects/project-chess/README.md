@@ -40,8 +40,8 @@ python play.py --eval material # play the classic engine
 ## The full pipeline
 
 ```bash
-python data.py --positions 1000000     # streams ~1.7 M records, keeps ~1 M quiet positions (network-bound, ~25 min)
-python train.py --epochs 20            # CPU training, roughly 1 min per epoch per million positions
+python data.py --positions 1000000     # streams ~1.7 M records, keeps ~1 M quiet positions (network-bound, ~20 min)
+python train.py --epochs 20            # CPU training, roughly 1 min per epoch per million positions (1 M: ~19 min)
 python bench.py --speed                # compare evaluators
 python bench.py --match pst --games 100 --movetime 200   # does the network beat the hand-written tables?
 python play.py                         # play the network engine
@@ -58,7 +58,7 @@ The engine is a Python script, so a GUI starts it as `python uci.py`. Use the fu
 - **[En Croissant](https://encroissant.org/)** (free, open source, Windows/macOS/Linux): *Engines → Add new → Local*, then pick `minifish.bat` (Windows) or `minifish.sh` (macOS/Linux, run `chmod +x minifish.sh` first).
 - **[fastchess](https://github.com/Disservin/fastchess)** (command line, for matches): `fastchess -engine cmd=minifish.bat name=MiniFish -engine cmd=stockfish name=SF option.UCI_LimitStrength=true option.UCI_Elo=1320 -each tc=60+0.6 -rounds 50 -repeat -concurrency 2`. Check the protocol first with `fastchess --compliance minifish.bat`.
 
-UCI options: `Eval` (auto / nn / material), `EvalFile` (default `checkpoints/evaluator.npz`), `Accumulator` (incremental first layer), `Move Overhead` (ms kept in reserve, default 100), `Hash` (transposition-table entries).
+UCI options: `Eval` (auto / nn / material), `EvalFile` (default `checkpoints/evaluator.npz`), `Accumulator` (incremental first layer, on by default), `Move Overhead` (ms kept in reserve, default 100), `Hash` (transposition-table entries).
 
 ## Testing against Stockfish
 
@@ -75,7 +75,16 @@ python bench.py --match stockfish --stockfish path/to/stockfish --sf-elo 1320 --
 
 - **Speed:** python-chess move generation is pure Python, so this engine searches thousands of nodes per second. Stockfish searches tens of millions per second on a desktop CPU. Expect depth 4-6 at a few seconds per move.
 - **Strength:** the engine plays legal, tactically aware chess and finds short mates, but **it will lose every game against full-strength Stockfish.** Weakened Stockfish (Skill Level 0, UCI_Elo 1320) is the realistic yardstick. Measure your own numbers with `bench.py` and report them with their error bars: 100 games give about ±70 Elo.
-- **The network:** with a few hundred thousand training positions it learns material and simple positional ideas. It is slower per node than the piece-square tables, so it has to be better per node to win. More data (1-5 M positions) and longer training help most. See the "Plugging the network into search" lesson for measured numbers.
+- **The network:** it plays legal, sensible chess, but in our tests it was **weaker than the hand-written tables**. Measured on one laptop at 0.2-0.3 s per move:
+
+  | Engine | Opponent | Result | Elo difference (95 % interval) |
+  |---|---|---|---|
+  | NN, 1 M Lichess positions | material + PST engine | +8 =0 −22 (30 games) | −176 (−366 to −53) |
+  | NN, 2 M Lichess positions | material + PST engine | +6 =5 −19 (30 games) | −161 (−316 to −51) |
+  | material + PST engine | Stockfish 19, UCI_Elo 1320 | +7 =2 −1 (10 games) | +241 (+66 to no upper bound) |
+  | NN, 1 M Lichess positions | Stockfish 19, UCI_Elo 1320 | +4 =2 −4 (10 games) | 0 (−217 to +217) |
+
+  Smaller nets undervalue material in the unbalanced positions a search explores, because human-game analyses rarely contain them (removing a rook cost 48 cp in the 300 k net's eyes, 221 cp at 1 M and 593 cp at 2 M). At 2 M positions material is roughly right, but positional judgement in unfamiliar positions and a slower search (about 5,000-6,000 vs 7,000-12,000 nodes/s) still cost it games. Things that help: more data (5 M positions or more), positions from your own engine's games scored by Stockfish through python-chess `engine.analyse`, and richer NNUE-style features. These are small samples: run your own matches and report the error bars.
 
 ## Licences
 

@@ -284,7 +284,16 @@ SPRT is like testing whether a coin is fair by flipping it only until you are co
 
 ## Honest expectations
 
-The project's research gives strength ranges for each stage, and they are estimates, not measurements: about 1300 to 1600 for the piece-square engine with ordering, quiescence, iterative deepening and a transposition table, and a further +50 to +250 Elo for the trained network. Treat them as a guess to beat or disprove. {/* TODO-MEASURED: result of `python bench.py --match stockfish --sf-elo 1320 --games 50` (and Skill Level 0) for the network engine: W/D/L, Elo difference, 95% interval, rough rating on the CCRL-anchored scale. */}
+The project's research gives strength ranges for each stage, and they are estimates, not measurements: about 1300 to 1600 for the piece-square engine with ordering, quiescence, iterative deepening and a transposition table, and a further +50 to +250 Elo for the trained network. Treat them as a guess to beat or disprove.
+
+The course's test runs played short matches against Stockfish 19 with `UCI_LimitStrength` and `UCI_Elo 1320`, at 0.3 s per move for both sides:
+
+| Engine | Games | Wins / draws / losses | Elo difference (95 % interval) | Rough rating on Stockfish's scale |
+|---|---|---|---|---|
+| Piece-square tables | 10 | 7 / 2 / 1 | +241 (+66 to no upper bound) | about 1560 |
+| Network, 1 M Lichess positions | 10 | 4 / 2 / 4 | 0 (−217 to +217) | about 1320 |
+
+Read these with care. Ten games give intervals hundreds of points wide, and Stockfish calibrates `UCI_Elo` at 120 s + 1 s per game, not at 0.3 s per move.<Cite id="sf-uci-commands" /> The results agree in direction with the direct match in the previous lesson, where the network lost to the tables. The piece-square result falls inside the research's 1300 to 1600 estimate; the network's does not yet show the hoped-for gain. Against Skill Level 0, the piece-square engine won 2 of 2 test games, and a 100 % score has no finite Elo estimate.
 
 Any number you produce lives on Stockfish's CCRL-anchored engine scale. It is not a FIDE or Lichess rating; Stockfish's FAQ notes that comparing engine ratings with FIDE Elo "has become virtually impossible".<Cite id="sf-faq" /> To measure your own numbers, report the anchor, the time control, the number of games, the W/D/L counts and the 95 % interval, and say what machine you used. Never quote the single Elo value alone.
 

@@ -76,6 +76,19 @@ sources:
     url: https://github.com/thomasahle/sunfish
     accessed: 2026-11-24
     type: code
+  - id: lichess-db
+    title: lichess.org open database (evaluations, CC0)
+    publisher: Lichess
+    url: https://database.lichess.org/
+    accessed: 2026-11-24
+    type: dataset
+  - id: python-chess-engine
+    title: python-chess engine communication (UCI client)
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/engine.html
+    accessed: 2026-11-24
+    type: docs
 exercises:
   - id: chess-nn-search-capture-columns
     type: numeric
@@ -194,7 +207,7 @@ The fix in `eval_nn.py` is to keep **two** accumulators, one built from White's 
 
 The accumulator gives about 1.2× more nodes per second, at the low end of the 1.2-2× range one should expect in Python. The column sum was never the main cost: python-chess move generation and the Python interpreter dominate, and the accumulator does not touch them. In compiled code with SIMD instructions the same idea is decisive, which is why Stockfish uses it.<Cite id="nnue-doc" />
 
-The network is also slower per node than the tables, just as Stockfish's FAQ says of NNUE versus its old evaluation.<Cite id="sf-faq" /> A slower evaluator searches less deeply in the same time, so the network must judge positions well enough to make up for it. Only a match can tell.
+The network is also slower per node than the tables, just as Stockfish's FAQ says of NNUE versus its old evaluation.<Cite id="sf-faq" /> A slower evaluator searches less deeply in the same time, so the network must judge positions better to make up for it.
 
 ## Does the network beat the tables?
 
@@ -204,11 +217,37 @@ The command
 python bench.py --match pst --games 100 --movetime 200
 ```
 
-plays 100 games at 0.2 seconds per move between the network engine and the piece-square engine. The games cycle through eight short openings, each played with both colours, which cancels most of the advantage a particular opening gives. A 100-ply game takes about 20 seconds at this speed, so the match runs for roughly half an hour or more. The script prints a running score, then a line such as `Elo difference +X (95% interval lo to hi), likelihood of superiority Y%`.
+plays 100 games at 0.2 seconds per move between the network engine and the piece-square engine. Eight short openings are each played with both colours, which cancels most opening bias. The script prints a running score, then a line such as `Elo difference +X (95% interval lo to hi), likelihood of superiority Y%`.
 
 Read it in three steps. The score $s$ is wins plus half the draws, divided by the number of games, and the Elo difference is $400 \log_{10}(s/(1-s))$.<Cite id="cpw-match-stats" /> The 95 % interval is wide: at 100 games it spans roughly ±70 Elo around a 50 % score, so if it includes 0 the match has not shown which engine is stronger. The *likelihood of superiority* (LOS) is the probability that the network engine really is the stronger one, computed from wins and losses only.<Cite id="cpw-match-stats" />
 
-The research estimate for this step is a gain of +50 to +250 Elo over the piece-square engine; it is an estimate, not a measurement. One published data point supports the range: the small Python engine Sunfish reports that its 4 kB NNUE variant measured about +200 Elo over its classic version at tournament time controls.<Cite id="sunfish" /> {/* TODO-MEASURED: result of `python bench.py --match pst --games 100 --movetime 200` with the 300k-position network (W/D/L, Elo difference, 95% interval, LOS). */}
+The research estimate for this step is a gain of +50 to +250 Elo over the piece-square engine; it is an estimate, not a measurement. One published data point supports the range: the small Python engine Sunfish reports that its 4 kB NNUE variant measured about +200 Elo over its classic version at tournament time controls.<Cite id="sunfish" />
+
+### What the test runs measured
+
+The course's own test runs did **not** reproduce that gain. Against the piece-square engine, at 0.2 s per move:
+
+| Network | Games | Result for the network | Elo difference (95 % interval) |
+|---|---|---|---|
+| 300,000 positions | 8 (stopped early) | 0 wins, 0 draws, 8 losses | not estimable from a 0 % score |
+| 1,000,000 positions | 30 | 8 wins, 0 draws, 22 losses | −176 (−366 to −53), LOS 1 % |
+| 2,000,000 positions | 30 | 6 wins, 5 draws, 19 losses | −161 (−316 to −51), LOS 0 % |
+
+Even at an equal fixed depth of 3 plies, where speed plays no part, the 1-million-position network scored 2.5 out of 16. So the handicap is judgement, not only speed.
+
+A simple probe shows part of the reason. Removing one White piece from a quiet middlegame position should cost roughly its value. The hand-written tables say −110 (pawn), −330 (knight), −500 (rook) and −895 (queen):
+
+| Network | Pawn | Knight | Rook | Queen |
+|---|---|---|---|---|
+| 300,000 positions | −24 | −77 | −48 | −444 |
+| 1,000,000 positions | −36 | −108 | −221 | −751 |
+| 2,000,000 positions | −82 | −513 | −593 | −817 |
+
+The smaller networks undervalued pieces, so the search traded them away. Lichess analyses come mostly from human games: in the 300,000-position sample only about 8 % of the quiet positions had a material imbalance of 2.5 pawns or more, yet a search spends much of its time in such positions.<Cite id="lichess-db" /> At 2 million positions material is roughly right, but the network still loses. What remains is weaker positional judgement in unfamiliar positions, and a search that is slower per node. Stockfish's networks are trained on billions of positions, many of them from engine games.<Cite id="nnue-doc" />
+
+<Callout type="note">
+These are small matches on one machine, not a verdict on neural evaluation. Ways to close the gap, by effort: train on 5 million positions or more; add positions from your own engine's games, scored with Stockfish through python-chess's `engine.analyse`; and use a richer feature set or two concatenated perspectives as NNUE does. Judge each change by a match, not the validation loss.<Cite id="python-chess-engine" />
+</Callout>
 
 <Exercise id="chess-nn-search-match-elo" />
 
@@ -231,3 +270,4 @@ Run `python bench.py --accumulator`: it should report about 2.3 column updates p
 - NNUE (Nasu, 2018) updates the first layer incrementally: 2 operations for a quiet move, 3 for a capture, 4 for castling.
 - A side-to-move network needs two accumulators, one per colour, which is the reason real NNUE has two perspectives.
 - In Python the accumulator gives about 1.2× (4,330 to 5,146 nodes/s), and a 100-game match measures strength only to about ±70 Elo.
+- Measure, don't assume: in the course's tests networks trained on 1 and 2 million Lichess positions still lost to the hand-written tables (about −160 to −180 Elo over 30 games).
