@@ -1,0 +1,36 @@
+---
+// Mark-complete toggle (C10). State comes from the progress store via [data-lesson-toggle]
+// (src/scripts/progress-ui.ts). `primary` = the one the M shortcut toggles.
+interface Props { slug: string; size?: 'lg' | 'sm'; primary?: boolean; }
+const { slug, size = 'lg', primary = false } = Astro.props;
+---
+<button type="button" class:list={['mark', `mark--${size}`]} data-lesson-toggle={slug} data-primary={primary ? '' : undefined}
+  aria-pressed="false" data-label-todo={size === 'lg' ? 'Mark lesson complete' : 'Mark complete'}
+  data-label-done={size === 'lg' ? 'Completed · Undo' : 'Completed · Undo'}>
+  <svg class="mark__icon" viewBox="0 0 24 24" aria-hidden="true">
+    <circle class="mark__circle" cx="12" cy="12" r="9.5" />
+    <path class="mark__check" d="M7.5 12.4l3 3 6-6.4" />
+  </svg>
+  <span data-label>{size === 'lg' ? 'Mark lesson complete' : 'Mark complete'}</span>
+  {primary && <kbd class="mark__kbd" aria-hidden="true">M</kbd>}
+</button>
+<style>
+  .mark {
+    display: inline-flex; align-items: center; gap: var(--s-3); cursor: pointer;
+    border-radius: var(--r-sm); border: 1px solid var(--accent); background: var(--accent); color: var(--ink-inverse);
+    font-weight: 600; font-size: var(--t-ui); box-shadow: var(--sh-accent);
+    transition: background-color var(--d-base) var(--ease-out), color var(--d-base), border-color var(--d-base), transform var(--d-fast), box-shadow var(--d-fast);
+  }
+  .mark:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .mark--lg { min-height: 48px; min-width: 240px; padding: 0 var(--s-5); }
+  .mark--sm { min-height: 40px; width: 100%; padding: 0 var(--s-4); font-size: var(--t-small); justify-content: center; }
+  .mark__icon { width: 22px; height: 22px; flex: none; }
+  .mark__circle { fill: none; stroke: currentColor; stroke-width: 1.75; transition: fill var(--d-base); }
+  .mark__check { fill: none; stroke: var(--success-soft); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 16; stroke-dashoffset: 16; transition: stroke-dashoffset var(--d-base) var(--ease-out) 80ms; }
+  .mark[aria-pressed="true"] { background: var(--success-soft); color: var(--success); border-color: var(--success); box-shadow: none; }
+  .mark[aria-pressed="true"]:hover { background: var(--success-soft); }
+  .mark[aria-pressed="true"] .mark__circle { fill: var(--success); stroke: var(--success); }
+  .mark[aria-pressed="true"] .mark__check { stroke-dashoffset: 0; }
+  .mark__kbd { background: rgb(255 255 255 / 0.15); color: inherit; border-color: rgb(255 255 255 / 0.4); }
+  .mark[aria-pressed="true"] .mark__kbd { background: var(--surface); border-color: var(--success); }
+</style>

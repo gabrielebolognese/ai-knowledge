@@ -1,0 +1,99 @@
+---
+/**
+ * Shows a companion-code file from code/ (imported with ?raw), syntax-highlighted,
+ * with a filename tab, a Copy button and a link to the file on GitHub.
+ * MDX:
+ *   <CodeFile path="code/samples/neuron.py" />
+ *   <CodeFile path="code/samples/neuron.py" lines="5-20" highlight="8,12-13" title="The forward pass" />
+ * `lines` = range shown (1-based, inclusive). `highlight` uses the ORIGINAL file's line numbers.
+ * The validator checks that the path exists and that the range fits the file.
+ */
+import { Code } from 'astro:components';
+
+interface Props { path: string; lines?: string; highlight?: string; lang?: string; title?: string; }
+const { path, lines, highlight, title } = Astro.props;
+
+const files = import.meta.glob<string>(
+  ['/code/**/*.{py,txt,md,toml,cfg,ini,json,yaml,yml,sh,ps1,bat,ipynb,js,ts,c,cpp,h}', '!/code/**/data/**', '!/code/**/.venv/**', '!/code/**/checkpoints/**'],
+  { query: '?raw', import: 'default' },
+);
+
+const key = '/' + path.replace(/\\/g, '/').replace(/^\.?\//, '');
+const loader = files[key];
+if (!loader) throw new Error(`<CodeFile path="${path}"> not found (looked for ${key})`);
+const source = (await loader()).replace(/\r\n/g, '\n').replace(/\n$/, '');
+const all = source.split('\n');
+
+let start = 1;
+let end = all.length;
+if (lines) {
+  const m = /^(\d+)\s*-\s*(\d+)$/.exec(lines.trim());
+  if (!m) throw new Error(`<CodeFile lines="${lines}"> must look like "10-40"`);
+  start = Math.max(1, Number(m[1]));
+  end = Math.min(all.length, Number(m[2]));
+}
+const code = all.slice(start - 1, end).join('\n');
+
+const hl = new Set<number>();
+for (const part of (highlight ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+  const [a, b] = part.split('-').map(Number);
+  for (let i = a; i <= (b || a); i++) hl.add(i);
+}
+
+const ext = path.split('.').pop()?.toLowerCase() ?? '';
+const langMap: Record<string, string> = { py: 'python', md: 'markdown', yml: 'yaml', sh: 'bash', ps1: 'powershell', bat: 'bat', txt: 'plaintext', cfg: 'ini', ipynb: 'json' };
+const lang = (Astro.props.lang ?? langMap[ext] ?? ext) as any;
+const fileName = path.split('/').pop();
+const repoUrl = `https://github.com/gabrielebolognese/ai-knowledge/blob/main/${path.replace(/^\.?\//, '')}${lines ? `#L${start}-L${end}` : ''}`;
+const transformers = [
+  {
+    line(node: any, line: number) {
+      if (hl.has(line + start - 1)) (this as any).addClassToHast(node, 'hl');
+    },
+  },
+];
+---
+<figure class="codefile" data-codefile>
+  <figcaption class="codefile__bar">
+    <span class="codefile__name">
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5.5Z" /><path d="M9 1.5v4h4" /></svg>
+      <code>{fileName}</code>
+      {lines && <span class="muted">lines {start}–{end}</span>}
+      {title && <span class="codefile__title">{title}</span>}
+    </span>
+    <button class="btn btn-ghost btn-sm" type="button" data-copy-code>Copy</button>
+  </figcaption>
+  <Code code={code} lang={lang} theme="css-variables" transformers={transformers} />
+  <p class="codefile__foot"><span>Run it yourself:</span> <code>{path}</code> · <a href={repoUrl}>View on GitHub</a></p>
+  <textarea class="sr-only" tabindex="-1" aria-hidden="true" data-code-source>{code}</textarea>
+</figure>
+<script>
+  document.querySelectorAll<HTMLElement>('[data-codefile]').forEach((fig) => {
+    const btn = fig.querySelector<HTMLButtonElement>('[data-copy-code]');
+    const src = fig.querySelector<HTMLTextAreaElement>('[data-code-source]');
+    if (!btn || !src || btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(src.value);
+      } catch {
+        src.select();
+        document.execCommand('copy');
+      }
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => (btn.textContent = 'Copy'), 1500);
+    });
+  });
+</script>
+<style is:global>
+  .codefile { clear: both; margin: var(--s-5) 0; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--code-bg); overflow: hidden; }
+  .codefile__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-1) var(--s-2) var(--s-1) var(--s-4); border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: var(--t-small); }
+  .codefile__name { display: inline-flex; align-items: center; gap: var(--s-2); min-width: 0; }
+  .codefile__name svg { width: 16px; height: 16px; color: var(--ink-3); flex: none; }
+  .codefile__name code { background: none; border: 0; padding: 0; font-weight: 500; }
+  .codefile__title { color: var(--ink-2); }
+  .codefile pre.astro-code { margin: 0; border: 0; border-radius: 0; }
+  .codefile__foot { margin: 0; padding: var(--s-2) var(--s-4); border-top: 1px solid var(--line); font-size: var(--t-small); color: var(--ink-3); }
+  .codefile__foot span { color: var(--ink-2); font-weight: 500; }
+  .codefile__foot code { font-size: 0.95em; }
+</style>

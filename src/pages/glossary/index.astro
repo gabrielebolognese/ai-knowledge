@@ -1,0 +1,31 @@
+---
+// Placeholder glossary from the scaffold step (keeps <Term> links working).
+// The glossary/search step replaces this file.
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+const entries = (await getCollection('glossary')).sort((a, b) => a.data.term.localeCompare(b.data.term));
+---
+<BaseLayout title="Glossary" active="glossary">
+  <main id="main" class="container glossary">
+    <h1>Glossary</h1>
+    <dl>
+      {entries.map((e) => (
+        <div id={e.id} class="glossary__entry">
+          <dt>{e.data.term}</dt>
+          <dd>
+            <p>{e.data.short}</p>
+            <p class="muted">Sources: {e.data.sources.map((s, i) => <>{i > 0 && ', '}<a href={s.url}>{s.title}</a></>)}</p>
+          </dd>
+        </div>
+      ))}
+    </dl>
+  </main>
+</BaseLayout>
+<style>
+  .glossary { padding-top: var(--s-7); max-width: 860px; }
+  .glossary__entry { padding: var(--s-4) 0; border-bottom: 1px solid var(--line); scroll-margin-top: calc(var(--topbar-h) + var(--s-5)); }
+  .glossary__entry:target { background: var(--accent-soft); }
+  .glossary dt { font-family: var(--font-serif); font-size: 1.375rem; font-weight: 500; }
+  .glossary dd { margin: var(--s-2) 0 0; }
+  .glossary dd p { margin: 0 0 var(--s-1); }
+</style>

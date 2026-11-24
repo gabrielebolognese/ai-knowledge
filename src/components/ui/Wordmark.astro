@@ -1,0 +1,21 @@
+---
+// Typographic wordmark + our own "node" glyph (three connected circles). No borrowed assets.
+interface Props { href?: string; }
+const { href = '/' } = Astro.props;
+---
+<a class="wordmark" href={href} aria-label="AI Knowledge, home">
+  <svg class="wordmark__glyph" viewBox="0 0 28 28" aria-hidden="true">
+    <path d="M7 20 14 8 21 20" fill="none" stroke="var(--line-strong)" stroke-width="1.5" />
+    <path d="M7 20h14" fill="none" stroke="var(--line-strong)" stroke-width="1.5" />
+    <circle cx="14" cy="8" r="4" fill="var(--accent)" />
+    <circle cx="7" cy="20" r="3.4" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5" />
+    <circle cx="21" cy="20" r="3.4" fill="var(--gold-2)" stroke="var(--gold-4)" stroke-width="1.2" />
+  </svg>
+  <span class="wordmark__text">AI <em>Knowledge</em></span>
+</a>
+<style>
+  .wordmark { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+  .wordmark__glyph { width: 28px; height: 28px; }
+  .wordmark__text { font-family: var(--font-serif); font-size: 1.3rem; font-weight: 600; letter-spacing: -0.01em; font-variation-settings: "opsz" 48, "SOFT" 30; }
+  .wordmark__text em { font-style: italic; font-weight: 400; }
+</style>

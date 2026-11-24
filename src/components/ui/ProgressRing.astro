@@ -1,0 +1,26 @@
+---
+// Progress ring (C3). Values are filled in on the client from the progress store
+// via [data-progress-slugs] (see src/scripts/progress-ui.ts).
+interface Props { slugs: string[]; size?: number; label: string; showText?: boolean; }
+const { slugs, size = 72, label, showText = size >= 56 } = Astro.props;
+const stroke = size >= 72 ? 6 : size >= 40 ? 4 : 3;
+const r = (size - stroke) / 2;
+const len = 2 * Math.PI * r;
+---
+<div class="ring" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label={label}
+  data-progress-slugs={slugs.join(',')} style={`--size:${size}px`}>
+  <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+    <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" stroke-width={stroke} />
+    <circle class="ring-value" cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--accent)" stroke-width={stroke}
+      stroke-linecap="round" stroke-dasharray={len} stroke-dashoffset={len}
+      transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+  </svg>
+  {showText && <span class="ring-text" data-progress-pct>0%</span>}
+</div>
+<style>
+  .ring { position: relative; width: var(--size); height: var(--size); flex: none; }
+  .ring svg { display: block; }
+  .ring-value { transition: stroke-dashoffset var(--d-slow) var(--ease-out); }
+  .ring[data-complete="true"] .ring-value { stroke: var(--gold-3); }
+  .ring-text { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 600; font-size: var(--t-small); font-variant-numeric: tabular-nums; }
+</style>

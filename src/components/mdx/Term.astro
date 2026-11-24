@@ -1,0 +1,17 @@
+---
+/**
+ * Wiki-link to a glossary entry with a hover/focus card (C8).
+ * MDX: <Term slug="gradient-descent">gradient descent</Term>   (children optional: defaults to the term)
+ */
+import { getEntry } from 'astro:content';
+interface Props { slug: string; }
+const { slug } = Astro.props;
+const entry = await getEntry('glossary', slug);
+if (!entry) throw new Error(`<Term slug="${slug}"> has no glossary entry at src/content/glossary/${slug}.md`);
+const tipId = `term-${slug}-${Math.random().toString(36).slice(2, 7)}`;
+const hasSlot = Astro.slots.has('default');
+// Default link text: the term in running-text case ("Weight" → "weight", but "ReLU" stays).
+const t = entry.data.term;
+const inline = t.length > 1 && t[1] === t[1].toLowerCase() && t[0] !== t[0].toLowerCase() ? t[0].toLowerCase() + t.slice(1) : t;
+---
+<span class="term" data-term><a class="term__link" href={`/glossary/#${slug}`} aria-describedby={tipId}>{hasSlot ? <slot /> : inline}</a><span class="term__card" id={tipId} role="tooltip"><span class="term__name">{entry.data.term}</span><span class="term__def">{entry.data.short}</span><span class="term__more">Click for the full glossary entry</span></span></span>

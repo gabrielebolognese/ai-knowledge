@@ -1,0 +1,183 @@
+---
+title: Gradient descent
+slug: gradient-descent
+track: beginner
+level: beginner
+order: 20
+minutes: 14
+module: Neural networks from scratch
+summary: Gradient descent trains a model by repeatedly stepping its parameters against the slope of the loss. This lesson runs three steps by hand, shows why the learning rate matters, and connects it to how neural networks learn.
+hatnote: This lesson trains a single number. For what the numbers inside a network are, see "The artificial neuron".
+prerequisites: [artificial-neuron]
+tools: [Python 3]
+outcomes:
+  - Explain what a gradient tells you
+  - Run gradient-descent updates by hand
+  - Recognise a learning rate that is too small or too large
+build: A five-step gradient descent in plain Python
+reviewed: 2026-11-24
+seeAlso: [artificial-neuron]
+sources:
+  - id: wiki-gd
+    title: Gradient descent
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Gradient_descent
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: goodfellow-ch4
+    title: "Deep Learning, chapter 4: Numerical Computation (4.3 Gradient-Based Optimization)"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/numerical.html
+    accessed: 2026-11-24
+    type: book
+  - id: cs231n-opt
+    title: "Optimization: Stochastic Gradient Descent"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/optimization-1/
+    accessed: 2026-11-24
+    type: course
+  - id: cs231n-nn3
+    title: "Neural Networks Part 3: Learning and Evaluation"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-3/
+    accessed: 2026-11-24
+    type: course
+  - id: d2l-gd
+    title: "Dive into Deep Learning, 12.3 Gradient Descent"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_optimization/gd.html
+    accessed: 2026-11-24
+    type: book
+  - id: mlcc-hparams
+    title: "Linear regression: Hyperparameters"
+    publisher: Google Machine Learning Crash Course
+    url: https://developers.google.com/machine-learning/crash-course/linear-regression/hyperparameters
+    accessed: 2026-11-24
+    type: course
+  - id: robbins1951
+    title: A Stochastic Approximation Method
+    author: Herbert Robbins, Sutton Monro
+    publisher: The Annals of Mathematical Statistics 22(3)
+    year: 1951
+    url: https://doi.org/10.1214/aoms/1177729586
+    accessed: 2026-11-24
+    type: paper
+  - id: pytorch-optim
+    title: torch.optim
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/optim.html
+    accessed: 2026-11-24
+    type: docs
+furtherReading:
+  - title: "3Blue1Brown: Gradient descent, how neural networks learn"
+    url: https://www.3blue1brown.com/lessons/gradient-descent
+exercises:
+  - id: gd-one-step
+    type: numeric
+    difficulty: easy
+    title: One update by hand
+    prompt: "Minimise $f(w) = (w-3)^2$, whose gradient is $2(w-3)$. Start at $w = 1$ with learning rate $\\eta = 0.25$. What is $w$ after one step?"
+    answer: 2
+    tolerance: 0.001
+    hint: "Gradient at $w = 1$ is $2(1-3) = -4$. Then $w_{new} = w - \\eta \\cdot \\text{gradient}$."
+    explanation: "$w_{new} = 1 - 0.25 \\cdot (-4) = 1 + 1 = 2$, which is closer to the minimum at 3."
+  - id: gd-learning-rate
+    type: mcq
+    difficulty: medium
+    title: Diagnose the learning rate
+    prompt: Your training loss jumps up and down and then becomes `nan`. What is the most likely cause?
+    options:
+      - The learning rate is too small
+      - The learning rate is too large
+      - The model has too few parameters
+      - The data set is too large
+    answer: The learning rate is too large
+    explanation: Steps that are too large overshoot the minimum, so each update lands further away; the values grow until they overflow to `nan`. A smaller learning rate is the first fix to try.
+  - id: gd-why-negative
+    type: short
+    difficulty: medium
+    title: Why the minus sign?
+    prompt: In the update $w \leftarrow w - \eta \nabla L$, why do we subtract the gradient instead of adding it?
+    answer: Because the gradient points uphill (the direction of steepest increase), so stepping against it goes downhill.
+    explanation: The gradient points towards the fastest increase of the loss. We want the loss to decrease, so we move in the opposite direction.
+---
+
+**Gradient descent** is a method for finding the lowest point of a function by repeatedly taking small steps downhill, where "downhill" is worked out from the function's slope.<Cite id="wiki-gd" /> In machine learning the function is the <Term slug="loss-function">loss</Term>, which measures how wrong a model is, and the steps change the model's parameters, such as the weights of each <Term slug="artificial-neuron">neuron</Term>.<Cite id="goodfellow-ch4" />
+
+## The idea
+
+A model's loss depends on its parameters. If you could see the loss as a landscape, good parameters would sit at the bottom of a valley. The <Term slug="gradient" /> of the loss is a list of slopes, one per parameter, and it points in the direction where the loss rises fastest.<Cite id="goodfellow-ch4" /> Taking a small step in the **opposite** direction lowers the loss, at least for small enough steps.<Cite id="cs231n-opt" />
+
+The method is old: it is usually credited to Augustin-Louis Cauchy, who suggested it in 1847.<Cite id="wiki-gd" /> Its noisy cousin, which uses a random sample of the data at each step, traces back to Robbins and Monro's 1951 work on stochastic approximation.<Cite id="robbins1951" />
+
+<Analogy breaks="A hiker can look around; gradient descent only knows the slope at the exact spot where it stands.">
+Imagine walking down a hill in thick fog with a fixed stride. You cannot see the valley, but you can feel which way the ground tilts under your feet, so you step that way and repeat.
+</Analogy>
+
+## The update rule, piece by piece
+
+Take the simplest possible loss, $f(w) = (w-3)^2$. Its minimum is at $w = 3$, and its <Term slug="derivative" /> is $2(w-3)$. Start at $w_0 = 0$ with a <Term slug="learning-rate" /> of $\eta = 0.1$.
+
+<MathSteps
+  title="Three steps of gradient descent"
+  legend={[
+    { symbol: 'w', meaning: 'the parameter being trained' },
+    { symbol: '\\eta', meaning: 'learning rate (step size)' },
+    { symbol: "f'(w)", meaning: 'slope of the loss at w' },
+    { symbol: '\\nabla_w L', meaning: 'gradient of the loss L' },
+  ]}
+>
+  <Step tex="f'(\hl{w_0}) = 2(0 - 3) = -6" words="Measure the slope where we stand. Negative means the loss goes down as w grows." />
+  <Step tex="w_1 = w_0 \hl{- \eta f'(w_0)} = 0 - 0.1 \cdot (-6) = 0.6" words="Step against the slope. Minus a negative number moves w to the right, towards 3." />
+  <Step tex="w_2 = 0.6 - 0.1 \cdot \hl{2(0.6 - 3)} = 0.6 + 0.48 = 1.08" words="Repeat from the new point. The slope is gentler now, so the step is smaller." />
+  <Step tex="w_3 = 1.08 - 0.1 \cdot 2(1.08 - 3) = \hl{1.464}" words="Each step shrinks the distance to 3 by the same factor, 1 − 2η = 0.8." example="distance 3 → 2.4 → 1.92 → 1.536" />
+  <Step tex="w \leftarrow w - \eta \, \hl{\nabla_w L}" words="The general rule for many parameters: the gradient replaces the single slope." />
+</MathSteps>
+
+The last line is the update used to train every network in this course; libraries such as [PyTorch's `torch.optim`](https://docs.pytorch.org/docs/stable/optim.html) package it, together with faster variants, as "optimisers".<Cite id="pytorch-optim" />
+
+## Why following the slope works
+
+Near any point, a smooth function looks almost like a straight line, and the derivative is that line's slope. Moving a small distance $\epsilon$ against the slope changes the function by roughly $-\epsilon$ times the squared slope, which is negative whenever the slope is not zero, so a small enough step always goes downhill.<Cite id="goodfellow-ch4" /> The catch is the word *small*: the straight-line picture is only accurate close to the current point, which is exactly why the step size matters.<Cite id="d2l-gd" />
+
+When the gradient is zero the method stops moving. That happens at a minimum, but also at a maximum or at a **saddle point**, where the surface curves up in one direction and down in another.<Cite id="goodfellow-ch4" /> For the bowl-shaped $f(w) = (w-3)^2$ there is only one such point, the minimum, so gradient descent cannot get lost. Neural-network losses are far bumpier, and gradient descent then finds a good low point rather than a guaranteed lowest one; in practice those low points usually work well.<Cite id="cs231n-opt" />
+
+## Choosing the learning rate
+
+The learning rate $\eta$ is the step size, and it is the setting that most often decides whether training works.<Cite id="mlcc-hparams" /> In the example, the distance to the minimum is multiplied by $1 - 2\eta$ at each step:<Cite id="d2l-gd" />
+
+| Learning rate | Factor $1 - 2\eta$ | What happens |
+|---|---|---|
+| 0.1 | 0.8 | Steady progress towards 3 |
+| 0.5 | 0 | Lands on 3 in one step (lucky for this function) |
+| 1.1 | −1.2 | Overshoots further each time: training diverges |
+
+A rate that is too small wastes time; one that is too large makes the loss bounce or explode.<Cite id="mlcc-hparams" /> There is rarely a single "perfect" value known in advance, so practitioners search for it on a logarithmic scale, trying values such as 0.1, 0.01 and 0.001 rather than 0.1, 0.2 and 0.3.<Cite id="cs231n-nn3" />
+
+<Callout type="tip">
+If the loss becomes `nan` within the first few steps, lower the learning rate by a factor of 10 before changing anything else.
+</Callout>
+
+## From one number to a whole network
+
+A neural network has thousands or millions of parameters, but the rule is the same: compute the gradient of the loss with respect to every weight and bias, then move each one a little against its own slope.<Cite id="goodfellow-ch4" /> Computing all those slopes efficiently is the job of backpropagation, covered later in the course.
+
+Most real training uses **mini-batch stochastic gradient descent**: the gradient is estimated from a small random batch of examples rather than the whole data set, which is far cheaper per step.<Cite id="cs231n-opt" /><Cite id="robbins1951" /> Each estimate is a little noisy, so the path wobbles on its way down, but thousands of cheap, slightly noisy steps usually beat a few exact and expensive ones. The number of examples per step is the **batch size**, and one full pass through the training data is called an **epoch**; both are settings you choose, alongside the learning rate.<Cite id="mlcc-hparams" />
+
+## Try it
+
+This script runs five steps for three learning rates and prints the path of $w$:
+
+<CodeFile path="code/samples/gradient_descent.py" lines="8-25" highlight="20" title="the update loop" />
+
+With $\eta = 0.1$ it prints `0.000, 0.600, 1.080, 1.464, …`, the same numbers as the steps above; with $\eta = 1.1$ the values swing wider at every step.
+
+## Summary
+
+- Gradient descent lowers a loss by stepping parameters against the gradient: $w \leftarrow w - \eta \nabla_w L$.
+- The gradient points uphill, which is why the update subtracts it.
+- The learning rate sets the step size: too small is slow, too large diverges.
+- Neural networks use the same rule on every parameter, usually with mini-batches.

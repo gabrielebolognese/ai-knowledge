@@ -1,0 +1,39 @@
+---
+/**
+ * Annotated screenshot for the setup track: numbered pins over the image and the
+ * same numbers as a list underneath (the list is what screen readers use).
+ * MDX:
+ *   <Screenshot src="/screenshots/python-download.png" alt="python.org downloads page"
+ *     caption="The Python downloads page" source="https://www.python.org/downloads/" taken="2026-11-24"
+ *     pins={[{ x: 22, y: 41, label: 'Click **Download Python 3.x**' }]} />
+ * x / y are percentages of the image width / height. Labels accept **bold** and `code`.
+ */
+interface Pin { x: number; y: number; label: string; }
+interface Props { src: string; alt: string; caption: string; pins?: Pin[]; source?: string; taken?: string; }
+const { src, alt, caption, pins = [], source, taken } = Astro.props;
+const md = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>');
+const host = source ? source.replace(/^https?:\/\//, '').replace(/\/$/, '') : '';
+---
+<figure class="figure screenshot">
+  <div class="screenshot__frame">
+    <img src={src} alt={alt} loading="lazy" />
+    {pins.map((p, i) => (
+      <span class="screenshot__pin" style={`left:${p.x}%;top:${p.y}%`} aria-hidden="true">{i + 1}</span>
+    ))}
+  </div>
+  <figcaption>
+    <span class="figure__caption">{caption}</span>
+    {(source || taken) && (
+      <span class="figure__credit">
+        {source && <Fragment>Screenshot of <a href={source}>{host}</a></Fragment>}
+        {taken && <Fragment> · captured {taken}</Fragment>}
+      </span>
+    )}
+  </figcaption>
+  {pins.length > 0 && (
+    <ol class="screenshot__steps">
+      {pins.map((p) => <li set:html={md(p.label)} />)}
+    </ol>
+  )}
+</figure>

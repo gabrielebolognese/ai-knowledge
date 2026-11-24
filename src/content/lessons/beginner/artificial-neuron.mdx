@@ -1,0 +1,187 @@
+---
+title: The artificial neuron
+slug: artificial-neuron
+track: beginner
+level: beginner
+order: 10
+minutes: 12
+module: Neural networks from scratch
+summary: An artificial neuron multiplies each input by a weight, adds a bias and passes the total through an activation function. This lesson computes one by hand, then in Python, and shows what a single neuron cannot do.
+hatnote: For how a network learns its weights, see "Gradient descent".
+prerequisites: []
+tools: [Python 3]
+outcomes:
+  - Compute a neuron's output by hand
+  - Explain what weights, the bias and the activation do
+  - Say why one neuron cannot learn XOR
+build: A neuron and an AND gate in plain Python
+reviewed: 2026-11-24
+seeAlso: [gradient-descent]
+sources:
+  - id: wiki-neuron
+    title: Artificial neuron
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Artificial_neuron
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: goodfellow-ch6
+    title: "Deep Learning, chapter 6: Deep Feedforward Networks"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/mlp.html
+    accessed: 2026-11-24
+    type: book
+  - id: cs231n-nn1
+    title: "Neural Networks Part 1: Setting up the Architecture"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-1/
+    accessed: 2026-11-24
+    type: course
+  - id: rosenblatt1958
+    title: "The perceptron: a probabilistic model for information storage and organization in the brain"
+    author: Frank Rosenblatt
+    publisher: Psychological Review 65(6)
+    year: 1958
+    url: https://doi.org/10.1037/h0042519
+    accessed: 2026-11-24
+    type: paper
+  - id: wiki-perceptron
+    title: Perceptron
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Perceptron
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: nair2010
+    title: Rectified Linear Units Improve Restricted Boltzmann Machines
+    author: Vinod Nair, Geoffrey Hinton
+    publisher: Proceedings of ICML 2010
+    year: 2010
+    url: https://www.cs.toronto.edu/~hinton/absps/reluICML.pdf
+    accessed: 2026-11-24
+    type: paper
+  - id: d2l-mlp
+    title: "Dive into Deep Learning, 5.1 Multilayer Perceptrons"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/mlp.html
+    accessed: 2026-11-24
+    type: book
+furtherReading:
+  - title: "3Blue1Brown: But what is a neural network?"
+    url: https://www.3blue1brown.com/lessons/neural-networks
+exercises:
+  - id: neuron-weighted-sum
+    type: numeric
+    difficulty: easy
+    title: Compute a weighted sum
+    prompt: "A neuron has inputs $x = [2, 1]$, weights $w = [3, -2]$ and bias $b = 1$. What is $z = w_1x_1 + w_2x_2 + b$?"
+    answer: 5
+    tolerance: 0
+    hint: Multiply position by position first, then add the bias.
+    explanation: "$3 \\cdot 2 + (-2) \\cdot 1 + 1 = 6 - 2 + 1 = 5$."
+  - id: neuron-relu-output
+    type: mcq
+    difficulty: easy
+    title: Apply ReLU
+    prompt: "A neuron's weighted sum is $z = -1.5$. What does a ReLU activation output?"
+    options: ["-1.5", "0", "1.5", "0.18"]
+    answer: 1
+    explanation: "ReLU outputs $\\max(0, z)$. Because $-1.5 < 0$, the output is $0$."
+  - id: neuron-why-bias
+    type: reveal
+    difficulty: medium
+    title: Why keep the bias?
+    prompt: Suppose you delete the bias from a neuron with a step activation. Which decision boundaries can it still draw, and which can it no longer draw?
+    answer: Only boundaries that pass through the origin.
+    explanation: "Without $b$ the neuron switches on exactly where $w \\cdot x = 0$, a line (or plane) through the origin. The bias moves that boundary away from the origin, so the neuron can fire for, say, AND, where the boundary must sit near the corner (1, 1)."
+---
+
+An **artificial neuron** is the basic unit of a neural network: it takes several input numbers, multiplies each one by a <Term slug="weight" />, adds the results together with a <Term slug="bias" />, and passes that total through an <Term slug="activation-function">activation function</Term> to produce a single output.<Cite id="wiki-neuron" /> Stacking many of these units in layers gives the networks used for image, text and game-playing models.<Cite id="goodfellow-ch6" />
+
+## What a neuron computes
+
+A neuron does two things in order.<Cite id="cs231n-nn1" /> First it computes a **weighted sum**, written $z$: each input $x_i$ is multiplied by its weight $w_i$, the products are added up, and the bias $b$ is added at the end. Adding up products position by position is called a <Term slug="dot-product" />, so the weighted sum is "the dot product of the weights and the inputs, plus the bias".
+
+Second, the neuron applies an activation function $\phi$ ("phi") to $z$. The result $a = \phi(z)$ is the neuron's output, which can become an input to the next layer.<Cite id="goodfellow-ch6" />
+
+<Analogy breaks="A real committee member can change their mind for reasons outside the evidence; a neuron's output is fixed by its numbers.">
+Picture a committee member deciding whether to speak up. Each input is a piece of evidence, each weight is how much they trust that evidence (a negative weight means distrust), and the bias is their mood before the meeting. The activation decides whether the total is enough to say something.
+</Analogy>
+
+The weights and the bias are the neuron's **parameters**. They are not written by hand in a real network: training adjusts them automatically, as the lesson on [gradient descent](/course/beginner/gradient-descent/) shows.<Cite id="d2l-mlp" />
+
+## Where the idea comes from
+
+The name is borrowed from biology, but only loosely. In 1943 Warren McCulloch and Walter Pitts proposed a simplified model of a nerve cell that adds up incoming signals and "fires" when the total crosses a threshold; that threshold unit is the ancestor of the neuron described here.<Cite id="wiki-neuron" /> A biological neuron communicates with timed electrical spikes and chemical signals, while an artificial one just outputs a number, so the similarity is an inspiration rather than a description of the brain.<Cite id="cs231n-nn1" />
+
+What matters for machine learning is the arithmetic. Because a neuron is built only from multiplications, additions and a simple function, a computer can evaluate millions of them per second, and the same small recipe works whether the inputs are pixel brightnesses, letters of text or features of a chess position.<Cite id="goodfellow-ch6" />
+
+## The maths, piece by piece
+
+Start with a tiny example using small numbers: two inputs $x = [1, 2]$, weights $w = [0.5, -1]$ and bias $b = 0.5$.
+
+<MathSteps
+  title="Computing one neuron's output"
+  legend={[
+    { symbol: 'x_i', meaning: 'input number i' },
+    { symbol: 'w_i', meaning: 'weight for input i' },
+    { symbol: 'b', meaning: 'bias' },
+    { symbol: 'z', meaning: 'weighted sum' },
+    { symbol: '\\phi', meaning: 'activation function' },
+    { symbol: 'a', meaning: 'the neuron\'s output' },
+  ]}
+>
+  <Step tex="\hl{w_1 x_1} = 0.5 \cdot 1 = 0.5" words="Multiply the first input by its weight." />
+  <Step tex="w_1 x_1 + \hl{w_2 x_2} = 0.5 + (-1)\cdot 2 = -1.5" words="Do the same for the second input and add it on. A negative weight pulls the total down." />
+  <Step tex="z = w_1 x_1 + w_2 x_2 + \hl{b} = -1.5 + 0.5 = -1" words="Add the bias. This number is the weighted sum z." />
+  <Step tex="a = \hl{\phi}(z) = \max(0, -1) = 0" words="Apply the activation. With ReLU, any negative z becomes 0, so this neuron stays silent." />
+  <Step tex="z = \hl{\sum_{i=1}^{n} w_i x_i} + b" words="The general formula: the capital sigma means 'add up the terms for i = 1 to n', one per input." example="n = 2 gives exactly the sum above." />
+</MathSteps>
+
+The last step is the formula found in textbooks; the first four are the same formula with numbers in it.<Cite id="cs231n-nn1" />
+
+## Activation functions
+
+Without an activation, a neuron only computes a straight-line (linear) function of its inputs, and stacking linear layers still gives a linear function. The non-linear activation is what lets deeper networks represent curved decision boundaries.<Cite id="goodfellow-ch6" />
+
+| Activation | Formula | Output range | Typical use |
+|---|---|---|---|
+| Step | 1 if $z > 0$, else 0 | 0 or 1 | The original perceptron |
+| <Term slug="sigmoid">Sigmoid</Term> | $1 / (1 + e^{-z})$ | 0 to 1 | Yes/no probabilities |
+| <Term slug="relu">ReLU</Term> | $\max(0, z)$ | 0 and up | Default for hidden layers |
+
+ReLU became popular after Nair and Hinton reported that rectified units trained well in 2010,<Cite id="nair2010" /> and the CS231n notes recommend it as a default for hidden layers.<Cite id="cs231n-nn1" /> In the example above, the sigmoid would have output $1/(1+e^{1}) \approx 0.269$ instead of $0$.
+
+<Callout type="pitfall">
+"The bias is optional decoration." It is not: without it, the neuron's boundary between "on" and "off" must pass through the origin, which rules out many simple patterns.
+</Callout>
+
+## From one neuron to the perceptron
+
+In 1958 Frank Rosenblatt described the **perceptron**, a machine built around one neuron with a step activation that learned its weights from examples.<Cite id="rosenblatt1958" /> Its learning rule changes the weights only when the prediction is wrong, and it is guaranteed to find a separating line when one exists.<Cite id="wiki-perceptron" />
+
+With weights $w = [1, 1]$ and bias $b = -1.5$, a step neuron computes logical AND: only the input $(1, 1)$ gives $z = 0.5 > 0$. No single line, however, separates the XOR pattern, where $(0,1)$ and $(1,0)$ are "on" and $(0,0)$ and $(1,1)$ are "off". Minsky and Papert's 1969 analysis of this limit cooled interest in perceptrons for years; adding a hidden layer removes it.<Cite id="wiki-perceptron" /><Cite id="d2l-mlp" />
+
+<Exercise id="neuron-relu-output" />
+
+## Many neurons side by side
+
+A **layer** is a group of neurons that all read the same inputs, each with its own weights and bias. A layer with $n_\text{in}$ inputs and $n_\text{out}$ neurons therefore has $n_\text{in} \times n_\text{out}$ weights plus $n_\text{out}$ biases.<Cite id="d2l-mlp" /> For example, a layer that reads a 28 × 28 pixel image (784 inputs) with 128 neurons has $784 \times 128 + 128 = 100{,}480$ parameters, which is why even small networks are trained automatically rather than tuned by hand.<Cite id="cs231n-nn1" />
+
+Writing all the weights of a layer as a grid of numbers (a matrix) lets libraries compute every neuron's weighted sum in one operation. Later lessons use exactly this trick; the single-neuron formula above is what each row of that computation does.<Cite id="goodfellow-ch6" />
+
+## Try it
+
+The script below computes the worked example and the AND gate in plain Python, with no libraries. Run it with `python code/samples/neuron.py` after [installing Python](https://www.python.org/downloads/).
+
+<CodeFile path="code/samples/neuron.py" lines="9-26" highlight="11" title="weighted sum and three activations" />
+
+It prints `weighted sum z = -1.0`, `ReLU(z) = 0.0` and `sigmoid(z) = 0.269`, matching the steps above, followed by the AND truth table.
+
+## Summary
+
+- A neuron computes a weighted sum $z = \sum_i w_i x_i + b$ and then an activation $a = \phi(z)$.
+- Weights scale the inputs, the bias shifts the switching point, and the activation adds non-linearity.
+- ReLU is the common default in hidden layers; the sigmoid maps to a probability-like range.
+- A single neuron can only draw a straight boundary, so it cannot learn XOR; layers fix this.

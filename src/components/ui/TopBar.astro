@@ -1,0 +1,51 @@
+---
+import Wordmark from './Wordmark.astro';
+interface Props { active?: string; }
+const { active = '' } = Astro.props;
+const links = [
+  { href: '/course/', label: 'Course', key: 'course' },
+  { href: '/projects/', label: 'Projects', key: 'projects' },
+  { href: '/exercises/', label: 'Exercises', key: 'exercises' },
+  { href: '/glossary/', label: 'Glossary', key: 'glossary' },
+  { href: '/certificate/', label: 'Certificate', key: 'certificate' },
+];
+---
+<header class="topbar" data-topbar>
+  <div class="topbar__inner">
+    <Wordmark />
+    <nav aria-label="Main">
+      <ul>
+        {links.map((l) => (
+          <li><a href={l.href} aria-current={active === l.key ? 'page' : undefined}>{l.label}</a></li>
+        ))}
+      </ul>
+    </nav>
+    <p class="topbar__note">Progress is saved in this browser only</p>
+  </div>
+</header>
+<script>
+  const bar = document.querySelector<HTMLElement>('[data-topbar]');
+  const onScroll = () => bar?.classList.toggle('is-scrolled', window.scrollY > 8);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
+<style>
+  .topbar {
+    position: sticky; top: 0; z-index: var(--z-sticky); height: var(--topbar-h);
+    background: rgb(250 247 242 / 0.85);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border-bottom: 1px solid transparent;
+    transition: border-color var(--d-fast);
+  }
+  .topbar.is-scrolled { border-bottom-color: var(--line); }
+  .topbar__inner { max-width: var(--container-wide); margin: 0 auto; padding: 0 var(--gutter); height: 100%; display: flex; align-items: center; gap: var(--s-7); }
+  nav ul { display: flex; gap: var(--s-1); list-style: none; margin: 0; padding: 0; }
+  nav a {
+    display: inline-flex; align-items: center; min-height: 40px; padding: 0 var(--s-3);
+    border-radius: var(--r-sm); text-decoration: none; color: var(--ink-2);
+    font-size: var(--t-ui); font-weight: 500;
+  }
+  nav a:hover { background: var(--surface-2); color: var(--ink); }
+  nav a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
+  .topbar__note { margin: 0 0 0 auto; font-size: var(--t-small); color: var(--ink-3); }
+</style>

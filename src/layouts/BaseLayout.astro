@@ -1,0 +1,88 @@
+---
+// Shared page shell: fonts, tokens, top bar, desktop-only notice, toast + live regions.
+import '@fontsource-variable/fraunces/full.css';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
+import 'katex/dist/katex.min.css';
+import '../styles/global.css';
+import TopBar from '../components/ui/TopBar.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  active?: string;
+  bodyClass?: string;
+}
+const { title, description = 'A free, sourced, Wikipedia-style deep learning course: from installing Python to a neural-network chess engine.', active, bodyClass } = Astro.props;
+const fullTitle = title === 'AI Knowledge' ? title : `${title} · AI Knowledge`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script is:inline>
+      try { if (sessionStorage.getItem('aik-allow-narrow') === '1') document.documentElement.classList.add('allow-narrow'); } catch (e) {}
+    </script>
+    <slot name="head" />
+  </head>
+  <body class={bodyClass}>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div class="desktop-notice" role="dialog" aria-modal="true" aria-labelledby="desktop-notice-title">
+      <div class="desktop-notice__card">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="var(--accent)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="6" y="8" width="36" height="24" rx="3" /><path d="M18 40h12M24 32v8" />
+        </svg>
+        <h2 id="desktop-notice-title">Best on a computer</h2>
+        <p>This course is designed for PC: it has side-by-side code, math and diagrams that need a larger screen. Open it on a desktop or laptop (1024&nbsp;px or wider).</p>
+        <div class="desktop-notice__actions">
+          <button class="btn" type="button" data-copy-link>Copy page link</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-allow-narrow>Continue anyway</button>
+        </div>
+      </div>
+    </div>
+    <div class="page" data-page>
+      <TopBar active={active} />
+      <slot />
+      <footer class="site-footer">
+        <div class="container site-footer__inner">
+          <p>AI Knowledge is a free, read-only course. Every claim links to its source. Progress is stored only in this browser (<code>localStorage</code>).</p>
+          <p class="muted">Content and code: <a href="https://github.com/gabrielebolognese/ai-knowledge">github.com/gabrielebolognese/ai-knowledge</a></p>
+        </div>
+      </footer>
+    </div>
+    <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
+    <div id="progress-live" class="sr-only" aria-live="polite"></div>
+    <script>
+      import '../scripts/progress-ui';
+      import '../scripts/article';
+      document.querySelector('[data-allow-narrow]')?.addEventListener('click', () => {
+        try { sessionStorage.setItem('aik-allow-narrow', '1'); } catch {}
+        document.documentElement.classList.add('allow-narrow');
+        document.querySelector('[data-page]')?.removeAttribute('inert');
+      });
+      document.querySelector('[data-copy-link]')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget as HTMLButtonElement;
+        try { await navigator.clipboard.writeText(location.href); btn.textContent = 'Link copied'; } catch { btn.textContent = location.href; }
+      });
+      const narrow = window.matchMedia('(max-width: 1023px)');
+      const syncInert = () => {
+        const page = document.querySelector('[data-page]');
+        if (!page) return;
+        if (narrow.matches && !document.documentElement.classList.contains('allow-narrow')) page.setAttribute('inert', '');
+        else page.removeAttribute('inert');
+      };
+      narrow.addEventListener('change', syncInert);
+      syncInert();
+    </script>
+    <style>
+      .site-footer { border-top: 1px solid var(--line); margin-top: var(--s-9); padding: var(--s-6) 0 var(--s-7); font-size: var(--t-small); color: var(--ink-2); }
+      .site-footer__inner { max-width: var(--container-wide); }
+      .site-footer p { margin: 0 0 var(--s-2); }
+    </style>
+  </body>
+</html>

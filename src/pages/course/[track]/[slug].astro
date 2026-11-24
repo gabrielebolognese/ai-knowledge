@@ -1,0 +1,16 @@
+---
+import { getCollection, render } from 'astro:content';
+import LessonLayout from '../../../layouts/LessonLayout.astro';
+import { mdxComponents } from '../../../components/mdx';
+
+export async function getStaticPaths() {
+  const lessons = await getCollection('lessons');
+  return lessons.map((entry) => ({ params: { track: entry.data.track, slug: entry.data.slug }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content, headings, remarkPluginFrontmatter: fm } = await render(entry);
+---
+<LessonLayout entry={entry} headings={headings} citeOrder={fm.citeOrder} citeCounts={fm.citeCounts} inlineExercises={fm.inlineExercises}>
+  <Content components={mdxComponents} />
+</LessonLayout>

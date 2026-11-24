@@ -1,0 +1,23 @@
+---
+/**
+ * Figure with numbered caption and credit/licence line.
+ * MDX: <Figure src="/figures/neuron.svg" alt="…" caption="…" credit="Own work" license="CC BY 4.0"
+ *              licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://…" />
+ * Local images live in public/ (src starts with "/"); the validator checks they exist.
+ */
+interface Props { src: string; alt: string; caption: string; credit?: string; license?: string; licenseUrl?: string; sourceUrl?: string; width?: number; }
+const { src, alt, caption, credit, license, licenseUrl, sourceUrl, width } = Astro.props;
+---
+<figure class="figure">
+  <img src={src} alt={alt} loading="lazy" width={width} />
+  <figcaption>
+    <span class="figure__caption">{caption}</span>
+    {(credit || license) && (
+      <span class="figure__credit">
+        {credit && (sourceUrl ? <a href={sourceUrl}>{credit}</a> : <span>{credit}</span>)}
+        {credit && license && ' · '}
+        {license && (licenseUrl ? <a href={licenseUrl}>{license}</a> : <span>{license}</span>)}
+      </span>
+    )}
+  </figcaption>
+</figure>

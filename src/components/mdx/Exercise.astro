@@ -1,0 +1,168 @@
+---
+/**
+ * Exercise card (C9). Renders one frontmatter exercise.
+ * MDX: <Exercise id="neuron-weighted-sum" />   (looks the id up in the current lesson's frontmatter;
+ *      ids are globally unique, so pages such as the exercise library can render any exercise.)
+ * Props for non-MDX use: exercise={...} lesson={{ title, url }}.
+ *  - mcq / numeric: self-check with instant feedback (Check, Try again, Show answer)
+ *  - short / reveal: think, optionally write, then reveal the model answer
+ *  - every exercise has a "Done" checkbox stored in the progress store (exercises[id])
+ * Numeric answers accept ±tolerance (default: 0.5% of the answer, at least 1e-9).
+ */
+import { getCollection } from 'astro:content';
+import { inlineMd } from '../../lib/inline-md';
+
+interface Ex {
+  id: string; type: 'mcq' | 'numeric' | 'short' | 'reveal'; difficulty: 'easy' | 'medium' | 'hard';
+  title?: string; prompt: string; options?: string[]; answer: string | number | string[];
+  tolerance?: number; hint?: string; explanation: string; concepts?: string[];
+}
+interface Props { id?: string; exercise?: Ex; lesson?: { title: string; url: string }; showLesson?: boolean; headingLevel?: 3 | 4; }
+const { id, showLesson = false } = Astro.props;
+let ex: Ex | undefined = Astro.props.exercise;
+let lesson = Astro.props.lesson;
+if (!ex && id) {
+  const all = await getCollection('lessons');
+  for (const l of all) {
+    const found = l.data.exercises.find((e) => e.id === id);
+    if (found) {
+      ex = found as Ex;
+      lesson ??= { title: l.data.title, url: `/course/${l.data.track}/${l.data.slug}/` };
+      break;
+    }
+  }
+}
+if (!ex) throw new Error(`<Exercise id="${id}"> not found in any lesson frontmatter`);
+
+const typeLabel = { mcq: 'Quiz', numeric: 'Numeric', short: 'Short answer', reveal: 'Think it through' }[ex.type];
+const diffLabel = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }[ex.difficulty];
+let correctIndex = -1;
+if (ex.type === 'mcq' && ex.options) {
+  correctIndex = typeof ex.answer === 'number' ? ex.answer : ex.options.findIndex((o) => o === ex!.answer);
+}
+const numericAnswer = ex.type === 'numeric' ? Number(ex.answer) : NaN;
+const tolerance = ex.type === 'numeric' ? (ex.tolerance ?? Math.max(1e-9, Math.abs(numericAnswer) * 0.005)) : 0;
+const answerText =
+  ex.type === 'mcq' && ex.options && correctIndex >= 0
+    ? ex.options[correctIndex]
+    : Array.isArray(ex.answer) ? ex.answer.join(' / ') : String(ex.answer);
+const selfCheck = ex.type === 'mcq' || ex.type === 'numeric';
+const uid = `ex-${ex.id}`;
+---
+<div class="exercise" id={uid} data-exercise={ex.id} data-type={ex.type} data-exercise-status={ex.id}
+  data-correct={selfCheck ? String(ex.type === 'mcq' ? correctIndex : numericAnswer) : undefined}
+  data-tolerance={ex.type === 'numeric' ? String(tolerance) : undefined}>
+  <div class="exercise__head">
+    <span class="exercise__chip">{typeLabel}</span>
+    <span class={`exercise__diff exercise__diff--${ex.difficulty}`}>{diffLabel}</span>
+    {ex.title && <span class="exercise__title">{ex.title}</span>}
+    <label class="exercise__done">
+      <input type="checkbox" data-exercise-toggle={ex.id} />
+      <span>Done</span>
+    </label>
+  </div>
+  <div class="exercise__prompt" set:html={inlineMd(ex.prompt)} />
+
+  {ex.type === 'mcq' && ex.options && (
+    <fieldset class="exercise__options">
+      <legend class="sr-only">Choose one answer</legend>
+      {ex.options.map((o, i) => (
+        <label class="exercise__option">
+          <input type="radio" name={`${uid}-opt`} value={i} />
+          <span set:html={inlineMd(o)} />
+        </label>
+      ))}
+    </fieldset>
+  )}
+  {ex.type === 'numeric' && (
+    <div class="exercise__numeric">
+      <label for={`${uid}-num`}>Your answer</label>
+      <input id={`${uid}-num`} type="text" inputmode="decimal" autocomplete="off" spellcheck="false" />
+    </div>
+  )}
+  {ex.type === 'short' && (
+    <div class="exercise__numeric">
+      <label for={`${uid}-txt`}>Your answer <span class="muted">(for you only, not graded)</span></label>
+      <textarea id={`${uid}-txt`} rows="2"></textarea>
+    </div>
+  )}
+
+  {selfCheck && (
+    <div class="exercise__actions no-js-hide">
+      <button class="btn btn-primary btn-sm" type="button" data-ex-check>Check</button>
+      <button class="btn btn-sm" type="button" data-ex-retry hidden>Try again</button>
+    </div>
+  )}
+  <div class="exercise__feedback" aria-live="polite" data-ex-feedback></div>
+  {ex.hint && <p class="exercise__hint" data-ex-hint hidden><strong>Hint:</strong> <span set:html={inlineMd(ex.hint)} /></p>}
+
+  <details class="exercise__answer" data-ex-answer>
+    <summary>Show answer</summary>
+    <div class="exercise__answer-body">
+      <p><strong>Answer:</strong> <span set:html={inlineMd(answerText)} /></p>
+      <p set:html={inlineMd(ex.explanation)} />
+    </div>
+  </details>
+  {showLesson && lesson && <p class="exercise__from">From the lesson <a href={lesson.url}>{lesson.title}</a></p>}
+</div>
+
+<script>
+  import { setExercise } from '../../lib/progress';
+
+  function normalise(s: string) {
+    return s.trim().replace(/\s+/g, '').replace(/,/g, '.').replace(/−/g, '-');
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-exercise]').forEach((root) => {
+    if (root.dataset.enhanced) return;
+    root.dataset.enhanced = '1';
+    const type = root.dataset.type;
+    const check = root.querySelector<HTMLButtonElement>('[data-ex-check]');
+    const retry = root.querySelector<HTMLButtonElement>('[data-ex-retry]');
+    const feedback = root.querySelector<HTMLElement>('[data-ex-feedback]')!;
+    const hint = root.querySelector<HTMLElement>('[data-ex-hint]');
+    const answer = root.querySelector<HTMLDetailsElement>('[data-ex-answer]')!;
+    if (!check) return;
+
+    const setResult = (ok: boolean | null, msg: string) => {
+      root.dataset.result = ok === null ? '' : ok ? 'correct' : 'incorrect';
+      feedback.textContent = msg;
+    };
+
+    check.addEventListener('click', () => {
+      let ok: boolean | null = null;
+      if (type === 'mcq') {
+        const picked = root.querySelector<HTMLInputElement>('input[type=radio]:checked');
+        if (!picked) return setResult(null, 'Pick an option first.');
+        ok = Number(picked.value) === Number(root.dataset.correct);
+        root.querySelectorAll('.exercise__option').forEach((o) => o.classList.remove('is-wrong', 'is-right'));
+        picked.closest('.exercise__option')?.classList.add(ok ? 'is-right' : 'is-wrong');
+      } else if (type === 'numeric') {
+        const input = root.querySelector<HTMLInputElement>('input[type=text]')!;
+        const raw = normalise(input.value);
+        if (!raw) return setResult(null, 'Type a number first.');
+        const value = Number(raw);
+        if (Number.isNaN(value)) return setResult(null, 'That does not look like a number.');
+        ok = Math.abs(value - Number(root.dataset.correct)) <= Number(root.dataset.tolerance);
+      }
+      if (ok) {
+        setResult(true, 'Correct.');
+        answer.open = true;
+        setExercise(root.dataset.exercise!, true);
+        if (hint) hint.hidden = true;
+      } else {
+        setResult(false, 'Not quite. Try again, or open the answer below.');
+        if (hint) hint.hidden = false;
+        if (retry) retry.hidden = false;
+      }
+    });
+    retry?.addEventListener('click', () => {
+      root.querySelectorAll<HTMLInputElement>('input[type=radio]').forEach((r) => (r.checked = false));
+      root.querySelectorAll('.exercise__option').forEach((o) => o.classList.remove('is-wrong', 'is-right'));
+      const input = root.querySelector<HTMLInputElement>('input[type=text]');
+      if (input) { input.value = ''; input.focus(); }
+      setResult(null, '');
+      retry.hidden = true;
+    });
+  });
+</script>

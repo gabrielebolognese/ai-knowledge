@@ -1,0 +1,22 @@
+---
+/**
+ * Analogy callout (C5). Place it right AFTER the formal statement, never instead of it.
+ * MDX:
+ *   <Analogy breaks="Real neurons fire in spikes; this one outputs a number.">
+ *   A neuron is like a committee member weighing evidence…
+ *   </Analogy>
+ * Keep the body to about two sentences. `breaks` = where the analogy stops being true.
+ */
+interface Props { title?: string; breaks?: string; }
+const { title = 'Think of it like…', breaks } = Astro.props;
+---
+<aside class="callout callout--analogy" data-analogy>
+  <p class="callout__eyebrow">
+    <svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7.5 14.5h5M8 17h4M10 2.5a5.5 5.5 0 0 0-3.2 10c.5.4.7.9.7 1.5v.5h5V14c0-.6.3-1.1.7-1.5A5.5 5.5 0 0 0 10 2.5Z" />
+    </svg>
+    <span>{title}</span>
+  </p>
+  <div class="callout__body"><slot /></div>
+  {breaks && <p class="callout__breaks"><span>Where the analogy breaks down:</span> {breaks}</p>}
+</aside>

@@ -1,0 +1,11 @@
+---
+/**
+ * Inline citation (C7): superscript [n] linking to the lesson's References list.
+ * MDX: <Cite id="goodfellow2016" />   (optional: page="p. 12")
+ * `n` and `k` are injected at build time by src/lib/remark-lesson.mjs (numbered by first use).
+ * The hover/focus preview is filled on the client from the References list item.
+ */
+interface Props { id: string; n?: string | number; k?: string | number; page?: string; }
+const { id, n = '?', k = 1, page } = Astro.props;
+---
+<sup class="cite" id={`cite-${n}-${k}`} data-cite={id}><a href={`#ref-${n}`} data-cite-link aria-label={`Reference ${n}`}>[{n}]</a>{page && <span class="cite__page">: {page}</span>}</sup>

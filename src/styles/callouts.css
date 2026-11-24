@@ -1,0 +1,26 @@
+/* Callout + Analogy (C5). Shared by Callout.astro and Analogy.astro. */
+  .callout {
+    clear: both; margin: var(--s-5) 0; padding: var(--s-4) var(--s-5) var(--s-4) calc(var(--s-5) + 4px);
+    border-radius: var(--r-md); position: relative; background: var(--surface-2);
+  }
+  .callout::before { content: ""; position: absolute; left: 0; top: var(--s-3); bottom: var(--s-3); width: 4px; border-radius: 0 4px 4px 0; background: var(--line-strong); }
+  .callout__eyebrow {
+    display: flex; align-items: center; gap: var(--s-2); margin: 0 0 var(--s-2);
+    font-size: var(--t-micro); line-height: var(--lh-micro); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; color: var(--ink-2);
+  }
+  .callout__eyebrow svg { width: 20px; height: 20px; flex: none; }
+  .callout__body > :last-child { margin-bottom: 0; }
+  .callout__breaks { margin: var(--s-3) 0 0; color: var(--ink-3); font-style: italic; font-size: var(--t-small); line-height: var(--lh-small); }
+  .callout__breaks span { font-style: normal; font-weight: 600; }
+  .callout--analogy { background: var(--accent-soft); }
+  .callout--analogy::before { background: var(--accent); }
+  .callout--analogy .callout__eyebrow { color: var(--accent); }
+  .callout--tip { background: var(--success-soft); }
+  .callout--tip::before { background: var(--success); }
+  .callout--tip .callout__eyebrow { color: var(--success); }
+  .callout--pitfall { background: var(--warn-soft); }
+  .callout--pitfall::before { background: var(--warn); }
+  .callout--pitfall .callout__eyebrow { color: var(--warn); }
+  .callout--warning { background: var(--danger-soft); }
+  .callout--warning::before { background: var(--danger); }
+  .callout--warning .callout__eyebrow { color: var(--danger); }

@@ -1,0 +1,310 @@
+---
+/**
+ * Wikipedia-style lesson layout (brief §5.3):
+ * breadcrumb · hatnote · title · lead + floating infobox · body · Exercises ·
+ * Mark complete · See also · References · Further reading · prev/next,
+ * with a track outline on the left and a sticky "On this page" rail on the right.
+ */
+import type { MarkdownHeading } from 'astro';
+import BaseLayout from './BaseLayout.astro';
+import Infobox from '../components/mdx/Infobox.astro';
+import Exercise from '../components/mdx/Exercise.astro';
+import LevelBadge from '../components/ui/LevelBadge.astro';
+import ProgressRing from '../components/ui/ProgressRing.astro';
+import MarkComplete from '../components/ui/MarkComplete.astro';
+import { getCourse, getNeighbours, lessonUrl, TRACK_META, type Lesson } from '../lib/course';
+import { getCollection } from 'astro:content';
+
+interface Props {
+  entry: Lesson;
+  headings: MarkdownHeading[];
+  citeOrder?: string[];
+  citeCounts?: Record<string, number>;
+  inlineExercises?: string[];
+}
+const { entry, headings, citeOrder = [], citeCounts = {}, inlineExercises = [] } = Astro.props;
+const d = entry.data;
+const meta = TRACK_META[d.track as keyof typeof TRACK_META];
+const { track, module, index, prev, next } = await getNeighbours(d.slug);
+await getCourse();
+const all = await getCollection('lessons');
+const bySlug = new Map(all.map((l) => [l.data.slug, l]));
+const prereqs = d.prerequisites.map((s) => bySlug.get(s)).filter((l): l is Lesson => !!l);
+const seeAlso = d.seeAlso.map((s) => bySlug.get(s)).filter((l): l is Lesson => !!l);
+const trackSlugs = track ? track.lessons.map((l) => l.data.slug) : [d.slug];
+
+// References: cited sources in first-use order, then any uncited ones (the validator flags those).
+const sourceById = new Map(d.sources.map((s) => [s.id, s]));
+const orderedIds = [...citeOrder.filter((id) => sourceById.has(id)), ...d.sources.map((s) => s.id).filter((id) => !citeOrder.includes(id))];
+const refs = orderedIds.map((id, i) => ({ n: i + 1, count: citeCounts[id] ?? 0, s: sourceById.get(id)! }));
+const letters = 'abcdefghijklmnopqrstuvwxyz';
+const typeLabel: Record<string, string> = { paper: 'Paper', docs: 'Docs', book: 'Book', video: 'Video', dataset: 'Dataset', wikipedia: 'Wikipedia', article: 'Article', course: 'Course', code: 'Code' };
+
+const remainingExercises = d.exercises.filter((e) => !inlineExercises.includes(e.id));
+const lessonRef = { title: d.title, url: lessonUrl(entry) };
+
+const toc = [
+  ...headings.filter((h) => h.depth === 2 || h.depth === 3).map((h) => ({ depth: h.depth, slug: h.slug, text: h.text })),
+  ...(remainingExercises.length ? [{ depth: 2, slug: 'exercises', text: 'Exercises' }] : []),
+  ...(seeAlso.length ? [{ depth: 2, slug: 'see-also', text: 'See also' }] : []),
+  { depth: 2, slug: 'references', text: 'References' },
+  ...(d.furtherReading.length ? [{ depth: 2, slug: 'further-reading', text: 'Further reading' }] : []),
+];
+const fmtLevel = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' }[d.level];
+---
+<BaseLayout title={d.title} description={d.summary} active="course">
+  <div class="lesson-shell" data-last-visited={JSON.stringify({ slug: d.slug, track: d.track, title: d.title })}>
+    <nav class="lesson-rail" aria-label={`${meta.title} track outline`}>
+      <div class="rail-sticky">
+        <div class="rail-head">
+          <ProgressRing slugs={trackSlugs} size={40} label={`${meta.title} track progress`} />
+          <div>
+            <p class="eyebrow muted">{meta.kind === 'project' ? 'Project' : 'Track'}</p>
+            <a class="rail-title" href={`/course/#${d.track}`}>{meta.title}</a>
+            <p class="rail-count" data-progress-slugs={trackSlugs.join(',')}><span data-progress-text>0 / {trackSlugs.length}</span> complete</p>
+          </div>
+        </div>
+        {track?.modules.map((m) => (
+          <div class="rail-module">
+            {track.modules.length > 1 || m.title !== meta.title ? <p class="rail-module__title">{m.title}</p> : null}
+            <ol>
+              {m.lessons.map((l) => (
+                <li>
+                  <a href={lessonUrl(l)} aria-current={l.data.slug === d.slug ? 'page' : undefined} data-lesson-status={l.data.slug}>
+                    <span class="rail-dot" aria-hidden="true"></span>
+                    <span class="rail-label">{l.data.title}</span>
+                    <span class="sr-only rail-state-done">(completed)</span>
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))}
+      </div>
+    </nav>
+
+    <main id="main" class="lesson-main">
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="/course/">Course</a></li>
+          <li><a href={`/course/#${d.track}`}>{meta.title}</a></li>
+          {module && module.title !== meta.title && <li><span>{module.title}</span></li>}
+          <li><span aria-current="page">{d.title}</span></li>
+        </ol>
+      </nav>
+
+      <article class="lesson" data-pagefind-body data-lesson={d.slug}>
+        {d.hatnote && <p class="hatnote">{d.hatnote}</p>}
+        <header class="lesson-head">
+          <h1 data-pagefind-meta="title">{d.title}</h1>
+          <p class="lesson-meta">
+            <LevelBadge level={d.level} />
+            <span>{d.minutes} min read</span>
+            {track && <span>Lesson {index + 1} of {track.lessons.length}</span>}
+            <span class="lesson-meta__status" data-lesson-status={d.slug}><span class="when-done">✓ Completed</span></span>
+          </p>
+        </header>
+
+        <Infobox title={d.title}>
+          <div class="ib-row"><dt>Level</dt><dd>{fmtLevel}</dd></div>
+          <div class="ib-row"><dt>Time</dt><dd>About {d.minutes} minutes</dd></div>
+          <div class="ib-row"><dt>Prerequisites</dt><dd>
+            {prereqs.length ? <ul>{prereqs.map((p) => <li><a href={lessonUrl(p)}>{p.data.title}</a></li>)}</ul> : 'None'}
+          </dd></div>
+          {d.outcomes.length > 0 && <div class="ib-row"><dt>You will learn</dt><dd><ul>{d.outcomes.slice(0, 4).map((o) => <li>{o}</li>)}</ul></dd></div>}
+          {d.build && <div class="ib-row"><dt>You will build</dt><dd>{d.build}</dd></div>}
+          {d.tools.length > 0 && <div class="ib-row"><dt>Tools</dt><dd>{d.tools.join(', ')}</dd></div>}
+          {next && <div class="ib-row"><dt>Next</dt><dd><a href={lessonUrl(next)}>{next.data.title}</a></dd></div>}
+          {d.reviewed && <div class="ib-row"><dt>Last reviewed</dt><dd>{d.reviewed}</dd></div>}
+        </Infobox>
+
+        <div class="prose lesson-body">
+          <slot />
+        </div>
+
+        <div class="prose lesson-end">
+          {remainingExercises.length > 0 && (
+            <section aria-labelledby="exercises">
+              <h2 id="exercises">Exercises</h2>
+              <p class="muted section-note">Self-check, not graded. Answers are always available; tick <em>Done</em> to track your practice.</p>
+              {remainingExercises.map((ex) => <Exercise exercise={ex} lesson={lessonRef} />)}
+            </section>
+          )}
+
+          <section class="complete-cta" aria-label="Lesson completion">
+            <div>
+              <p class="complete-cta__title">Finished reading?</p>
+              <p class="muted">Mark it complete to update your course progress. You can undo it any time.</p>
+            </div>
+            <div class="complete-cta__actions">
+              <MarkComplete slug={d.slug} primary />
+              {next && <a class="btn btn-lg" href={lessonUrl(next)}>Next: {next.data.title} →</a>}
+            </div>
+          </section>
+
+          {seeAlso.length > 0 && (
+            <section aria-labelledby="see-also">
+              <h2 id="see-also">See also</h2>
+              <ul class="see-also">
+                {seeAlso.map((l) => <li><a href={lessonUrl(l)}>{l.data.title}</a> <span class="muted">{l.data.summary}</span></li>)}
+              </ul>
+            </section>
+          )}
+
+          <section aria-labelledby="references">
+            <h2 id="references">References</h2>
+            <ol class="references">
+              {refs.map(({ n, count, s }) => (
+                <li id={`ref-${n}`}>
+                  <span class="ref__back">
+                    {count <= 1
+                      ? <a href={`#cite-${n}-1`} aria-label="Back to the text">^</a>
+                      : <Fragment>^ {Array.from({ length: count }, (_, k) => <sup><a href={`#cite-${n}-${k + 1}`} aria-label={`Back to citation ${letters[k]}`}>{letters[k]}</a></sup>)}</Fragment>}
+                  </span>
+                  <span class="ref__body">
+                    {s.author && `${s.author}${s.year ? ` (${s.year})` : ''}. `}
+                    <a class="ext" href={s.url}><span class="ref__title">{s.title}</span></a>{'. '}
+                    {s.publisher && `${s.publisher}${!s.author && s.year ? `, ${s.year}` : ''}. `}
+                    <span class="ref__accessed">Retrieved {s.accessed}.</span>
+                    {s.type && <span class="ref__type">{typeLabel[s.type]}</span>}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </section>
+
+          {d.furtherReading.length > 0 && (
+            <section aria-labelledby="further-reading">
+              <h2 id="further-reading">Further reading</h2>
+              <ul>{d.furtherReading.map((f) => <li><a class="ext" href={f.url}>{f.title}</a></li>)}</ul>
+            </section>
+          )}
+
+          <nav class="prevnext" aria-label="Previous and next lesson">
+            {prev ? <a class="prevnext__card" href={lessonUrl(prev)} rel="prev"><span class="eyebrow muted">← Previous</span><span class="prevnext__title">{prev.data.title}</span></a> : <span></span>}
+            {next ? <a class="prevnext__card prevnext__card--next" href={lessonUrl(next)} rel="next"><span class="eyebrow muted">Next →</span><span class="prevnext__title">{next.data.title}</span></a> : <span></span>}
+          </nav>
+        </div>
+      </article>
+    </main>
+
+    <aside class="lesson-aside" aria-label="On this page">
+      <div class="rail-sticky">
+        <p class="eyebrow muted">On this page</p>
+        <ol class="toc" data-toc>
+          <li><a href="#main" data-toc-link="top">{d.title}</a></li>
+          {toc.map((h) => <li class={`toc-d${h.depth}`}><a href={`#${h.slug}`} data-toc-link={h.slug}>{h.text}</a></li>)}
+        </ol>
+        <div class="aside-card">
+          <div class="aside-progress" data-progress-slugs={trackSlugs.join(',')}>
+            <ProgressRing slugs={trackSlugs} size={56} label={`${meta.title}: lessons complete`} />
+            <p><strong>{meta.title}</strong><br /><span class="muted"><span data-progress-text>0 / {trackSlugs.length}</span> lessons</span></p>
+          </div>
+          <MarkComplete slug={d.slug} size="sm" />
+          <p class="shortcuts muted">Press <kbd>M</kbd> to toggle</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+</BaseLayout>
+
+<script>
+  // Highlight the current section in "On this page".
+  const links = new Map<string, HTMLElement>();
+  document.querySelectorAll<HTMLElement>('[data-toc-link]').forEach((a) => links.set(a.dataset.tocLink!, a));
+  const targets = Array.from(links.keys())
+    .filter((k) => k !== 'top')
+    .map((id) => document.getElementById(id))
+    .filter((el): el is HTMLElement => !!el);
+  const setActive = (id: string) => links.forEach((a, k) => a.classList.toggle('is-active', k === id));
+  const onScroll = () => {
+    let current = 'top';
+    for (const t of targets) if (t.getBoundingClientRect().top < 140) current = t.id;
+    setActive(current);
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
+
+<style>
+  .lesson-shell {
+    max-width: 1600px; margin: 0 auto; padding: var(--s-6) var(--gutter) 0;
+    display: grid; grid-template-columns: var(--rail-left) minmax(0, 1fr) var(--rail-right); gap: var(--s-7);
+    align-items: start;
+  }
+  .lesson-rail, .lesson-aside { align-self: stretch; }
+  .rail-sticky { position: sticky; top: calc(var(--topbar-h) + var(--s-5)); max-height: calc(100vh - var(--topbar-h) - var(--s-6)); overflow-y: auto; padding-bottom: var(--s-5); scrollbar-width: thin; }
+
+  /* Left rail: track outline */
+  .rail-head { display: flex; gap: var(--s-3); align-items: center; padding-bottom: var(--s-4); margin-bottom: var(--s-3); border-bottom: 1px solid var(--line); }
+  .rail-head p { margin: 0; }
+  .rail-title { font-family: var(--font-serif); font-size: 1.125rem; font-weight: 500; color: var(--ink); text-decoration: none; }
+  .rail-count { font-size: var(--t-small); color: var(--ink-3); }
+  .rail-module { margin: var(--s-3) 0 var(--s-4); }
+  .rail-module__title { margin: 0 0 var(--s-2); font-size: var(--t-micro); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; color: var(--ink-3); }
+  .rail-module ol { list-style: none; margin: 0; padding: 0; position: relative; }
+  .rail-module ol::before { content: ""; position: absolute; left: 7px; top: 12px; bottom: 12px; width: 2px; background: var(--line); }
+  .rail-module a {
+    position: relative; display: flex; gap: var(--s-3); align-items: flex-start; padding: 6px var(--s-2) 6px 0;
+    color: var(--ink-2); text-decoration: none; font-size: var(--t-small); line-height: var(--lh-small); border-radius: var(--r-xs);
+  }
+  .rail-module a:hover { color: var(--ink); }
+  .rail-module a[aria-current="page"] { color: var(--ink); font-weight: 600; }
+  .rail-dot { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line-strong); position: relative; z-index: 1; }
+  .rail-module a[aria-current="page"] .rail-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .rail-module a[data-done="true"] .rail-dot { background: var(--accent-soft); border-color: var(--accent); }
+  .rail-module a[data-done="true"] .rail-dot::after { content: ""; position: absolute; left: 3.5px; top: 1px; width: 4px; height: 7px; border: solid var(--accent); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .rail-module a:not([data-done="true"]) .rail-state-done { display: none; }
+
+  /* Centre */
+  .lesson-main { min-width: 0; }
+  .breadcrumb ol { display: flex; flex-wrap: wrap; gap: var(--s-2); list-style: none; padding: 0; margin: 0 0 var(--s-5); font-size: var(--t-small); color: var(--ink-3); }
+  .breadcrumb li + li::before { content: "›"; margin-right: var(--s-2); color: var(--line-strong); }
+  .breadcrumb a { color: var(--ink-3); text-decoration: none; }
+  .breadcrumb a:hover { color: var(--link); text-decoration: underline; }
+  .hatnote { font-style: italic; color: var(--ink-2); font-size: var(--t-small); margin: 0 0 var(--s-3); padding-left: var(--s-4); border-left: 2px solid var(--line); max-width: var(--measure); }
+  .lesson-head { margin-bottom: var(--s-5); max-width: var(--measure); }
+  .lesson-head h1 { margin-bottom: var(--s-3); }
+  .lesson-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-3); margin: 0; font-size: var(--t-small); color: var(--ink-3); }
+  .lesson-meta > span + span:not(.level-badge)::before { content: "·"; margin-right: var(--s-3); color: var(--line-strong); }
+  .lesson-meta__status:not([data-done="true"]) { display: none; }
+  .lesson-meta__status { color: var(--success); font-weight: 600; }
+  .lesson :global(.lesson-body > p:first-child) { font-size: var(--t-lead); line-height: var(--lh-lead); color: var(--ink); }
+  .lesson-end { clear: both; }
+  .section-note { font-size: var(--t-small); }
+  .complete-cta {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--s-5); flex-wrap: wrap;
+    margin: var(--s-7) 0 0; padding: var(--s-5) var(--s-6); border-radius: var(--r-lg);
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%); border: 1px solid var(--line); box-shadow: var(--sh-1);
+  }
+  .complete-cta p { margin: 0; }
+  .complete-cta__title { font-family: var(--font-serif); font-size: 1.375rem; font-weight: 500; margin-bottom: var(--s-1) !important; }
+  .complete-cta .muted { font-size: var(--t-small); }
+  .complete-cta__actions { display: flex; gap: var(--s-3); flex-wrap: wrap; }
+  .see-also li { margin: var(--s-2) 0; }
+  .see-also .muted { display: block; font-size: var(--t-small); line-height: var(--lh-small); }
+  .prevnext { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4); margin-top: var(--s-7); }
+  .prevnext__card {
+    display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-4) var(--s-5); text-decoration: none;
+    border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--sh-1);
+    transition: transform var(--d-base) var(--ease-out), box-shadow var(--d-base) var(--ease-out);
+  }
+  .prevnext__card:hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
+  .prevnext__card--next { text-align: right; }
+  .prevnext__title { font-family: var(--font-serif); font-size: 1.125rem; color: var(--ink); font-weight: 500; }
+
+  /* Right rail */
+  .toc { list-style: none; margin: var(--s-2) 0 var(--s-5); padding: 0; border-left: 1px solid var(--line); font-size: var(--t-small); line-height: var(--lh-small); }
+  .toc a { display: block; padding: 4px 0 4px var(--s-3); margin-left: -1px; border-left: 2px solid transparent; color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink); }
+  .toc a.is-active { color: var(--accent); border-left-color: var(--accent); font-weight: 500; }
+  .toc .toc-d3 a { padding-left: var(--s-5); }
+  .aside-card { padding: var(--s-4); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--sh-1); display: grid; gap: var(--s-3); }
+  .aside-progress { display: flex; align-items: center; gap: var(--s-3); }
+  .aside-progress p { margin: 0; font-size: var(--t-small); line-height: var(--lh-small); }
+  .shortcuts { margin: 0; font-size: var(--t-micro); text-align: center; }
+
+  @media (max-width: 1279px) {
+    .lesson-shell { grid-template-columns: 220px minmax(0, 1fr) 220px; gap: var(--s-6); padding-left: var(--s-6); padding-right: var(--s-6); }
+  }
+</style>

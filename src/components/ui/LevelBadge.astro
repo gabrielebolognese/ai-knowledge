@@ -1,0 +1,12 @@
+---
+// Level badge: word + shape (circle = Beginner, diamond = Intermediate, hexagon = Advanced).
+interface Props { level: 'beginner' | 'intermediate' | 'advanced'; }
+const { level } = Astro.props;
+const word = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' }[level];
+---
+<span class={`level-badge level-${level}`}>
+  {level === 'beginner' && <svg viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="4.2" fill="currentColor" /></svg>}
+  {level === 'intermediate' && <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0.6 9.4 5 5 9.4 0.6 5Z" fill="currentColor" /></svg>}
+  {level === 'advanced' && <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.6 0.8h4.8L9.8 5 7.4 9.2H2.6L0.2 5Z" fill="currentColor" /></svg>}
+  {word}
+</span>

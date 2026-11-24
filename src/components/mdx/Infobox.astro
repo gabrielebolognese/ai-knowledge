@@ -1,0 +1,51 @@
+---
+/**
+ * Wikipedia-style fact table that floats to the right of the lead (C4).
+ * MDX:  <Infobox title="MNIST" rows={[{ label: 'Images', value: '70,000' }]} />
+ * Extra rows can be passed as children: <div class="ib-row"><dt>Label</dt><dd>…</dd></div>
+ * Rows with empty values are omitted; keep it to 8 rows or fewer.
+ */
+interface Row { label: string; value?: string | number | null; }
+interface Props { title: string; rows?: Row[]; image?: string; imageAlt?: string; caption?: string; float?: boolean; }
+const { title, rows = [], image, imageAlt = '', caption, float = true } = Astro.props;
+const visible = rows.filter((r) => r.value !== undefined && r.value !== null && String(r.value).trim() !== '');
+---
+<aside class:list={['infobox', { 'infobox--float': float }]} aria-label={`${title}: key facts`}>
+  <p class="infobox__title">{title}</p>
+  {image && (
+    <figure class="infobox__media">
+      <img src={image} alt={imageAlt} loading="lazy" />
+      {caption && <figcaption>{caption}</figcaption>}
+    </figure>
+  )}
+  <dl>
+    {visible.map((r) => (
+      <div class="ib-row"><dt>{r.label}</dt><dd>{r.value}</dd></div>
+    ))}
+    <slot />
+  </dl>
+</aside>
+<style is:global>
+  .infobox {
+    width: var(--infobox-w); background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: var(--r-sm); overflow: hidden; font-size: var(--t-small); line-height: var(--lh-small);
+    margin: 0 0 var(--s-5);
+  }
+  .infobox--float { float: right; margin: var(--s-1) 0 var(--s-5) var(--s-6); }
+  .infobox__title {
+    margin: 0; padding: var(--s-3) var(--s-4); background: var(--surface-3);
+    font-family: var(--font-serif); font-size: 1.0625rem; line-height: 1.5rem; font-weight: 500;
+    font-variation-settings: "opsz" 24, "SOFT" 30;
+  }
+  .infobox__media { margin: 0; padding: var(--s-3) var(--s-4) 0; }
+  .infobox__media img { display: block; width: 100%; border-radius: var(--r-xs); background: var(--surface); }
+  .infobox__media figcaption { color: var(--ink-3); margin-top: var(--s-1); }
+  .infobox dl { margin: 0; padding: var(--s-1) var(--s-4) var(--s-2); }
+  .infobox .ib-row { display: grid; grid-template-columns: 96px 1fr; gap: var(--s-3); padding: var(--s-2) 0; border-top: 1px solid var(--line); }
+  .infobox .ib-row:first-child { border-top: 0; }
+  .infobox dt { color: var(--ink-3); }
+  .infobox dd { margin: 0; color: var(--ink); }
+  .infobox dd ul { margin: 0; padding: 0 0 0 1em; list-style: disc; }
+  .infobox dd ul li::marker { color: var(--ink-3); }
+  .infobox dd li + li { margin-top: 2px; }
+</style>

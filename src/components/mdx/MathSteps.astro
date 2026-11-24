@@ -1,0 +1,143 @@
+---
+/**
+ * Step-by-step math reveal (C6). Shows a derivation one <Step> at a time,
+ * with Back / Next step / Show all / Reset and ←/→ keys. Without JS (or in print)
+ * every step is visible as a numbered list.
+ * MDX:
+ *   <MathSteps title="Computing one neuron's output" legend={[{ symbol: 'w_i', meaning: 'weight i' }]}>
+ *     <Step tex="..." words="..." />
+ *     <Step tex="..." words="..." />
+ *   </MathSteps>
+ * Every lesson that contains display math must present it with MathSteps (validator rule).
+ */
+import katex from 'katex';
+import { katexOptions } from '../../lib/katex-options.mjs';
+interface Legend { symbol: string; meaning: string; }
+interface Props { title: string; legend?: Legend[]; }
+const { title, legend = [] } = Astro.props;
+const id = `ms-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}`;
+const legendHtml = legend.map((l) => ({ html: katex.renderToString(l.symbol, { ...katexOptions, displayMode: false }), meaning: l.meaning }));
+---
+<section class="msteps" data-mathsteps aria-labelledby={`${id}-title`}>
+  <header class="msteps__head">
+    <p class="msteps__title" id={`${id}-title`}>{title}</p>
+    <p class="msteps__count" aria-live="polite" data-ms-count></p>
+    <div class="msteps__dots" aria-hidden="true" data-ms-dots></div>
+  </header>
+  <ol class="msteps__list" data-ms-list>
+    <slot />
+  </ol>
+  <footer class="msteps__controls no-print" data-ms-controls hidden>
+    <button class="btn btn-sm" type="button" data-ms-back>← Back</button>
+    <button class="btn btn-primary btn-sm" type="button" data-ms-next>Next step →</button>
+    <button class="btn btn-ghost btn-sm" type="button" data-ms-all>Show all</button>
+    <button class="btn btn-ghost btn-sm" type="button" data-ms-reset>Reset</button>
+  </footer>
+  {legendHtml.length > 0 && (
+    <details class="msteps__legend">
+      <summary>Symbols used</summary>
+      <dl>
+        {legendHtml.map((l) => (<div><dt set:html={l.html} /><dd>{l.meaning}</dd></div>))}
+      </dl>
+    </details>
+  )}
+</section>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-mathsteps]').forEach((root) => {
+    const steps = Array.from(root.querySelectorAll<HTMLElement>('[data-step]'));
+    const n = steps.length;
+    if (!n) return;
+    const count = root.querySelector<HTMLElement>('[data-ms-count]')!;
+    const dots = root.querySelector<HTMLElement>('[data-ms-dots]')!;
+    const controls = root.querySelector<HTMLElement>('[data-ms-controls]')!;
+    const back = root.querySelector<HTMLButtonElement>('[data-ms-back]')!;
+    const next = root.querySelector<HTMLButtonElement>('[data-ms-next]')!;
+    const all = root.querySelector<HTMLButtonElement>('[data-ms-all]')!;
+    const reset = root.querySelector<HTMLButtonElement>('[data-ms-reset]')!;
+    dots.innerHTML = steps.map(() => '<span></span>').join('');
+    controls.hidden = false;
+    root.classList.add('is-enhanced');
+    let cur = 0;
+
+    function show(i: number, animate = true) {
+      cur = Math.max(0, Math.min(n - 1, i));
+      steps.forEach((s, j) => {
+        s.hidden = j > cur;
+        s.classList.toggle('is-current', j === cur);
+        s.classList.toggle('is-past', j < cur);
+        if (j === cur && animate) {
+          s.classList.remove('enter');
+          void s.offsetWidth;
+          s.classList.add('enter');
+        }
+      });
+      Array.from(dots.children).forEach((d, j) => d.classList.toggle('on', j <= cur));
+      count.textContent = `Step ${cur + 1} of ${n}`;
+      back.disabled = cur === 0;
+      next.disabled = cur === n - 1;
+      all.disabled = cur === n - 1;
+      root.dataset.complete = String(cur === n - 1);
+    }
+    back.addEventListener('click', () => show(cur - 1));
+    next.addEventListener('click', () => show(cur + 1));
+    all.addEventListener('click', () => show(n - 1, false));
+    reset.addEventListener('click', () => show(0));
+    root.addEventListener('keydown', (e) => {
+      if ((e.target as HTMLElement).closest('input, textarea')) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); show(cur + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); show(cur - 1); }
+    });
+    show(0, false);
+  });
+</script>
+
+<style is:global>
+  .msteps {
+    clear: both; margin: var(--s-6) 0; background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r-md); box-shadow: var(--sh-1); overflow: hidden;
+  }
+  .msteps__head { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .msteps__title { margin: 0; font-family: var(--font-serif); font-size: 1.125rem; font-weight: 500; font-variation-settings: "opsz" 24, "SOFT" 30; }
+  .msteps__count { margin: 0 0 0 auto; font-size: var(--t-small); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .msteps__dots { display: flex; gap: 6px; }
+  .msteps__dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); transition: background var(--d-base); }
+  .msteps__dots span.on { background: var(--accent); }
+  .msteps__list { list-style: none; margin: 0 !important; padding: var(--s-2) var(--s-5) !important; counter-reset: mstep; }
+  .mstep { counter-increment: mstep; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: var(--s-5); padding: var(--s-4) 0; border-top: 1px dashed var(--line); margin: 0 !important; }
+  .mstep:first-child { border-top: 0; }
+  .mstep[hidden] { display: none; }
+  .mstep__expr { position: relative; padding-left: var(--s-6); min-width: 0; align-self: center; }
+  .mstep__expr::before {
+    content: counter(mstep); position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--surface-2); color: var(--ink-2); font-size: var(--t-micro); font-weight: 600;
+  }
+  .mstep__expr .katex-display { margin: 0; overflow-x: auto; overflow-y: hidden; padding: var(--s-2) 0; text-align: left; }
+  .mstep__expr .katex-display > .katex { text-align: left; }
+  .mstep__expr .katex { font-size: 1.16em; }
+  .mstep__label { display: block; font-size: var(--t-micro); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .mstep__words { background: var(--surface-2); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); font-size: var(--t-small); line-height: var(--lh-small); align-self: center; }
+  .mstep__words p { margin: 0 0 var(--s-2); }
+  .mstep__words > :last-child, .mstep__slot > :last-child { margin-bottom: 0; }
+  .mstep__eyebrow { font-size: var(--t-micro); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; color: var(--accent); }
+  .mstep__example { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .mstep__example span { font-weight: 600; color: var(--ink); }
+  .msteps.is-enhanced .mstep.is-past { opacity: 0.7; }
+  .msteps.is-enhanced .mstep.is-past .hl { background: transparent; color: inherit; }
+  .msteps.is-enhanced .mstep.is-current .mstep__expr::before { background: var(--accent); color: var(--ink-inverse); }
+  .msteps__controls { display: flex; gap: var(--s-2); padding: var(--s-3) var(--s-5) var(--s-4); border-top: 1px solid var(--line); }
+  .msteps__controls[hidden] { display: none; }
+  .msteps__controls button:disabled { opacity: 0.45; cursor: default; transform: none; box-shadow: none; }
+  .msteps__legend { border-top: 1px solid var(--line); padding: var(--s-3) var(--s-5); font-size: var(--t-small); }
+  .msteps__legend summary { cursor: pointer; color: var(--ink-2); font-weight: 500; }
+  .msteps__legend dl { margin: var(--s-3) 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2) var(--s-5); }
+  .msteps__legend dl div { display: flex; gap: var(--s-3); align-items: baseline; }
+  .msteps__legend dt { min-width: 3em; }
+  .msteps__legend dd { margin: 0; color: var(--ink-2); }
+  @media (prefers-reduced-motion: no-preference) {
+    .mstep.enter { animation: mstep-in var(--d-base) var(--ease-out) both; }
+    @keyframes mstep-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  }
+  @media print { .msteps .mstep[hidden] { display: grid !important; } }
+</style>

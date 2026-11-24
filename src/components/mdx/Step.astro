@@ -1,0 +1,28 @@
+---
+/**
+ * One step of a <MathSteps> derivation. Rendered server-side with KaTeX.
+ * MDX:
+ *   <Step tex="z = \hl{w_1 x_1}" example="with w₁ = 0.5, x₁ = 1 → 0.5">
+ *   **In words:** multiply the first input by how much we trust it.
+ *   </Step>
+ * Use \hl{...} to highlight the term that is new in this step. One new idea per step.
+ */
+import katex from 'katex';
+import { katexOptions } from '../../lib/katex-options.mjs';
+interface Props { tex: string; words?: string; example?: string; label?: string; }
+const { tex, words, example, label } = Astro.props;
+const html = katex.renderToString(tex, { ...katexOptions, displayMode: true });
+const hasSlot = Astro.slots.has('default');
+---
+<li class="mstep" data-step>
+  <div class="mstep__expr">
+    {label && <span class="mstep__label">{label}</span>}
+    <Fragment set:html={html} />
+  </div>
+  <div class="mstep__words">
+    <p class="mstep__eyebrow">In words</p>
+    {words && <p>{words}</p>}
+    {hasSlot && <div class="mstep__slot"><slot /></div>}
+    {example && <p class="mstep__example"><span>Example:</span> {example}</p>}
+  </div>
+</li>
