@@ -3643,9 +3643,9 @@
       "title": "Code autocompletion",
       "kind": "project",
       "level": "advanced",
-      "codeDir": "code/projects/code-autocomplete/",
+      "codeDir": "code/projects/project-code-autocomplete/",
       "blurb": "Train a tiny GPT on Python's own standard library and use it to complete code.",
-      "outcome": "A ~1.8M-parameter character-level GPT (optionally BPE) that completes Python, measured by validation loss and the parse rate of its completions.",
+      "outcome": "A ~1.8M-parameter character-level GPT (then a BPE version) that completes Python, measured by validation loss in bits per character and the parse rate of its completions.",
       "datasets": [
         "python-license"
       ],
@@ -3688,7 +3688,7 @@
               "prerequisites": [
                 "python-for-ml"
               ],
-              "covers": "No download needed, measured counts (1,748 files / ≈10.7 MB of source on 3.13), character vocabulary, train/val split by file.",
+              "covers": "No download needed, measured counts (568 non-test files / ≈9.7M characters on CPython 3.13 for Windows), fixed 97-character alphabet, train/val split by file.",
               "sources": [
                 {
                   "id": "python-sysconfig",
@@ -3713,7 +3713,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/code-autocomplete/build_corpus.py"
+                "code/projects/project-code-autocomplete/corpus.py"
               ]
             },
             {
@@ -3754,6 +3754,14 @@
                 {
                   "id": "pt-sdpa",
                   "url": "https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html"
+                },
+                {
+                  "id": "radford2019",
+                  "url": "https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf"
+                },
+                {
+                  "id": "press2016",
+                  "url": "https://arxiv.org/abs/1608.05859"
                 }
               ],
               "research": "02 §6, §11",
@@ -3766,7 +3774,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/code-autocomplete/model.py"
+                "code/projects/project-code-autocomplete/model.py"
               ]
             },
             {
@@ -3787,7 +3795,7 @@
                 "hyperparameter-tuning",
                 "saving-loading-models"
               ],
-              "covers": "30-60 min CPU run, --smoke mode, eval every N steps, loss in nats per character.",
+              "covers": "30-60 min CPU run (4,000 steps), --smoke mode, eval every N steps, loss in nats per token and bits per character, --resume and the --no-causal-mask demo.",
               "sources": [
                 {
                   "id": "nanogpt",
@@ -3816,7 +3824,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/code-autocomplete/train.py"
+                "code/projects/project-code-autocomplete/train.py"
               ]
             }
           ]
@@ -3867,8 +3875,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/code-autocomplete/sample.py",
-                "code/projects/code-autocomplete/evaluate.py"
+                "code/projects/project-code-autocomplete/complete.py",
+                "code/projects/project-code-autocomplete/evaluate.py"
               ]
             },
             {
@@ -3880,7 +3888,7 @@
               "order": 50,
               "minutes": 25,
               "goals": [
-                "Train a 2-4k-token BPE vocabulary on the training files only",
+                "Train a BPE vocabulary (a few hundred merges, scalable to 2-4k tokens) on the training files only",
                 "Retrain the model on BPE tokens and compare loss per character fairly",
                 "Explain the vocabulary-size versus model-size trade-off"
               ],
@@ -3917,7 +3925,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/code-autocomplete/bpe.py"
+                "code/projects/project-code-autocomplete/tokenizer.py"
               ]
             },
             {
@@ -3950,6 +3958,14 @@
                 {
                   "id": "the-stack-smol",
                   "url": "https://huggingface.co/datasets/bigcode/the-stack-smol"
+                },
+                {
+                  "id": "chen2021",
+                  "url": "https://arxiv.org/abs/2107.03374"
+                },
+                {
+                  "id": "bavarian2022",
+                  "url": "https://arxiv.org/abs/2207.14255"
                 }
               ],
               "research": "02 §10.5b, §11",
@@ -3962,7 +3978,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/code-autocomplete/complete.py"
+                "code/projects/project-code-autocomplete/complete.py"
               ]
             }
           ]
@@ -6069,6 +6085,18 @@
       "url": "https://brew.sh/",
       "publisher": "Homebrew",
       "research": "04 §3.3"
+    },
+    "chen2021": {
+      "title": "Evaluating Large Language Models Trained on Code (Chen et al. 2021, Codex)",
+      "url": "https://arxiv.org/abs/2107.03374",
+      "publisher": "arXiv",
+      "research": "added (code-autocomplete project step)"
+    },
+    "bavarian2022": {
+      "title": "Efficient Training of Language Models to Fill in the Middle (Bavarian et al. 2022)",
+      "url": "https://arxiv.org/abs/2207.14255",
+      "publisher": "arXiv",
+      "research": "added (code-autocomplete project step)"
     }
   }
 }
