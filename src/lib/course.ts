@@ -26,8 +26,8 @@ export interface TrackMeta {
 export const TRACK_META: Record<TrackId, TrackMeta> = {
   setup: { id: 'setup', title: 'Setup', short: 'Setup', kind: 'core', level: 'beginner', blurb: 'Install Python, an editor and the libraries. Skip it if you are already set up.' },
   beginner: { id: 'beginner', title: 'Beginner', short: 'Beginner', kind: 'core', level: 'beginner', blurb: 'Python for ML, the math you need, and your first neural network.' },
-  intermediate: { id: 'intermediate', title: 'Intermediate', short: 'Intermediate', kind: 'core', level: 'intermediate', blurb: 'PyTorch, training that works, CNNs and sequence models.' },
-  advanced: { id: 'advanced', title: 'Advanced', short: 'Advanced', kind: 'core', level: 'advanced', blurb: 'Attention, Transformers, search and evaluation.' },
+  intermediate: { id: 'intermediate', title: 'Intermediate', short: 'Intermediate', kind: 'core', level: 'intermediate', blurb: 'Multilayer networks and backprop, PyTorch from tensors to training loops, and the habits that make training work.' },
+  advanced: { id: 'advanced', title: 'Advanced', short: 'Advanced', kind: 'core', level: 'advanced', blurb: 'Convolutions, sequence models, attention and Transformers, tokenization, game-tree search and self-play, and shipping models efficiently.' },
   'project-digits-letters': { id: 'project-digits-letters', title: 'Handwritten digits and letters', short: 'Digits & letters', kind: 'project', level: 'intermediate', blurb: 'Recognise handwritten digits (MNIST) and letters (EMNIST).' },
   'project-doodles': { id: 'project-doodles', title: 'Doodle recognition', short: 'Doodles', kind: 'project', level: 'intermediate', blurb: 'Classify quick sketches from the Quick, Draw! dataset.' },
   'project-text': { id: 'project-text', title: 'Small-text models', short: 'Small text', kind: 'project', level: 'intermediate', blurb: 'A character-level generator and a short-text classifier.' },
@@ -48,12 +48,19 @@ interface CurriculumModule {
 interface CurriculumTrack {
   id: string;
   title?: string;
+  blurb?: string;
+  quickStart?: string[];
+  recommendedPath?: string[];
+  codeDir?: string;
   modules?: CurriculumModule[];
   lessons?: (string | { slug: string })[];
 }
 
 const curriculumFiles = import.meta.glob<{ default: { tracks?: CurriculumTrack[] } }>('/src/data/curriculum.json', { eager: true });
 const curriculum = Object.values(curriculumFiles)[0]?.default ?? null;
+
+/** The raw curriculum (planned lessons, quickStart, recommendedPath, certificateRequirement, sourceRegistry), or null. */
+export const getCurriculum = () => curriculum as (typeof curriculum & Record<string, unknown>) | null;
 
 export interface ModuleGroup {
   title: string;
@@ -78,9 +85,10 @@ export async function getCourse(): Promise<TrackGroup[]> {
   const groups: TrackGroup[] = [];
 
   for (const id of TRACKS as readonly TrackId[]) {
-    const meta = TRACK_META[id];
-    let modules: ModuleGroup[] = [];
     const ct = curriculum?.tracks?.find((t) => t.id === id);
+    // Titles and blurbs come from curriculum.json when it provides them.
+    const meta: TrackMeta = { ...TRACK_META[id], ...(ct?.title ? { title: ct.title } : {}), ...(ct?.blurb ? { blurb: ct.blurb } : {}) };
+    let modules: ModuleGroup[] = [];
     if (ct) {
       const mods: CurriculumModule[] = ct.modules ?? [{ title: meta.title, lessons: ct.lessons ?? [] }];
       modules = mods.map((m) => ({

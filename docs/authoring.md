@@ -165,16 +165,43 @@ The API is `getState`, `subscribe`, `toggleLesson`, `setLesson`, `setLessons` (b
 
 ## 11. Curriculum file
 
-When `src/data/curriculum.json` exists, it defines the order of tracks, modules and lessons, and the validator requires every listed lesson file to exist **(checked)**:
+`src/data/curriculum.json` is the course map: 9 tracks, their modules and every planned lesson. **Write lessons against it.** The reasoning behind it is in `research/curriculum-rationale.md`. `src/lib/course.ts` builds the outline, the prev/next links and the track titles/blurbs from it. The validator checks its structure through `scripts/lib/check-curriculum.mjs`, which you can also run on its own: `node scripts/lib/check-curriculum.mjs` **(checked)**.
+
+Shape (abridged):
 
 ```json
-{ "tracks": [
-  { "id": "beginner", "title": "Beginner",
-    "modules": [ { "id": "nn-from-scratch", "title": "Neural networks from scratch",
-                   "lessons": ["artificial-neuron", "gradient-descent"] } ] } ] }
+{ "version": 1,
+  "environmentHelp": { "torch": ["setup-install-pytorch", "setup-colab"] },
+  "certificateRequirement": { "allLessonsInTracks": ["beginner", "intermediate", "advanced"],
+    "projectTracks": ["project-digits-letters", "…"], "minProjectTracksCompleted": 1, "setupRequired": false },
+  "tracks": [
+    { "id": "project-chess", "title": "Mini chess engine", "kind": "project", "level": "advanced", "blurb": "…",
+      "codeDir": "code/projects/chess/",
+      "quickStart": ["python-for-ml", "game-tree-search", "…"],
+      "recommendedPath": ["beginner", "intermediate", "game-tree-search", "project-chess"],
+      "modules": [ { "id": "chess-classic", "title": "The classic engine", "lessons": [
+        { "slug": "chess-board-moves", "title": "…", "track": "project-chess", "module": "The classic engine",
+          "level": "intermediate", "order": 10, "minutes": 20,
+          "goals": ["3 to 5 learning goals"], "prerequisites": ["python-for-ml"], "needs": ["chess"],
+          "covers": "what the lesson must contain", "sources": [{ "id": "python-chess-core", "url": "https://…" }],
+          "research": "03 a1, b1 (M1)", "exercises": { "count": 3, "types": ["numeric", "mcq", "short"] },
+          "codeFiles": ["code/projects/chess/perft.py"], "screenshots": ["SS-W01"] } ] } ] } ],
+  "sourceRegistry": { "python-chess-core": { "title": "…", "url": "https://…", "publisher": "…", "research": "03 b1" } } }
 ```
 
-A lesson entry may also be an object `{ "slug": "…", … }` with extra fields. Lessons that exist but are missing from the curriculum produce a warning.
+Rules for lesson writers:
+- Use the entry's `slug`, `track`, `level` and `module` in the frontmatter. Put its `goals` into `outcomes` and its `prerequisites` into `prerequisites`. The validator warns when the level, module or prerequisites drift from the curriculum. If you change a title or goals, update the curriculum in the same commit.
+- `sources` lists the **key** sources (ids in `sourceRegistry`, URLs from the research files). Copy them into the frontmatter with `accessed` dates, cite each one in the text, and add more if you need them.
+- `research` points to the section of `research/0X-*.md` that holds the distilled facts, the math micro-steps and the analogies.
+- `exercises` is the plan: at least that many exercises, of those types.
+- `codeFiles` (project lessons, some core lessons) are the companion files the lesson shows with `<CodeFile>`. Project code lives in the track's `codeDir`.
+- `screenshots` (setup lessons) are IDs from `research/04-setup.md` §8.
+- `skipPaths` (top level) drive the dashboard's skip chips (Skip setup, I know Python, I know the math, Start at Intermediate, Go straight to a project). Skipping never marks lessons complete; see `skipPolicy`.
+- `needs` names the software a lesson uses. Setup is optional, so **no lesson outside setup lists a setup lesson as a prerequisite**. Point to `environmentHelp` instead.
+
+Rules the checker enforces: all 9 tracks in order; unique kebab-case slugs; 10–30 minutes per lesson; 3–5 goals; at least 2 planned exercises of schema types; at least 3 key sources that resolve in `sourceRegistry`; prerequisites that exist and come **earlier** in the course order (setup → beginner → intermediate → advanced → each project); no project lesson depends on another project; every project lists `codeFiles` under its `codeDir`; `quickStart` contains every direct non-project prerequisite of the track's lessons; `recommendedPath` ends with the track; the certificate needs all of beginner, intermediate and advanced plus at least one project, and never setup.
+
+Planned lessons that are not written yet are reported as "planned", not as failures. `node scripts/validate-content.mjs --complete` (optionally with `--track <id>`) makes every curriculum lesson and its planned `codeFiles` mandatory. Use it when a track is finished, and in final QA. Lessons that exist but are missing from the curriculum produce a warning. The short form `"lessons": ["slug"]` is still accepted.
 
 ## 12. Before you commit
 

@@ -6,12 +6,17 @@
  *   node scripts/validate-content.mjs                 # everything
  *   node scripts/validate-content.mjs --track beginner
  *   node scripts/validate-content.mjs --strict        # warnings also fail
+ *   node scripts/validate-content.mjs --complete      # every curriculum lesson (and its planned code files) must exist
  *
  * Enforces the authoring rules in docs/authoring.md. Exits 1 and lists every failure.
  *
  * Lesson rules (errors):
- *  - every lesson listed in src/data/curriculum.json (if present) exists as
- *    src/content/lessons/<track>/<slug>.mdx
+ *  - src/data/curriculum.json (if present) passes scripts/lib/check-curriculum.mjs: all tracks, unique slugs,
+ *    10-30 min lessons, 3-5 goals, prerequisites taught earlier, setup optional, quickStart covers each project's
+ *    prerequisites, certificateRequirement, sources resolve in sourceRegistry
+ *  - with --complete: every curriculum lesson exists as src/content/lessons/<track>/<slug>.mdx and its planned
+ *    codeFiles exist (without it, unwritten lessons are reported as "planned")
+ *  - a written lesson sits in the track its curriculum entry names
  *  - frontmatter matches the schema in src/lib/schema.mjs (same schema the site build uses);
  *    folder = track, file name = slug, slugs unique
  *  - >= 3 sources, every source URL is https, source ids unique, every source cited at least once
@@ -26,14 +31,16 @@
  *  - <CodeFile path> exists and its lines/highlight ranges fit the file
  *  - local <Figure>/<Screenshot> images exist in public/; remote ones are https; alt text present
  *  - the body opens with a lead paragraph (no heading/component first) and has no "# h1"
- * Warnings: word count outside 800–1800, h4+ headings, lessons missing from the curriculum.
+ * Warnings: word count outside 800–1800, h4+ headings, lessons missing from the curriculum, level/module/prerequisites
+ *   that differ from the curriculum entry.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { z } from 'zod';
-import { makeSchemas, TRACKS } from '../src/lib/schema.mjs';
+import { makeSchemas, TRACKS, LEVELS, EXERCISE_TYPES } from '../src/lib/schema.mjs';
+import { checkCurriculum } from './lib/check-curriculum.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const LESSONS_DIR = path.join(ROOT, 'src/content/lessons');
@@ -50,12 +57,14 @@ const WORDS = [800, 1800];
 const args = process.argv.slice(2);
 let onlyTrack = null;
 let strict = false;
+let complete = false;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--track') onlyTrack = args[++i];
   else if (args[i].startsWith('--track=')) onlyTrack = args[i].slice(8);
   else if (args[i] === '--strict') strict = true;
+  else if (args[i] === '--complete') complete = true;
   else if (args[i] === '--help' || args[i] === '-h') {
-    console.log('Usage: node scripts/validate-content.mjs [--track <id>] [--strict]');
+    console.log('Usage: node scripts/validate-content.mjs [--track <id>] [--strict] [--complete]');
     process.exit(0);
   } else {
     console.error(`Unknown argument: ${args[i]}`);
@@ -221,38 +230,55 @@ for (const l of lessons) {
 
 // ---------- curriculum ----------
 let curriculumPairs = null;
+let curriculumEntryBySlug = new Map();
+const plannedMissing = [];
 if (fs.existsSync(CURRICULUM)) {
+  let cur = null;
   try {
-    const cur = JSON.parse(fs.readFileSync(CURRICULUM, 'utf8'));
-    curriculumPairs = [];
-    if (!Array.isArray(cur.tracks)) err(CURRICULUM, 'curriculum.json must have a "tracks" array');
-    for (const t of cur.tracks ?? []) {
-      if (!TRACKS.includes(t.id)) err(CURRICULUM, `unknown track id "${t.id}"`);
-      const mods = t.modules ?? [{ lessons: t.lessons ?? [] }];
-      for (const m of mods) for (const item of m.lessons ?? []) {
-        const slug = typeof item === 'string' ? item : item?.slug;
-        if (!slug) err(CURRICULUM, `track "${t.id}" has a lesson entry without a slug`);
-        else curriculumPairs.push({ track: t.id, slug });
-      }
-    }
+    cur = JSON.parse(fs.readFileSync(CURRICULUM, 'utf8'));
   } catch (e) {
     err(CURRICULUM, `invalid JSON: ${e.message}`);
   }
+  if (cur) {
+    const res = checkCurriculum(cur, { TRACKS, LEVELS, EXERCISE_TYPES, root: ROOT });
+    res.errors.forEach((m) => err(CURRICULUM, m));
+    res.warnings.forEach((m) => warn(CURRICULUM, m));
+    curriculumPairs = res.entries.filter((e) => e.slug).map((e) => ({ track: e._track, slug: e.slug }));
+    curriculumEntryBySlug = new Map(res.entries.filter((e) => e.slug).map((e) => [e.slug, e]));
+  }
 }
 if (curriculumPairs) {
-  const seen = new Set();
   for (const { track, slug } of curriculumPairs) {
     if (onlyTrack && track !== onlyTrack) continue;
-    if (seen.has(slug)) err(CURRICULUM, `slug "${slug}" is listed more than once`);
-    seen.add(slug);
     const expected = path.join(LESSONS_DIR, track, `${slug}.mdx`);
-    if (!fs.existsSync(expected)) err(CURRICULUM, `curriculum lesson missing: ${rel(expected)}`);
+    if (!fs.existsSync(expected)) {
+      // Lessons are planned in the curriculum before they are written. Missing files only fail with --complete.
+      if (complete) err(CURRICULUM, `curriculum lesson missing: ${rel(expected)}`);
+      else plannedMissing.push(rel(expected));
+    }
+    if (complete) {
+      for (const f of curriculumEntryBySlug.get(slug)?.codeFiles ?? []) {
+        if (!fs.existsSync(path.join(ROOT, f))) err(CURRICULUM, `lesson "${slug}": planned code file missing: ${f}`);
+      }
+    }
   }
   const inCurriculum = new Set(curriculumPairs.map((p) => p.slug));
   for (const l of lessons) {
     if (onlyTrack && l.folder !== onlyTrack) continue;
     const slug = l.data?.slug ?? l.fileSlug;
-    if (!inCurriculum.has(slug)) warn(l.file, `lesson "${slug}" is not listed in src/data/curriculum.json`);
+    if (!inCurriculum.has(slug)) {
+      warn(l.file, `lesson "${slug}" is not listed in src/data/curriculum.json`);
+      continue;
+    }
+    // Written lessons must agree with their curriculum entry.
+    const e = curriculumEntryBySlug.get(slug);
+    if (!l.data || !e) continue;
+    if (e._track !== l.folder) err(l.file, `curriculum puts "${slug}" in track "${e._track}", but the file is in "${l.folder}"`);
+    if (e.level && e.level !== l.data.level) warn(l.file, `level "${l.data.level}" differs from the curriculum ("${e.level}")`);
+    if (e._module && l.data.module && e._module !== l.data.module) warn(l.file, `module "${l.data.module}" differs from the curriculum ("${e._module}")`);
+    for (const p of e.prerequisites ?? []) {
+      if (!l.data.prerequisites.includes(p)) warn(l.file, `curriculum prerequisite "${p}" is missing from the frontmatter prerequisites`);
+    }
   }
 }
 
@@ -447,7 +473,8 @@ if (errors.length) {
     msgs.forEach((m) => console.error(`    ✗ ${m}`));
   }
 }
-const summary = `${selected.length} lesson(s) and ${onlyTrack ? 0 : glossaryEntries.length} glossary entr${glossaryEntries.length === 1 ? 'y' : 'ies'} checked (${scope}${curriculumPairs ? ', with curriculum.json' : ', no curriculum.json yet'}): ${errors.length} failure(s), ${warnings.length} warning(s).`;
+const planned = plannedMissing.length ? `, ${plannedMissing.length} planned lesson(s) not written yet (use --complete to require them)` : '';
+const summary = `${selected.length} lesson(s) and ${onlyTrack ? 0 : glossaryEntries.length} glossary entr${glossaryEntries.length === 1 ? 'y' : 'ies'} checked (${scope}${curriculumPairs ? ', with curriculum.json' : ', no curriculum.json yet'}${planned}): ${errors.length} failure(s), ${warnings.length} warning(s).`;
 if (errors.length || (strict && warnings.length)) {
   console.error(`\n✗ ${summary}`);
   process.exit(1);
