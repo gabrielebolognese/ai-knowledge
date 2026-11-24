@@ -1,0 +1,191 @@
+---
+title: Sampling completions and measuring the parse rate
+slug: code-sampling-eval
+track: project-code-autocomplete
+level: advanced
+order: 40
+minutes: 20
+module: Completion and tooling
+summary: Turn the trained model into a code completer. This lesson samples characters with temperature and top-k, decides when a completion should stop, and measures how often generated function bodies are valid Python with ast.parse, then explains why longer completions drift.
+hatnote: This lesson needs a trained checkpoint from "Training the code model on a CPU".
+prerequisites: [code-training]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Complete a code prompt with temperature and top-k sampling
+  - Measure the fraction of generated functions that parse with ast.parse
+  - Explain why longer completions drift
+build: evaluate.py, which measures the parse rate of generated function bodies
+reviewed: 2026-11-25
+seeAlso: [code-training, code-autocomplete-cli]
+sources:
+  - id: python-ast
+    title: "ast — Abstract Syntax Trees"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/library/ast.html
+    accessed: 2026-11-24
+    type: docs
+  - id: holtzman2019
+    title: "The Curious Case of Neural Text Degeneration"
+    author: Ari Holtzman, Jan Buys, Li Du, Maxwell Forbes, Yejin Choi
+    publisher: arXiv
+    year: 2019
+    url: https://arxiv.org/abs/1904.09751
+    accessed: 2026-11-24
+    type: paper
+  - id: hf-generate
+    title: "How to generate text: using different decoding methods for language generation with Transformers"
+    author: Patrick von Platen
+    publisher: Hugging Face blog
+    year: 2020
+    url: https://huggingface.co/blog/how-to-generate
+    accessed: 2026-11-24
+    type: article
+  - id: fan2018
+    title: "Hierarchical Neural Story Generation"
+    author: Angela Fan, Mike Lewis, Yann Dauphin
+    publisher: arXiv
+    year: 2018
+    url: https://arxiv.org/abs/1805.04833
+    accessed: 2026-11-24
+    type: paper
+  - id: pt-multinomial
+    title: "torch.multinomial"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.multinomial.html
+    accessed: 2026-11-24
+    type: docs
+  - id: bengio2015
+    title: "Scheduled Sampling for Sequence Prediction with Recurrent Neural Networks"
+    author: Samy Bengio, Oriol Vinyals, Navdeep Jaitly, Noam Shazeer
+    publisher: arXiv
+    year: 2015
+    url: https://arxiv.org/abs/1506.03099
+    accessed: 2026-11-24
+    type: paper
+  - id: chen2021
+    title: "Evaluating Large Language Models Trained on Code"
+    author: Mark Chen et al.
+    publisher: arXiv
+    year: 2021
+    url: https://arxiv.org/abs/2107.03374
+    accessed: 2026-11-25
+    type: paper
+  - id: nanogpt
+    title: "nanoGPT"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/nanoGPT
+    accessed: 2026-11-24
+    type: code
+furtherReading:
+  - title: "Python documentation: tokenize"
+    url: https://docs.python.org/3/library/tokenize.html
+exercises:
+  - id: code-sample-temperature
+    type: numeric
+    difficulty: easy
+    title: Sharpening with temperature
+    prompt: "A model gives logits $[2, 1, 0]$ for three characters. What probability does the first character get at temperature $T = 0.5$? Give three decimals."
+    answer: 0.867
+    tolerance: 0.002
+    hint: "Divide the logits by 0.5 to get $[4, 2, 0]$, then apply the softmax."
+    explanation: "$e^4 / (e^4 + e^2 + e^0) = 54.598 / 62.987 \\approx 0.867$. At $T = 1$ the same character had 0.665, so halving the temperature makes the favourite much more likely."
+  - id: code-sample-greedy
+    type: mcq
+    difficulty: medium
+    title: Why not always take the most likely character?
+    prompt: What typically happens when a small language model always picks the single most likely next token (greedy decoding) for a long completion?
+    options:
+      - It produces the most correct code possible
+      - It often falls into repeating the same phrase or line
+      - It produces random characters
+      - It stops immediately
+    answer: 1
+    explanation: "Greedy and other maximisation-based decoding tend to produce repetitive, looping text, which Holtzman and colleagues call degeneration. A little randomness (temperature with top-k or top-p) avoids loops while staying close to likely continuations."
+  - id: code-sample-drift
+    type: reveal
+    difficulty: hard
+    title: Parses, but is it right?
+    prompt: "Your model reaches a parse rate of 60%. Give two reasons why that number overstates how useful the completions are."
+    answer: "Parsing checks only syntax: a body can parse and still call functions that do not exist, use undefined names or return the wrong value. And the stop rule cuts completions short, so short bodies (a single return or pass) parse easily without doing anything useful. Unit tests, as in Codex's HumanEval benchmark, measure correctness instead."
+    explanation: "The parse rate is a cheap, automatic sanity metric for a small model. Functional correctness needs tests that run the code; Chen et al. built 164 hand-written problems with unit tests for exactly that purpose."
+---
+
+**Sampling** turns a trained <Term slug="language-model" /> into a code completer: the model gives a probability for every possible next character, one is drawn, appended to the prompt, and the process repeats.<Cite id="hf-generate" /> How the character is drawn, and when the loop stops, matter as much as the model itself. This lesson builds both and then measures the result with a simple automatic metric: the fraction of generated function bodies that are valid Python.
+
+## From logits to the next character
+
+`GPT.generate` in `model.py` runs the loop used by nanoGPT.<Cite id="nanogpt" /> It crops the context to the last `block_size` tokens, because the position table has only 128 entries; runs the model; keeps only the logits of the *last* position; reshapes them with temperature and top-k; and draws one token with `torch.multinomial`, which samples an index in proportion to the given probabilities.<Cite id="pt-multinomial" /> It yields each token as soon as it is drawn, so a caller can print the completion while it is being written.
+
+<CodeFile path="code/projects/project-code-autocomplete/model.py" lines="115-128" highlight="119,121,124" title="model.py: one token at a time" />
+
+<Callout type="pitfall">
+Forgetting to crop the context is a common bug: once the prompt plus completion exceeds `block_size`, the position lookup fails. Cropping also means the model simply forgets everything older than 128 characters, about three lines of code.
+</Callout>
+
+## Temperature and top-k
+
+Always taking the single most likely character (greedy decoding) seems safest, but it makes small models loop, repeating one line again and again. Holtzman and colleagues named this failure *degeneration* and showed that pure maximisation produces bland, repetitive text even in large models.<Cite id="holtzman2019" /> Pure sampling from the full distribution has the opposite problem: now and then it picks a very unlikely character, and one wrong bracket can derail everything that follows.
+
+Two knobs sit between those extremes. **Temperature** divides the logits before the softmax; values below 1 sharpen the distribution, values above 1 flatten it. **Top-k** keeps only the $k$ most likely characters and renormalises, which removes the long tail of unlikely choices.<Cite id="fan2018" />
+
+<MathSteps
+  title="Temperature and top-k on three candidates"
+  legend={[
+    { symbol: 'z', meaning: 'logits from the model' },
+    { symbol: 'T', meaning: 'temperature' },
+    { symbol: 'p', meaning: 'probabilities after the softmax' },
+  ]}
+>
+  <Step tex="z = [2,\,1,\,0], \quad p_i = \frac{e^{z_i/T}}{\sum_j e^{z_j/T}}" words="Three candidate characters with their raw scores, and the softmax with temperature." />
+  <Step tex="T = 1:\; p = [\hl{0.665},\,0.245,\,0.090]" words="The plain softmax: e² / (e² + e¹ + e⁰) = 7.389 / 11.107." />
+  <Step tex="T = 0.5:\; p = [\hl{0.867},\,0.117,\,0.016]" words="Halving the temperature doubles the gaps between logits, so the favourite dominates." />
+  <Step tex="k = 2:\; p = \left[\tfrac{0.665}{0.910},\,\tfrac{0.245}{0.910},\,0\right] = [\hl{0.731},\,0.269,\,0]" words="Top-k at T = 1 drops the third candidate and rescales the other two to sum to 1." />
+</MathSteps>
+
+For code, a low temperature works best: 0.2-0.6 with top-k between 10 and 40 suggests likely continuations without looping.<Cite id="hf-generate" /> `complete.py` defaults to temperature 0.4 and top-k 20. A related method, top-p (nucleus) sampling, keeps the smallest set of tokens whose probabilities add up to $p$, so the set grows when the model is unsure and shrinks when it is confident.<Cite id="holtzman2019" />
+
+<Analogy breaks="A diner chooses once; the model chooses again for every single character, so small risks compound over a long completion.">
+Temperature is how adventurous a regular at a restaurant is: at 0.2 they nearly always order the usual, at 1 they sometimes try something else. Top-k says they only ever look at the k dishes on the specials board.
+</Analogy>
+
+## Knowing when to stop
+
+An editor suggestion should end where the code block ends, not run on into a new class. `complete.py` stops when any of these happens:
+
+- **Dedent.** If the prompt ends with a block header such as `def f(x):`, the completion stops at the first non-blank line indented no deeper than that header, because the body is over.
+- **Two blank lines.** PEP 8 separates top-level definitions with two blank lines, so three newlines in a row end the completion.
+- **File marker.** The corpus separator `# <|file|>` means the model thinks a new file starts.
+- **Token limit**, 200 by default.
+
+While streaming, a line that so far contains only spaces is held back, because it may still turn out to be a dedent that should not be shown.
+
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="78-94" title="complete.py: stop rules" />
+
+## Measuring the parse rate
+
+Reading a few samples is essential, but it is subjective. A cheap automatic check is whether the output is *syntactically* valid Python, which the standard library's `ast.parse` decides: it either builds a syntax tree or raises `SyntaxError`.<Cite id="python-ast" />
+
+`evaluate.py` finds every function in the **validation** files, which the model never trained on. For each one it gives the model the file's code up to and including the `def` line, lets it write the body with the stop rules above, drops an unfinished last line, and tries to parse header plus body.
+
+<CodeFile path="code/projects/project-code-autocomplete/evaluate.py" lines="23-51" highlight="48" title="evaluate.py: prompts from unseen files, checked by ast.parse" />
+
+@@PARSE@@
+
+## Why longer completions drift
+
+During training, the model always sees *real* code as its context. During generation, the context is increasingly its *own* output, including any mistakes. Bengio and colleagues described this mismatch between training and inference for sequence models: errors made early change the conditions for every later prediction, and they compound.<Cite id="bengio2015" /> A misnamed variable in line 2 becomes "the" variable for the rest of the body.
+
+The small context window makes this worse. With 128 characters of memory, the model cannot see the function signature once the body is a few lines long, so it loses track of argument names and of what the function is for. The result is code that keeps the *shape* of Python, with indentation, colons and closed brackets, while its meaning wanders.
+
+<Callout type="warning">
+Parsing is a low bar. A body can parse and still call functions that do not exist or return the wrong thing. Production code models are evaluated by running unit tests: Codex's HumanEval benchmark has 164 hand-written programming problems, each checked by tests.<Cite id="chen2021" />
+</Callout>
+
+## Summary
+
+- Generation repeats: crop the context, take the last position's logits, apply temperature and top-k, sample, append.
+- Greedy decoding loops; low-temperature sampling (about 0.4) with top-k (about 20) suits code.
+- Completions stop at a dedent, two blank lines, the file marker or a token limit.
+- The parse rate measures syntax on unseen functions with `ast.parse`; it says nothing about correctness.
+- Long completions drift because the model conditions on its own errors and forgets anything older than its context window.

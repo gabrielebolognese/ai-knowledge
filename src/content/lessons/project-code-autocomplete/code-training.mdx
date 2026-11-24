@@ -1,0 +1,211 @@
+---
+title: Training the code model on a CPU
+slug: code-training
+track: project-code-autocomplete
+level: advanced
+order: 30
+minutes: 25
+module: Corpus and model
+summary: Train the 1.8M-parameter GPT on the standard library with random context windows, AdamW and a warm-up plus cosine schedule. This lesson estimates the compute budget, reads the loss in nats and bits per character, saves and resumes checkpoints, and uses a missing causal mask as a debugging exercise.
+hatnote: The model trained here is defined in "Writing a tiny GPT in PyTorch".
+prerequisites: [code-tiny-gpt]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Run training with random context windows, AdamW and a cosine schedule
+  - Estimate the compute budget (6 × params × tokens) and the run time
+  - Save checkpoints and resume; spot the "forgot the causal mask" bug from a suspicious loss
+build: train.py with a smoke mode, checkpoints and resume
+reviewed: 2026-11-25
+seeAlso: [code-tiny-gpt, code-sampling-eval]
+sources:
+  - id: nanogpt
+    title: "nanoGPT"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/nanoGPT
+    accessed: 2026-11-24
+    type: code
+  - id: kaplan2020
+    title: "Scaling Laws for Neural Language Models"
+    author: Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon Child, Scott Gray, Alec Radford, Jeffrey Wu, Dario Amodei
+    publisher: arXiv
+    year: 2020
+    url: https://arxiv.org/abs/2001.08361
+    accessed: 2026-11-24
+    type: paper
+  - id: loshchilov2017
+    title: "Decoupled Weight Decay Regularization"
+    author: Ilya Loshchilov, Frank Hutter
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1711.05101
+    accessed: 2026-11-24
+    type: paper
+  - id: loshchilov2016
+    title: "SGDR: Stochastic Gradient Descent with Warm Restarts"
+    author: Ilya Loshchilov, Frank Hutter
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1608.03983
+    accessed: 2026-11-24
+    type: paper
+  - id: pt-save-load
+    title: "Saving and Loading Models"
+    publisher: PyTorch tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pt-adamw
+    title: "torch.optim.AdamW"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.optim.AdamW.html
+    accessed: 2026-11-24
+    type: docs
+  - id: lets-build-gpt
+    title: "Let's build GPT: from scratch, in code, spelled out"
+    author: Andrej Karpathy
+    publisher: YouTube
+    year: 2023
+    url: https://www.youtube.com/watch?v=kCc8FmEb1nY
+    accessed: 2026-11-24
+    type: video
+  - id: wiki-entropy
+    title: "Entropy (information theory)"
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Entropy_(information_theory)
+    accessed: 2026-11-24
+    type: wikipedia
+furtherReading:
+  - title: "Andrej Karpathy: A Recipe for Training Neural Networks"
+    url: https://karpathy.github.io/2019/04/25/recipe/
+exercises:
+  - id: code-train-flops
+    type: numeric
+    difficulty: easy
+    title: Compute budget of the smoke run
+    prompt: "The smoke run trains an 813,952-parameter model for 300 steps of 16 windows × 64 tokens. Using $C \\approx 6ND$, how many FLOPs is that, in units of $10^{12}$ (TFLOP)? Round to one decimal."
+    answer: 1.5
+    tolerance: 0.05
+    hint: "$D = 300 \\times 16 \\times 64 = 307{,}200$ tokens."
+    explanation: "$6 \\times 813{,}952 \\times 307{,}200 \\approx 1.50 \\times 10^{12}$ FLOPs, the figure train.py prints. At a few tens of GFLOP/s this is under a minute of pure arithmetic, which is why the smoke run is quick."
+  - id: code-train-cheat
+    type: mcq
+    difficulty: medium
+    title: A loss that is too good
+    prompt: "A learner's character model reaches a training loss of 0.05 nats per character after a few thousand steps, while the same model with the course's settings reaches about 1. Generated text is gibberish. What is the most likely cause?"
+    options:
+      - The learning rate is too low
+      - The model attends to future positions, so it can read the character it is supposed to predict
+      - The validation set is too small
+      - The model has too many parameters to train on a CPU
+    answer: 1
+    explanation: "Without the causal mask, the answer for position t is visible at position t + 1, so the model learns to copy it and the loss collapses. At generation time the future does not exist, so the copying trick is useless and the samples are garbage. A loss far below what similar models reach is a red flag, not a success."
+  - id: code-train-resume
+    type: reveal
+    difficulty: medium
+    title: What a checkpoint must contain
+    prompt: "Why does train.py save the optimizer's state_dict and the step number, not only the model's weights?"
+    answer: "AdamW keeps running averages of each parameter's gradient and squared gradient, and the learning-rate schedule depends on the step. Resuming with fresh optimizer state and step 0 would restart the warm-up and use badly calibrated update sizes, so training would jump instead of continuing smoothly."
+    explanation: "PyTorch's guide on saving models recommends saving the optimizer state_dict alongside the model for exactly this reason. The checkpoint also stores the config and the tokenizer, so complete.py can rebuild the model without any other files."
+---
+
+**Training** the code model means showing it millions of short windows of Python and nudging its 1.8 million parameters, after every batch, towards predicting each next character better. On a laptop CPU the full run takes under an hour, and a smoke run checks the whole pipeline in a few minutes. The script, `train.py`, follows the structure of nanoGPT's training loop, with the GPU-specific parts removed.<Cite id="nanogpt" />
+
+## Random windows of code
+
+The encoded corpus is one long tensor of integers. Each step, `get_batch` picks random start positions and cuts out windows of `block_size` tokens; the targets are the same windows shifted one position to the right. Window position $t$ therefore learns to predict token $t+1$, and every window contributes 128 predictions at once.<Cite id="lets-build-gpt" />
+
+<CodeFile path="code/projects/project-code-autocomplete/train.py" lines="68-73" highlight="72" title="train.py: inputs and shifted targets" />
+
+<Callout type="pitfall">
+Getting the shift wrong is the most common language-model bug. If `y` equals `x`, the model is asked to predict the token it is already looking at; the loss falls almost to zero and the model learns nothing useful.
+</Callout>
+
+Random windows mean there are no epochs in the usual sense. The full run takes 4,000 steps of 32 windows × 128 characters, about 16.4 million characters, so it reads the 8.7 million training characters roughly twice on average.
+
+## Optimizer and schedule
+
+The optimizer is **AdamW**: Adam with *decoupled* weight decay, which shrinks the weights directly instead of adding a penalty to the gradient. Loshchilov and Hutter showed that decoupling makes weight decay behave as intended with Adam.<Cite id="loshchilov2017" /> Following nanoGPT, weight decay of 0.1 applies only to matrices; biases and LayerNorm parameters are excluded, because shrinking them towards zero has no regularising benefit.<Cite id="nanogpt" /><Cite id="pt-adamw" />
+
+The <Term slug="learning-rate" /> is not constant. It rises linearly for the first 100 steps (warm-up), because Adam's running statistics are unreliable at the start, then falls along a half cosine curve from $10^{-3}$ to $10^{-4}$. Cosine decay was popularised by Loshchilov and Hutter's SGDR paper and is the default in nanoGPT.<Cite id="loshchilov2016" />
+
+<MathSteps
+  title="Warm-up and cosine decay"
+  legend={[
+    { symbol: 's', meaning: 'current step' },
+    { symbol: 'w', meaning: 'warm-up steps (100)' },
+    { symbol: 'S', meaning: 'total steps (4,000)' },
+    { symbol: '\\eta', meaning: 'learning rate' },
+  ]}
+>
+  <Step tex="\eta(s) = \eta_{\max} \cdot \frac{s+1}{w} \quad (s \lt w)" words="During warm-up the rate climbs in a straight line from almost zero to the maximum, 0.001." example="step 49: 0.001 × 50/100 = 0.0005" />
+  <Step tex="p = \frac{s - w}{S - w} \in [0, 1]" words="After warm-up, p measures how far through the rest of training we are." />
+  <Step tex="\eta(s) = \eta_{\min} + \tfrac12(\eta_{\max} - \eta_{\min})\,\hl{(1 + \cos \pi p)}" words="The cosine term goes smoothly from 2 to 0, so the rate glides from the maximum down to the minimum, 0.0001." example="half-way (p = 0.5): 0.0001 + 0.5 × 0.0009 × 1 = 0.00055" />
+</MathSteps>
+
+Gradients are also clipped to a total norm of 1.0, a cheap safeguard against an occasional huge update.
+
+<CodeFile path="code/projects/project-code-autocomplete/train.py" lines="117-120" title="train.py: AdamW with two parameter groups" />
+
+## How long will it take?
+
+Kaplan and colleagues observed that training a Transformer costs about six floating-point operations per parameter per training token: two for the forward pass and four for the backward pass.<Cite id="kaplan2020" /> That gives a run-time estimate before you press Enter.
+
+<MathSteps
+  title="The compute budget of the full run"
+  legend={[
+    { symbol: 'N', meaning: 'parameters (1,823,040)' },
+    { symbol: 'D', meaning: 'training tokens' },
+    { symbol: 'C', meaning: 'compute in FLOPs' },
+  ]}
+>
+  <Step tex="D = 4000 \times 32 \times 128 = \hl{16.4 \times 10^6}" words="Steps times windows times tokens per window." />
+  <Step tex="C \approx 6ND = 6 \times 1.82 \times 10^6 \times 16.4 \times 10^6 \approx \hl{1.8 \times 10^{14}}" words="About 180 trillion operations in total, or 45 billion per step." />
+  <Step tex="t \approx \frac{1.8 \times 10^{14}}{6 \times 10^{10}\ \text{FLOP/s}} \approx 3000\ \text{s} \approx \hl{50\ \text{min}}" words="PyTorch on a laptop CPU sustains a few tens of GFLOP/s on matrices this small. Measured here: 0.73 s per step, about 61 GFLOP/s." />
+</MathSteps>
+
+The estimate is rough. Small matrices use a CPU less efficiently than large ones, other programs compete for the cores, and evaluation adds a few minutes. Treat it as an order of magnitude: this run takes tens of minutes, not seconds or days.
+
+## Reading the loss
+
+The loss is cross-entropy in **nats** per token, using natural logarithms. For a character model, dividing by $\ln 2$ converts it to **bits per character**, the average number of yes/no questions the model needs to guess the next character.<Cite id="wiki-entropy" /> Bits per character also allows a fair comparison with the BPE model later, whose tokens are longer than one character.
+
+<MathSteps
+  title="From loss to bits per character"
+  legend={[
+    { symbol: 'L', meaning: 'cross-entropy loss in nats per token' },
+    { symbol: 'r', meaning: 'characters per token (1 for this model)' },
+  ]}
+>
+  <Step tex="L_0 \approx \ln 97 = 4.57" words="An untrained model spreads its bets evenly over the 97 characters. The measured first evaluation was 4.48, close to this." />
+  <Step tex="\text{bpc} = \frac{L}{r \cdot \ln 2}" words="Divide by ln 2 to turn nats into bits, and by the characters per token to get a per-character figure." example="L = 1.0 nats gives 1.44 bits per character" />
+  <Step tex="\frac{4.57}{\ln 2} = \hl{6.60}\ \text{bits} = \log_2 97" words="The starting point in bits is exactly the information in a uniform guess among 97 characters." />
+</MathSteps>
+
+@@CHAR_TABLE@@
+
+## Checkpoints and resuming
+
+Every evaluation saves a checkpoint to `checkpoints/char.pt`. It holds the model's `state_dict`, the optimizer's `state_dict`, the step, the best validation loss, the model config and the tokenizer. PyTorch's guide recommends saving the optimizer state along with the model when you intend to resume training, because Adam's running averages are part of the training state.<Cite id="pt-save-load" />
+
+Press Ctrl+C at any time: `train.py` catches the interrupt, saves, and `python train.py --resume` continues from the same step with the same schedule. Because the checkpoint contains the tokenizer and config, `complete.py` and `evaluate.py` need nothing else to rebuild the model.
+
+<CodeFile path="code/projects/project-code-autocomplete/train.py" lines="135-139" title="train.py: everything needed to resume or to sample" />
+
+## The smoke test
+
+`python train.py --smoke` uses about 200 KB of code, a narrower model (0.8M parameters, 64-token windows) and 300 steps. On the test machine it finished in 1.4 minutes, with the training loss falling from 4.47 to 2.16 and the validation loss to 2.19 (3.16 bits per character). The script fails with an error if the loss does not fall by at least 0.5. If the smoke test passes, your installation, the corpus and the model code all work.
+
+## Debugging exercise: forget the causal mask
+
+`--no-causal-mask` switches the mask off, which recreates a classic mistake. Without the mask, position $t$ can attend to position $t+1$, which holds the very character it must predict.
+
+@@NOMASK@@
+
+## Summary
+
+- Training draws random windows; targets are the inputs shifted by one, so each window gives T predictions.
+- AdamW with decoupled weight decay, a 100-step warm-up and cosine decay from 0.001 to 0.0001 trains the model stably.
+- $C \approx 6ND$ predicts the cost: about $1.8 \times 10^{14}$ FLOPs, under an hour on a laptop CPU.
+- Loss starts near $\ln 97 \approx 4.57$ nats; divide by $\ln 2$ (and by characters per token) for bits per character.
+- Checkpoints store model, optimizer, step, config and tokenizer; a loss that looks too good usually means the model can see the future.

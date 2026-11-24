@@ -1,0 +1,180 @@
+---
+title: Building a code corpus from Python's standard library
+slug: code-corpus
+track: project-code-autocomplete
+level: advanced
+order: 10
+minutes: 20
+module: Corpus and model
+summary: Every Python installation ships about ten million characters of real, well-written source code. This lesson finds it with sysconfig, cleans it into a 97-character alphabet, splits it by file into training and validation sets, and explains the licence.
+hatnote: This is the first lesson of the code-autocompletion project. The model itself is built in "Writing a tiny GPT in PyTorch".
+prerequisites: []
+tools: [Python 3]
+outcomes:
+  - Find the standard library with sysconfig and collect about 10 MB of .py files
+  - "Clean it: skip tests, normalize line endings and tabs, add file separators"
+  - Explain the PSF licence and why we never ship the corpus or weights
+build: A reproducible 9.7-million-character corpus of Python code with a train/validation split by file
+reviewed: 2026-11-24
+seeAlso: [code-tiny-gpt, code-training]
+sources:
+  - id: python-sysconfig
+    title: "sysconfig — Provide access to Python's configuration information"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/library/sysconfig.html
+    accessed: 2026-11-24
+    type: docs
+  - id: python-license
+    title: "History and License (PSF License Agreement)"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/license.html
+    accessed: 2026-11-24
+    type: docs
+  - id: cpython-license
+    title: "CPython LICENSE file"
+    publisher: Python Software Foundation (GitHub)
+    url: https://github.com/python/cpython/blob/main/LICENSE
+    accessed: 2026-11-24
+    type: code
+  - id: python-tokenize
+    title: "tokenize — Tokenizer for Python source"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/library/tokenize.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pep8
+    title: "PEP 8 — Style Guide for Python Code"
+    author: Guido van Rossum, Barry Warsaw, Alyssa Coghlan
+    publisher: Python Software Foundation
+    url: https://peps.python.org/pep-0008/
+    accessed: 2026-11-24
+    type: docs
+  - id: nanogpt
+    title: "nanoGPT"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/nanoGPT
+    accessed: 2026-11-24
+    type: code
+  - id: wiki-split
+    title: "Training, validation, and test data sets"
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Training,_validation,_and_test_data_sets
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: the-stack-smol
+    title: "The Stack smol"
+    publisher: BigCode (Hugging Face)
+    url: https://huggingface.co/datasets/bigcode/the-stack-smol
+    accessed: 2026-11-24
+    type: dataset
+furtherReading:
+  - title: "Python documentation: os.walk"
+    url: https://docs.python.org/3/library/os.html#os.walk
+  - title: "CodeSearchNet (Husain et al. 2019)"
+    url: https://arxiv.org/abs/1909.09436
+exercises:
+  - id: code-corpus-epoch
+    type: numeric
+    difficulty: easy
+    title: How long is one epoch?
+    prompt: "The training split has 8,664,390 characters. One training step of the full run reads a batch of 32 windows of 128 characters. How many steps does it take to read as many characters as the training split contains (one epoch)? Round to the nearest whole step."
+    answer: 2115
+    tolerance: 2
+    hint: "One step reads $32 \\times 128 = 4096$ characters."
+    explanation: "$8{,}664{,}390 / 4096 \\approx 2115$ steps. The full run trains for 4,000 steps, so on average the model sees each character about twice. Because windows are drawn at random, some text is seen more often and some less."
+  - id: code-corpus-split
+    type: mcq
+    difficulty: medium
+    title: Why split by file?
+    prompt: The corpus is split into training and validation sets by whole files rather than by random lines. What is the main reason?
+    options:
+      - Splitting by file makes the training set larger
+      - Neighbouring lines in one file share names and structure, so a line-level split would let validation text leak into training
+      - The model cannot read individual lines
+      - Python files must be parsed whole by ast before training
+    answer: 1
+    explanation: "Lines from the same file repeat the same identifiers, imports and idioms. If some lines of a file were in training and others in validation, the validation loss would reward memorising that file and look better than the model really is on unseen code. A file-level split measures what we care about: completing code the model has never seen."
+  - id: code-corpus-licence
+    type: short
+    difficulty: medium
+    title: What does the repository not contain?
+    prompt: The course repository contains the code that builds the corpus but neither the corpus nor any trained weights. Give two reasons for that choice.
+    answer: "The corpus is already on every learner's machine, so shipping it adds nothing but size; and keeping licensed text and models derived from it out of the repository avoids redistributing them, which keeps the licence situation simple. Weights also depend on the Python version and are quick to retrain."
+    explanation: "The PSF licence does allow redistribution with the copyright notice kept, so shipping would be possible. But the corpus is generated in seconds from files the learner already has, it differs by Python version, and a repository of code and lessons is easier to keep clean when it holds no third-party text or derived binaries."
+---
+
+A **code corpus** is the body of source code a model learns from. This project needs no download: every Python installation already contains the standard library as several hundred readable `.py` files, written and reviewed by the CPython core developers.<Cite id="python-sysconfig" /> Collected and cleaned, it gives about ten million characters of consistent, idiomatic Python, roughly nine times the 1.1 million characters of the TinyShakespeare file used in nanoGPT's character-level example.<Cite id="nanogpt" />
+
+## Why the standard library
+
+A <Term slug="language-model" /> learns whatever patterns its training text contains, so the text should look like the code you want it to write. The standard library is a good fit for a first code model for three reasons:
+
+- **It is already there.** No account, download or disk space is needed, and every learner gets almost the same corpus.
+- **It is consistent.** Most modules follow the PEP 8 style guide: four-space indentation, `snake_case` names and blank lines between functions.<Cite id="pep8" /> A small model learns a consistent style much faster than a mix of styles.
+- **It is licensed permissively.** The PSF licence allows use and derivative works, as described below.<Cite id="python-license" />
+
+The trade-off is variety. The standard library is one large, mostly self-contained codebase, so a model trained on it will write "stdlib-flavoured" Python and will know nothing about popular third-party libraries. Larger public datasets such as The Stack exist for that, but they need a Hugging Face login and bring per-file licence obligations.<Cite id="the-stack-smol" />
+
+## Finding the files with sysconfig
+
+The [`sysconfig`](https://docs.python.org/3/library/sysconfig.html) module reports where Python is installed. Its `stdlib` path is the directory holding the platform-independent standard-library files, for example `C:\Users\you\AppData\Local\Programs\Python\Python313\Lib` on Windows.<Cite id="python-sysconfig" /> Inside a virtual environment the call still returns the base installation's library, so the same code works everywhere.
+
+`corpus.py` walks that directory and keeps `.py` files, with three filters:
+
+- It **skips folders** named `test`, `tests`, `idlelib`, `site-packages` and `__pycache__`. The test suite is large and repetitive, IDLE is a GUI application rather than library code, and `site-packages` holds installed third-party packages such as PyTorch, which are not part of the standard library at all.
+- It **prunes those folders before descending**, rather than listing every file and filtering afterwards. On a machine with PyTorch installed, `site-packages` contains tens of thousands of files, and walking them first made an early version of the script take over a minute instead of three seconds.
+- It **drops files over 200 KB**, which in the standard library are mostly generated tables of data rather than hand-written code.
+
+## Cleaning the text
+
+Raw source needs a little normalisation before a character-level model sees it:
+
+1. **Line endings** become `\n`, so Windows and Unix files look identical.
+2. **Tabs** become four spaces. Indentation then has one spelling, which matters for a model whose output must indent correctly.
+3. **Rare characters** are replaced by a placeholder, `¤`. The alphabet is fixed at 97 characters: the newline, the 95 printable ASCII characters and the placeholder. Non-ASCII letters appear almost only in comments and docstrings (names of contributors, for example), so the measured corpus contains just 208 placeholders in 9.65 million characters.
+4. **File separators**: each file starts with a marker line, `# <|file|> path/to/module.py`. The model learns that a new file begins after it, which typically means a docstring and imports follow, and the completion tool later uses the marker as a stop signal.
+
+A fixed alphabet has a practical benefit: the vocabulary is the same on every machine and for every split, so no character in the validation set can be unknown to the model.
+
+<Analogy breaks="A transcriber can still read the original if unsure; the model only ever sees the cleaned copy, so anything mapped to ¤ is gone for good.">
+Cleaning is like a transcriber copying old letters into one typeface: the content stays, but every page now uses the same letters and margins.
+</Analogy>
+
+## Splitting by file
+
+To know whether the model has learned Python rather than memorised the corpus, part of the data must stay unseen during training. That held-out part is the **validation set**, used to compare models and settings.<Cite id="wiki-split" /> Here the split is made by whole files: the file list is shuffled with a fixed seed, and the first 10% of files become validation data.
+
+Splitting by lines instead would leak information. Neighbouring lines in one file share imports, class names and local variables, so a validation line whose neighbours were in training is much easier to predict than genuinely new code.<Cite id="wiki-split" /> The fixed seed makes the split reproducible: every run, and every script in the project, sees the same validation files.
+
+Measured on CPython 3.13.3 for Windows, the filters keep **568 files**: 511 for training (8,664,390 characters) and 57 for validation (989,019 characters). Other Python versions and operating systems give somewhat different numbers, so the script prints its own counts.
+
+<Callout type="note">
+The research notes for this course counted 1,748 `.py` files in the same standard library. That total includes the test suite and IDLE; about two-thirds of all standard-library source by size sits in those folders.
+</Callout>
+
+## The licence, and what is never shipped
+
+CPython is distributed under the PSF License Agreement, together with older notices from BeOpen, CNRI and CWI. It is a permissive, GPL-compatible licence that allows using, modifying and distributing the code and derivative works, provided the copyright notice is kept.<Cite id="python-license" /> A few modules include third-party code under their own permissive terms; the same document lists them, and the full text is in the repository's `LICENSE` file.<Cite id="cpython-license" />
+
+Training a model privately on this code is therefore unproblematic. Even so, the course repository contains only the *scripts*. The corpus is written to `data/`, the trained models to `checkpoints/`, and both folders are excluded from version control. Every learner rebuilds the corpus in a few seconds from their own installation, and a repository with no third-party text or derived binaries is simpler to keep clean.
+
+## Try it
+
+The file filter and the cleaning rules:
+
+<CodeFile path="code/projects/project-code-autocomplete/corpus.py" lines="20-44" highlight="33" title="corpus.py: find and clean the files" />
+
+The split, which `train.py` and `evaluate.py` call with the same seed:
+
+<CodeFile path="code/projects/project-code-autocomplete/corpus.py" lines="47-76" highlight="64-65" title="corpus.py: a reproducible split by file" />
+
+Run `python corpus.py` from the project folder. It writes `data/train.txt` and `data/val.txt` and prints the file and character counts; expect several hundred files and roughly 8-10 million characters. Open `val.txt` in an editor and check that the separators, indentation and docstrings look as described. To validate generated code later, the project uses the standard library's own parser; Python also ships a [`tokenize`](https://docs.python.org/3/library/tokenize.html) module that splits source into Python tokens if you want to analyse the corpus further.<Cite id="python-tokenize" />
+
+## Summary
+
+- The standard library is a free, consistent, permissively licensed code corpus of about 10 million characters, already on every machine.
+- `sysconfig.get_paths()["stdlib"]` finds it; tests, IDLE and `site-packages` are skipped, and large generated files are dropped.
+- Cleaning fixes line endings, tabs and rare characters, giving a 97-character alphabet with file-separator lines.
+- The training/validation split is made by file with a fixed seed, so validation measures completion of unseen code.
+- Only the scripts are committed; the corpus and checkpoints are rebuilt locally.

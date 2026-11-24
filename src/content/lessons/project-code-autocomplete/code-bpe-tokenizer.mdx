@@ -1,0 +1,196 @@
+---
+title: "Stage 2: a BPE tokenizer for code"
+slug: code-bpe-tokenizer
+track: project-code-autocomplete
+level: advanced
+order: 50
+minutes: 25
+module: Completion and tooling
+summary: Write a byte-pair-encoding tokenizer from scratch, train it on the training files only, retrain the GPT on its tokens, and compare the two models fairly in bits per character. Along the way, see why a small model needs a small vocabulary.
+hatnote: This lesson upgrades the character model from "Training the code model on a CPU".
+prerequisites: [code-sampling-eval]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Train a BPE vocabulary (a few hundred merges, scalable to 2-4k tokens) on the training files only
+  - Retrain the model on BPE tokens and compare loss per character fairly
+  - Explain the vocabulary-size versus model-size trade-off
+build: tokenizer.py, a from-scratch BPE trainer and encoder, and a BPE version of the code model
+reviewed: 2026-11-25
+seeAlso: [code-training, code-autocomplete-cli]
+sources:
+  - id: sennrich2016
+    title: "Neural Machine Translation of Rare Words with Subword Units"
+    author: Rico Sennrich, Barry Haddow, Alexandra Birch
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1508.07909
+    accessed: 2026-11-24
+    type: paper
+  - id: wiki-bpe
+    title: "Byte pair encoding"
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Byte_pair_encoding
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: radford2019
+    title: "Language Models are Unsupervised Multitask Learners"
+    author: Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever
+    publisher: OpenAI
+    year: 2019
+    url: https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf
+    accessed: 2026-11-24
+    type: paper
+  - id: minbpe
+    title: "minbpe"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/minbpe
+    accessed: 2026-11-24
+    type: code
+  - id: tiktoken
+    title: "tiktoken"
+    publisher: OpenAI (GitHub)
+    url: https://github.com/openai/tiktoken
+    accessed: 2026-11-24
+    type: code
+  - id: hf-bpe
+    title: "LLM Course, chapter 6.5: Byte-Pair Encoding tokenization"
+    publisher: Hugging Face
+    url: https://huggingface.co/learn/llm-course/chapter6/5
+    accessed: 2026-11-24
+    type: course
+  - id: lets-build-tokenizer
+    title: "Let's build the GPT Tokenizer"
+    author: Andrej Karpathy
+    publisher: YouTube
+    year: 2024
+    url: https://www.youtube.com/watch?v=zduSFxRajkE
+    accessed: 2026-11-24
+    type: video
+furtherReading:
+  - title: "Kudo & Richardson 2018: SentencePiece"
+    url: https://arxiv.org/abs/1808.06226
+  - title: "Hugging Face tokenizers documentation"
+    url: https://huggingface.co/docs/tokenizers/index
+exercises:
+  - id: code-bpe-embedding-cost
+    type: numeric
+    difficulty: easy
+    title: The price of a bigger vocabulary
+    prompt: "With 192 channels, how many parameters does the (tied) token-embedding table have for a vocabulary of 2,145 tokens (97 characters + 2,048 merges)?"
+    answer: 411840
+    tolerance: 1
+    hint: "One row of 192 numbers per token."
+    explanation: "$2{,}145 \\times 192 = 411{,}840$, about 23% of the 1.8M model, compared with 18,624 for the 97 characters. With GPT-2's 50,257 tokens the table alone would need 9.65M parameters, five times the whole model."
+  - id: code-bpe-leakage
+    type: short
+    difficulty: medium
+    title: Which text trains the tokenizer?
+    prompt: "Why is the BPE tokenizer trained on the training files only, not on the whole corpus?"
+    answer: "Merges learned from the validation files would give validation code unusually efficient tokens (for example whole identifiers that appear only there), which leaks information about the validation set into the model's input and makes validation results look better than they would on genuinely new code."
+    explanation: "The tokenizer is part of the model pipeline. Anything fitted on data, including a vocabulary, must be fitted on training data only, or the held-out measurement stops being held out."
+  - id: code-bpe-fair
+    type: reveal
+    difficulty: hard
+    title: Comparing losses fairly
+    prompt: "The character model reaches a validation loss of about 1 nat per token and the BPE model about 2 nats per token. Can you conclude that the character model is better?"
+    answer: "No. The losses are per token, and a BPE token covers about 2.3 characters while a character token covers one. Converting both to bits per character (loss ÷ characters per token ÷ ln 2) puts them on the same scale before comparing."
+    explanation: "Predicting a 2.3-character token is a harder guess than predicting one character, so its loss per token is naturally higher. Per character, the BPE model may well be the better predictor; only the normalised number can tell."
+---
+
+**Byte-pair encoding** (BPE) builds a vocabulary of frequent character sequences by repeatedly merging the most common adjacent pair of symbols into a new symbol.<Cite id="sennrich2016" /> It began as a data-compression method by Philip Gage in 1994, and Sennrich, Haddow and Birch adapted it to neural translation in 2016; it is now the standard <Term slug="tokenization" /> method for GPT-style models.<Cite id="wiki-bpe" /> This lesson writes a BPE trainer from scratch, trains the code model on its tokens, and checks whether the switch helps.
+
+## Why go beyond characters
+
+A character model spends capacity learning to spell. It has to predict `r`, `e`, `t`, `u`, `r`, `n` one at a time, even though `return` is a single idea. Worse, its 128-token context holds only 128 characters, about three lines, so it cannot see the function signature from the middle of a body.
+
+Word-level tokens fix the length problem but fail on code, where identifiers such as `get_user_by_id` are endless and mostly rare. BPE sits in between: common sequences such as `self`, `return` or eight spaces of indentation become single tokens, while rare names are spelled out from smaller pieces, so there is never an unknown token.<Cite id="hf-bpe" />
+
+## The algorithm on a toy corpus
+
+The textbook example uses four words with their counts and an end-of-word marker `_`. Each round counts every adjacent pair, weighted by word frequency, and merges the winner everywhere.<Cite id="sennrich2016" />
+
+<MathSteps
+  title="Five BPE merges, step by step"
+  legend={[
+    { symbol: '\\times n', meaning: 'how often the word occurs in the corpus' },
+    { symbol: '\\_', meaning: 'end-of-word marker' },
+  ]}
+>
+  <Step tex="\texttt{l o w \_}\times5,\;\; \texttt{l o w e r \_}\times2,\;\; \texttt{n e w e s t \_}\times6,\;\; \texttt{w i d e s t \_}\times3" words="Start from single characters. The pair counts include e s = 6 + 3 = 9, s t = 9, t _ = 9 and l o = 7." />
+  <Step tex="\text{merge 1: } \texttt{e s} \to \hl{\texttt{es}}" words="Three pairs tie at 9; the first one found wins. newest becomes n e w es t _." />
+  <Step tex="\text{merge 2: } \texttt{es t} \to \hl{\texttt{est}}, \quad \text{merge 3: } \texttt{est \_} \to \hl{\texttt{est\_}}" words="The new symbol takes part in new pairs immediately. After two more rounds, est_ means 'est at the end of a word'." />
+  <Step tex="\text{merge 4: } \texttt{l o} \to \texttt{lo}, \quad \text{merge 5: } \texttt{lo w} \to \hl{\texttt{low}}" words="With the est family done, l o (count 7) is the most frequent pair, and then lo w." />
+  <Step tex="\texttt{lowest\_}:\; \texttt{l o w e s t \_} \to \hl{[\texttt{low},\, \texttt{est\_}]}" words="To encode a word never seen in training, apply the merges in the order they were learned. Two meaningful pieces come out." />
+</MathSteps>
+
+The vocabulary size is a dial: base symbols plus the number of merges. GPT-2 starts from the 256 possible bytes and adds 50,000 merges and one special token, for 50,257 tokens.<Cite id="radford2019" />
+
+<Analogy breaks="A note-taker invents abbreviations that mean something; BPE merges purely by frequency, so a piece like 'est' is just common, not a known suffix.">
+BPE is like inventing shorthand while taking notes: once you have written "self." a hundred times, you give it its own squiggle, and later a squiggle for "self.name".
+</Analogy>
+
+## A BPE trainer for Python code
+
+`tokenizer.py` follows the design of Karpathy's minbpe, an educational BPE implementation of about a hundred lines, with two adjustments for code.<Cite id="minbpe" />
+
+**Base alphabet.** It starts from the corpus's 97 characters rather than 256 bytes. The corpus has already mapped every other character to `¤`, so bytes would only add unused symbols.
+
+**Pre-splitting.** Like GPT-2, it first cuts text into chunks with a regular expression, and merges never cross a chunk boundary, so a merge cannot glue the end of one identifier to the start of the next.<Cite id="radford2019" /> The chunk rules are tailored to Python: a newline *together with its indentation*, an identifier with one leading space, a number, a run of punctuation, or a run of spaces. Indentation therefore becomes its own family of tokens, which suits a language where indentation is syntax.
+
+<CodeFile path="code/projects/project-code-autocomplete/tokenizer.py" lines="44-51" title="tokenizer.py: chunks that merges never cross" />
+
+**Speed.** A naive trainer recounts every pair in the corpus after every merge. Instead, the trainer counts each *distinct* chunk once with its frequency and keeps an index from each pair to the chunks containing it, so a merge only updates the chunks it touches. On the 8.7-million-character training split, 512 merges take about 17 seconds and 2,048 merges about a minute in pure Python.
+
+<CodeFile path="code/projects/project-code-autocomplete/tokenizer.py" lines="70-105" highlight="87" title="tokenizer.py: the training loop" />
+
+Encoding applies the learned merges in order of their rank inside each chunk, and caches each chunk's result, since the same identifiers recur thousands of times. For production use, OpenAI's tiktoken does the same job in Rust, several times faster, and the Hugging Face tokenizers library can also train vocabularies.<Cite id="tiktoken" />
+
+## What the tokenizer learns
+
+Running `python tokenizer.py --merges 512` on the training split printed these first merges:
+
+1. two spaces, then four, then eight spaces;
+2. a newline followed by eight spaces;
+3. `se`, `in`, a newline followed by four spaces, `re`, `on`, `th`.
+
+Indentation dominates because it is the most repeated text in Python. Later merges build keywords and common names: merge 200 is `raise`, merge 500 is ` key`. The line `    def __init__(self, name=None):` with its body takes 60 character tokens but 18 BPE tokens, including single tokens for ` name`, `None` and the newline-plus-indent.
+
+On the validation files, the 512-merge vocabulary averages **2.28 characters per token** and the 2,048-merge vocabulary **2.90**. The same 128-token context therefore covers about 290 characters instead of 128, more than twice as much code.
+
+## Vocabulary size against model size
+
+More merges mean shorter sequences, but each extra token adds a row of 192 numbers to the embedding table, and those rows are trained only when their token appears. Rare tokens get few updates, so a small model on a small corpus cannot use a huge vocabulary well.<Cite id="lets-build-tokenizer" />
+
+| Vocabulary | Characters per token | Embedding parameters | Share of a 1.8M model |
+|---|---|---|---|
+| 97 characters | 1.00 | 18,624 | 1% |
+| 609 (512 merges) | 2.28 | 116,928 | 6% |
+| 2,145 (2,048 merges) | 2.90 | 411,840 | 23% |
+| 50,257 (GPT-2) | n/a | 9,649,344 | 530% |
+
+This course uses 512 merges by default: a large gain in context length for a small cost in parameters. `--merges 2048` is a worthwhile experiment.
+
+<Callout type="pitfall">
+Train the tokenizer on the training files only. `train.py` calls `BPETokenizer.train(train_text, ...)`; fitting it on validation code as well would leak information about the held-out set into the vocabulary.
+</Callout>
+
+## Retraining and a fair comparison
+
+`python train.py --tokenizer bpe` trains the tokenizer, encodes the corpus and trains a model with the same width, depth, batch size and number of steps as the character model. The model sees the same number of *tokens*, which is more *characters* of code.
+
+Loss per token cannot be compared directly, because a BPE token is harder to guess than a single character. Both scripts therefore report **bits per character**: the loss per token divided by the characters per token and by $\ln 2$.<Cite id="hf-bpe" />
+
+@@BPE_TABLE@@
+
+<Callout type="note">
+A BPE model has one practical quirk at prompt boundaries. If your prompt ends with a newline, the tokenizer encodes it as a bare newline token, while in training a newline was almost always merged with the indentation that follows. The model must then continue from a token boundary it rarely saw. Character models do not have this problem.
+</Callout>
+
+## Summary
+
+- BPE starts from characters and repeatedly merges the most frequent adjacent pair; the merge order is the tokenizer.
+- Pre-splitting into chunks, with newline-plus-indentation as a chunk, keeps merges inside identifiers and gives Python's indentation its own tokens.
+- 512 merges give 2.28 characters per token on unseen code, so the same context covers more than twice as much text.
+- Every token costs an embedding row, so small models need small vocabularies.
+- Compare models in bits per character, and train the tokenizer on training data only.

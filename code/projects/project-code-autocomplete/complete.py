@@ -3,7 +3,7 @@
     python complete.py --prompt "def is_even(n):"     # one completion, streamed
     python complete.py                                 # interactive: paste code, then an empty line
     python complete.py --watch my_script.py            # suggest the rest of the file's last line on every save
-    python complete.py --bench                         # latency: float32 vs int8 dynamic quantization
+    python complete.py --bench                         # latency: thread counts, float32 vs int8 quantization
 
 Options: --temperature (0.2-0.6 suits code), --top-k, --samples (alternatives, like an IDE list),
 --ckpt (default: checkpoints/char.pt, falling back to the smoke checkpoint).
@@ -112,8 +112,12 @@ def size_mb(model):
 
 
 def bench(path, prompt, n_tokens=150, repeats=3):
-    """Milliseconds per generated token, float32 vs int8, with the same seed."""
-    for label, quant in (("float32", False), ("int8 dynamic", True)):
+    """Milliseconds per generated token for thread counts and float32 vs int8, with the same seed."""
+    default_threads = torch.get_num_threads()
+    runs = [("float32", False, 1), ("float32", False, 4), ("float32", False, default_threads),
+            ("int8 dynamic", True, default_threads)]
+    for label, quant, threads in runs:
+        torch.set_num_threads(threads)
         c = Completer(path, quantize=quant)
         idx = torch.tensor([c.tok.encode(prompt)], dtype=torch.long)
         times = []
@@ -122,8 +126,9 @@ def bench(path, prompt, n_tokens=150, repeats=3):
             t0 = time.perf_counter()
             out = [i.item() for i in c.model.generate(idx, n_tokens, 0.4, 20)]
             times.append((time.perf_counter() - t0) / n_tokens * 1000)
-        print(f"{label:>13}: {min(times):6.2f} ms/token | state_dict {size_mb(c.model):5.2f} MB")
-        print("               sample:", repr(c.tok.decode(out)[:80]))
+        print(f"{label:>13}, {threads:2d} threads: {min(times):6.2f} ms/token "
+              f"| weights {size_mb(c.model):5.2f} MB | {c.tok.decode(out)[:40]!r}")
+    torch.set_num_threads(default_threads)
 
 
 def watch(c, path, args):

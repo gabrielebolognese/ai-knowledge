@@ -1,0 +1,207 @@
+---
+title: "Capstone: a command-line autocomplete tool"
+slug: code-autocomplete-cli
+track: project-code-autocomplete
+level: advanced
+order: 60
+minutes: 25
+module: Completion and tooling
+summary: Wrap the trained model in complete.py, a command-line tool that streams completions, offers alternatives and watches a file as you edit it. Measure and reduce its latency, and compare it honestly with production code assistants such as Codex.
+hatnote: This is the final lesson of the code-autocompletion project.
+prerequisites: [code-bpe-tokenizer]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Wrap the model in a CLI that completes the code you paste
+  - Speed up inference with no_grad, eval mode, thread settings and dynamic quantization, and measure the latency
+  - State honestly what a 2M-parameter model can and cannot do compared with large code models
+build: complete.py, a streaming command-line autocompleter with a file-watch mode and a latency benchmark
+reviewed: 2026-11-25
+seeAlso: [code-sampling-eval, code-bpe-tokenizer, code-corpus]
+sources:
+  - id: pt-quantization
+    title: "Quantization"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/quantization.html
+    accessed: 2026-11-25
+    type: docs
+  - id: jacob2018
+    title: "Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference"
+    author: Benoit Jacob, Skirmantas Kligys, Bo Chen, Menglong Zhu, Matthew Tang, Andrew Howard, Hartwig Adam, Dmitry Kalenichenko
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1712.05877
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-no-grad
+    title: "torch.no_grad"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.no_grad.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-threads
+    title: "torch.set_num_threads"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.set_num_threads.html
+    accessed: 2026-11-25
+    type: docs
+  - id: nanogpt
+    title: "nanoGPT"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/nanoGPT
+    accessed: 2026-11-24
+    type: code
+  - id: chen2021
+    title: "Evaluating Large Language Models Trained on Code"
+    author: Mark Chen et al.
+    publisher: arXiv
+    year: 2021
+    url: https://arxiv.org/abs/2107.03374
+    accessed: 2026-11-25
+    type: paper
+  - id: bavarian2022
+    title: "Efficient Training of Language Models to Fill in the Middle"
+    author: Mohammad Bavarian, Heewoo Jun, Nikolas Tezak, John Schulman, Christine McLeavey, Jerry Tworek, Mark Chen
+    publisher: arXiv
+    year: 2022
+    url: https://arxiv.org/abs/2207.14255
+    accessed: 2026-11-25
+    type: paper
+  - id: the-stack-smol
+    title: "The Stack smol"
+    publisher: BigCode (Hugging Face)
+    url: https://huggingface.co/datasets/bigcode/the-stack-smol
+    accessed: 2026-11-24
+    type: dataset
+  - id: torchao
+    title: "torchao: PyTorch native quantization and sparsity"
+    publisher: PyTorch (GitHub)
+    url: https://github.com/pytorch/ao
+    accessed: 2026-11-25
+    type: code
+furtherReading:
+  - title: "Kocetkov et al. 2022: The Stack"
+    url: https://arxiv.org/abs/2211.15533
+  - title: "nanochat (Karpathy's successor to nanoGPT)"
+    url: https://github.com/karpathy/nanochat
+exercises:
+  - id: code-cli-fim
+    type: mcq
+    difficulty: easy
+    title: What production assistants add
+    prompt: "You place the cursor in the middle of a function in an editor. A production code assistant uses the code *after* the cursor as well as before it. Which training technique makes that possible?"
+    options:
+      - Weight tying
+      - Fill-in-the-middle, which moves a span from the middle of a document to the end during training
+      - Dynamic int8 quantization
+      - A causal mask
+    answer: 1
+    explanation: "Bavarian et al. showed that a left-to-right model can learn to infill if training documents are rearranged as prefix, suffix, then middle. The course's model only ever sees code to the left of the cursor."
+  - id: code-cli-int8-size
+    type: numeric
+    difficulty: medium
+    title: Bytes saved by int8
+    prompt: "The model has 1,823,040 parameters. Stored as 32-bit floats, how many megabytes (10⁶ bytes) do they take? Give two decimals."
+    answer: 7.29
+    tolerance: 0.01
+    hint: "A 32-bit float is 4 bytes."
+    explanation: "$1{,}823{,}040 \\times 4 = 7{,}292{,}160$ bytes, about 7.29 MB. As 8-bit integers the same weights would take a quarter of that, about 1.8 MB, plus a scale per tensor. Dynamic quantization converts only the linear layers, so the embeddings stay in float32."
+  - id: code-cli-int8-slower
+    type: reveal
+    difficulty: hard
+    title: Why was int8 not faster?
+    prompt: "On the test machine the int8 model was smaller but not faster than the float32 model. Give a plausible explanation."
+    answer: "For tiny matrices (192 × 576) the arithmetic is cheap, and the cost of quantizing activations on the fly, converting back to float and calling extra kernels dominates. Int8 pays off when matrix multiplications are large enough for the saved memory traffic and faster integer arithmetic to outweigh that overhead."
+    explanation: "Dynamic quantization stores weights as int8 and quantizes each layer's input at run time. That overhead is fixed per call, so it is relatively large for a small model generating one token at a time. Always measure: speed-ups depend on the model size and the hardware."
+---
+
+An **autocomplete tool** turns a language model into something you can use while writing code: you give it the start of some code, and it streams a likely continuation. `complete.py` wraps the trained model in a small command-line program with three modes: a one-off prompt, an interactive session, and a watch mode that follows a file as you edit it. This lesson builds it, measures its speed, and ends with an honest comparison with production code assistants.
+
+## Using complete.py
+
+The tool loads a checkpoint (by default `checkpoints/char.pt`, then `bpe.pt`), rebuilds the model and tokenizer from it, and calls the sampling and stop rules from the previous lesson.
+
+- `python complete.py --prompt "def is_even(n):"` streams one completion.
+- `python complete.py` starts an interactive session: paste or type code, and an empty line asks for a completion.
+- `--samples 3` shows three alternative suggestions, like an editor's suggestion list, and `--temperature` and `--top-k` change how adventurous they are.
+- `--watch my_script.py` checks the file twice a second and, whenever it is saved, prints a suggestion for the rest of its last line.
+
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="186-198" highlight="193" title="complete.py: streaming a completion" />
+
+@@CLI_DEMO@@
+
+The watch mode is the simplest possible editor integration: no plugin, just a file and a terminal side by side. The loop is the one every autocompleter runs: read the code before the cursor, sample, show the suggestion.
+
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="134-150" highlight="147" title="complete.py: watch a file and complete its last line" />
+
+## Making inference fast
+
+A suggestion is only useful if it arrives while you are still thinking. Four settings matter on a CPU:
+
+1. **Evaluation mode.** `model.eval()` switches off dropout, so outputs are deterministic for a fixed seed.
+2. **No gradients.** `generate` runs under `torch.no_grad()`, which stops PyTorch from recording operations for backpropagation, saving memory and time.<Cite id="pt-no-grad" />
+3. **Threads.** `torch.set_num_threads` sets how many CPU threads PyTorch uses within an operation.<Cite id="pt-threads" /> For tiny matrices, more threads are not always faster, because coordinating them costs time.
+4. **Quantization.** Storing weights as 8-bit integers instead of 32-bit floats makes the model about four times smaller, and on suitable hardware integer arithmetic is faster.<Cite id="jacob2018" />
+
+Quantization maps each real-valued weight to one of 255 integer levels with a shared scale factor:
+
+<MathSteps
+  title="Symmetric int8 quantization of three weights"
+  legend={[
+    { symbol: 'w', meaning: 'original float32 weights' },
+    { symbol: 's', meaning: 'scale: the size of one integer step' },
+    { symbol: 'q', meaning: 'stored 8-bit integers (-127 to 127)' },
+  ]}
+>
+  <Step tex="w = [0.50,\; -1.27,\; 0.023]" words="Three weights from a linear layer." />
+  <Step tex="s = \frac{\max |w|}{127} = \frac{1.27}{127} = \hl{0.01}" words="Choose the scale so the largest weight lands exactly on the largest integer." />
+  <Step tex="q = \operatorname{round}(w / s) = [\hl{50},\; -127,\; 2]" words="Divide by the scale and round: each weight now fits in one byte instead of four." />
+  <Step tex="\hat w = q \cdot s = [0.50,\; -1.27,\; \hl{0.02}]" words="At run time the integers are multiplied back by the scale. The small weight lost 0.003 to rounding: that is the price of a quarter of the memory." />
+</MathSteps>
+
+PyTorch's *dynamic* quantization converts the weights of every `nn.Linear` layer ahead of time and quantizes each layer's input on the fly. `complete.py --quantize` applies it with one call. The current PyTorch documentation says quantization development has moved to the separate **torchao** library and asks users of the eager-mode API to migrate to it; the call still works in PyTorch 2.15, and `complete.py` reports clearly if a future version removes it.<Cite id="pt-quantization" /><Cite id="torchao" />
+
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="97-105" title="complete.py: dynamic int8 quantization" />
+
+`python complete.py --bench` measures milliseconds per generated token for 1 thread, 4 threads and PyTorch's default thread count, and for the quantized model, each time with the same random seed so the outputs can be compared.
+
+@@BENCH@@
+
+<Callout type="tip">
+The biggest speed-up in production systems is one this project leaves out: a **key-value cache**. `generate` recomputes attention over the whole context for every new token; caching each layer's keys and values means only the newest position needs computing. With a 128-token context the gain is modest, which is why the course keeps the simpler code.
+</Callout>
+
+## How this compares with production code assistants
+
+The tiny model shares its core with large code models: a decoder-only Transformer, trained with next-token cross-entropy on source code, with a sub-word tokenizer and temperature sampling.<Cite id="nanogpt" /> Nearly everything else differs by orders of magnitude.
+
+Codex is the best-documented example; according to its paper, a distinct production version of it powered GitHub Copilot. Its training set came from 54 million public GitHub repositories: 179 GB of unique Python files, filtered down to 159 GB. The largest model had 12 billion parameters. On HumanEval, 164 hand-written programming problems checked by unit tests, it solved 28.8% of problems with a single sample, and 70.2% when 100 samples were drawn per problem and any passing sample counted.<Cite id="chen2021" />
+
+| | This project | Codex (2021) |
+|---|---|---|
+| Parameters | 1.8 million | up to 12 billion (about 6,600 times more) |
+| Training code | 8.7 MB, one codebase | 159 GB from 54 million repositories (about 18,000 times more) |
+| Context | 128 tokens (128-290 characters) | thousands of tokens (GPT-3 family) |
+| Sees code after the cursor | no | yes, in later fill-in-the-middle models |
+| Evaluated by | parse rate (syntax) | unit tests (correctness) |
+| Hardware | a laptop CPU, under an hour | a GPU cluster |
+
+Production assistants add techniques this project leaves out. **Fill-in-the-middle** training moves a span from the middle of each document to its end, so a left-to-right model learns to complete code *between* a prefix and a suffix, which is what happens when the cursor sits inside a function.<Cite id="bavarian2022" /> Their training data is also filtered, for example removing files that look auto-generated or have very long lines, as Codex's was.<Cite id="chen2021" />
+
+**What the tiny model can do.** It writes code with the *texture* of Python: correct indentation, closed brackets, plausible names, `self.` inside methods, `raise ValueError(...)` and docstrings in the right places. It is a good completer of boilerplate that looks like the standard library.
+
+**What it cannot do.** It does not understand what a function is for, it forgets anything older than its context window, it invents functions and attributes that do not exist, and it knows nothing about libraries outside the standard library. Its output should be read as a statistical continuation, not as a solution. That is also true, at a far higher level of quality, of large models: Codex's own paper reports that a single sample solved fewer than a third of its test problems.<Cite id="chen2021" />
+
+## Where to go next
+
+- **More and different data.** The Stack smol has 10,000 files per language for many languages. It requires a Hugging Face login and acceptance of its terms, and each file keeps its original licence.<Cite id="the-stack-smol" />
+- **A bigger model on a GPU.** nanoGPT's configuration files scale the same code to GPT-2 size.<Cite id="nanogpt" />
+- **Fill-in-the-middle.** Rearrange training files into prefix, suffix and middle with two special tokens, and teach `complete.py` to send the code after the cursor too.<Cite id="bavarian2022" />
+
+## Summary
+
+- `complete.py` streams completions from a prompt, an interactive session or a watched file, with temperature, top-k and alternative suggestions.
+- `eval()`, `no_grad()`, a sensible thread count and int8 quantization are the CPU inference levers; measure each rather than assuming.
+- Quantization stores weights as integers times a scale: a quarter of the memory, at the cost of small rounding errors.
+- The architecture is the same as in production code models, but they are thousands of times larger, are trained on filtered data, can see code after the cursor and are tested for correctness.
+- A 1.8M-parameter model completes the *form* of Python well and its *meaning* poorly; say so whenever you show it.

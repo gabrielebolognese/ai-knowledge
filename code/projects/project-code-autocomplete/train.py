@@ -47,10 +47,12 @@ def get_args():
     p.add_argument("--threads", type=int, default=None, help="torch.set_num_threads (default: PyTorch's choice)")
     p.add_argument("--seed", type=int, default=1337)
     a = p.parse_args()
-    if a.smoke:  # ~200 KB of code, a smaller model, a few hundred steps
-        a.max_chars = a.max_chars or 200_000
-        a.max_iters, a.batch_size, a.block_size = 300, 16, 64
-        a.n_embd, a.eval_interval, a.eval_iters, a.warmup = 128, 100, 10, 20
+    if a.smoke:  # ~200 KB of code, a smaller model, a few hundred steps (flags you pass still win)
+        smoke = dict(max_chars=200_000, max_iters=300, batch_size=16, block_size=64,
+                     n_embd=128, eval_interval=100, eval_iters=10, warmup=20)
+        for key, value in smoke.items():
+            if getattr(a, key) == p.get_default(key):
+                setattr(a, key, value)
     a.ckpt = Path(a.ckpt or HERE / "checkpoints" / f"{a.tokenizer}{'-smoke' if a.smoke else ''}.pt")
     return a
 
@@ -162,8 +164,7 @@ def main():
                 save(step + 1)
         step = a.max_iters
     except KeyboardInterrupt:
-        print("\ninterrupted: saving so you can --resume")
-        step += 1
+        print("\ninterrupted: saving so you can --resume")   # the unfinished step is redone
     save(step)
     print(f"saved {a.ckpt} (step {step}) in {(time.time() - t0) / 60:.1f} min")
 

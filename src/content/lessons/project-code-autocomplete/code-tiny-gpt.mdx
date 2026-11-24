@@ -1,0 +1,242 @@
+---
+title: Writing a tiny GPT in PyTorch
+slug: code-tiny-gpt
+track: project-code-autocomplete
+level: advanced
+order: 20
+minutes: 30
+module: Corpus and model
+summary: A complete GPT-style language model in about 130 lines of PyTorch, modelled on nanoGPT. This lesson follows a batch of code characters through embeddings, causal self-attention and the MLP, checks every tensor shape, and counts the 1,823,040 parameters.
+hatnote: This lesson builds the model; training it is covered in "Training the code model on a CPU".
+prerequisites: [code-corpus]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Implement embeddings, causal self-attention, the MLP block and the LM head
+  - Check every tensor shape with a tiny config
+  - Count parameters for the 4-layer, d=192 model (~1.8M)
+build: model.py, a 1.8M-parameter decoder-only Transformer
+reviewed: 2026-11-24
+seeAlso: [code-training, code-corpus]
+sources:
+  - id: vaswani2017
+    title: "Attention Is All You Need"
+    author: Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, Illia Polosukhin
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1706.03762
+    accessed: 2026-11-24
+    type: paper
+  - id: radford2019
+    title: "Language Models are Unsupervised Multitask Learners"
+    author: Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever
+    publisher: OpenAI
+    year: 2019
+    url: https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf
+    accessed: 2026-11-24
+    type: paper
+  - id: nanogpt
+    title: "nanoGPT"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/nanoGPT
+    accessed: 2026-11-24
+    type: code
+  - id: mingpt
+    title: "minGPT"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/minGPT
+    accessed: 2026-11-24
+    type: code
+  - id: lets-build-gpt
+    title: "Let's build GPT: from scratch, in code, spelled out"
+    author: Andrej Karpathy
+    publisher: YouTube
+    year: 2023
+    url: https://www.youtube.com/watch?v=kCc8FmEb1nY
+    accessed: 2026-11-24
+    type: video
+  - id: pt-sdpa
+    title: "torch.nn.functional.scaled_dot_product_attention"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html
+    accessed: 2026-11-24
+    type: docs
+  - id: press2016
+    title: "Using the Output Embedding to Improve Language Models"
+    author: Ofir Press, Lior Wolf
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1608.05859
+    accessed: 2026-11-24
+    type: paper
+  - id: ba2016
+    title: "Layer Normalization"
+    author: Jimmy Lei Ba, Jamie Ryan Kiros, Geoffrey E. Hinton
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1607.06450
+    accessed: 2026-11-24
+    type: paper
+  - id: he2016
+    title: "Deep Residual Learning for Image Recognition"
+    author: Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+    publisher: arXiv
+    year: 2015
+    url: https://arxiv.org/abs/1512.03385
+    accessed: 2026-11-24
+    type: paper
+furtherReading:
+  - title: "Jay Alammar: The Illustrated GPT-2"
+    url: https://jalammar.github.io/illustrated-gpt2/
+  - title: "Harvard NLP: The Annotated Transformer"
+    url: https://nlp.seas.harvard.edu/annotated-transformer/
+exercises:
+  - id: code-gpt-block-params
+    type: numeric
+    difficulty: easy
+    title: Parameters in one block
+    prompt: "Using the rule of thumb of $12d^2$ parameters per Transformer block (ignoring biases and LayerNorm), how many parameters does one block have when $d = 128$?"
+    answer: 196608
+    tolerance: 1
+    hint: "$128^2 = 16{,}384$."
+    explanation: "$12 \\times 128^2 = 12 \\times 16{,}384 = 196{,}608$. Four such blocks give about 0.79M, which is why nanoGPT's CPU config with $d = 128$ is called a 0.8M model."
+  - id: code-gpt-score-shape
+    type: mcq
+    difficulty: medium
+    title: The shape of the attention scores
+    prompt: "With batch size B, context length T, H heads and C channels, what is the shape of the attention score tensor `q @ k.transpose(-2, -1)`?"
+    options:
+      - "(B, T, C)"
+      - "(B, H, T, C // H)"
+      - "(B, H, T, T)"
+      - "(B, T, T, H)"
+    answer: "(B, H, T, T)"
+    explanation: "Each head compares every query position with every key position, so each head has a T × T table of scores, for each sequence in the batch: (B, H, T, T). Multiplying it by the values, shaped (B, H, T, C // H), brings the shape back to (B, H, T, C // H)."
+  - id: code-gpt-why-inf
+    type: reveal
+    difficulty: hard
+    title: Why minus infinity?
+    prompt: The causal mask sets future scores to minus infinity before the softmax. Why not set them to 0, or set the weights to 0 after the softmax?
+    answer: "A score of 0 still gets weight e⁰ = 1 in the softmax, so the future would leak in. Zeroing weights after the softmax would leave rows that no longer sum to 1. Minus infinity becomes exactly 0 after exponentiation, and the softmax then normalises over the allowed positions only."
+    explanation: "The softmax computes exp(score) divided by the row sum. exp(−∞) = 0, so masked positions contribute nothing to either the numerator or the sum, and the remaining weights still form a proper average."
+---
+
+A **GPT** is a stack of <Term slug="transformer" /> decoder blocks trained to predict the next token of a sequence.<Cite id="radford2019" /> This lesson writes one in a single file, `model.py`, following the structure of Andrej Karpathy's nanoGPT and minGPT, which are deliberately small, readable reimplementations of OpenAI's GPT-2.<Cite id="nanogpt" /><Cite id="mingpt" /> The result has 1.8 million parameters, small enough to train on a laptop CPU, yet it contains every part of the architecture that large code models use.
+
+## The architecture at a glance
+
+The model reads a batch of token ids and returns, for every position, a score for every possible next token. Its size is set by five numbers:
+
+| Setting | Symbol | Value | Meaning |
+|---|---|---|---|
+| `vocab_size` | V | 97 | characters in the alphabet (see the corpus lesson) |
+| `block_size` | T | 128 | longest context the model can see |
+| `n_layer` | L | 4 | Transformer blocks stacked on top of each other |
+| `n_head` | H | 4 | attention heads per block |
+| `n_embd` | C | 192 | length of each token's vector ("channels") |
+
+These follow the research notes' recommendation for a CPU-sized code model and sit between nanoGPT's 0.8M CPU example and its 10.65M GPU example.<Cite id="nanogpt" /> Karpathy's video *Let's build GPT* develops the same design step by step for a Shakespeare model, and is the best companion to this lesson.<Cite id="lets-build-gpt" />
+
+## Step 1: embeddings
+
+A batch arrives as integers with shape `(B, T)`: B windows of T characters. Two lookup tables turn them into vectors. The token embedding `wte` gives each of the 97 characters a learned vector of length 192. The position embedding `wpe` gives each of the 128 positions its own learned vector, because attention by itself ignores order.<Cite id="vaswani2017" /> The two are added, giving `x` with shape `(B, T, C)`.
+
+The original Transformer used fixed sine and cosine patterns for positions; GPT-2 and nanoGPT learn them instead, and so does this model.<Cite id="radford2019" />
+
+## Step 2: causal self-attention, shape by shape
+
+<Term slug="self-attention" /> lets each position gather information from other positions. Every position produces a *query* (what it is looking for), a *key* (what it offers) and a *value* (what it passes on). The weight between two positions is the softmax of their query–key <Term slug="dot-product" />, scaled by the square root of the head size.<Cite id="vaswani2017" />
+
+<MathSteps
+  title="Attention shapes for one block"
+  legend={[
+    { symbol: 'B', meaning: 'batch size (windows per step)' },
+    { symbol: 'T', meaning: 'context length in tokens' },
+    { symbol: 'C', meaning: 'channels per token (n_embd = 192)' },
+    { symbol: 'H', meaning: 'heads (4), each of size C/H = 48' },
+  ]}
+>
+  <Step tex="x \in \mathbb{R}^{B \times T \times C} \;\xrightarrow{\text{qkv}}\; \hl{q,\,k,\,v} \in \mathbb{R}^{B \times T \times C}" words="One linear layer produces queries, keys and values for every position at once (3C outputs, split into three)." />
+  <Step tex="(B, T, C) \to (B, T, H, C/H) \to \hl{(B, H, T, C/H)}" words="Each vector is cut into H slices of 48 numbers, and the head axis moves forward so every head works independently." />
+  <Step tex="S = \frac{q\,k^\top}{\sqrt{C/H}} \in \hl{\mathbb{R}^{B \times H \times T \times T}}" words="Every query is compared with every key: a T × T table of scores per head. Dividing by √48 keeps the scores from growing with the head size." example="T = 128 gives 16,384 scores per head per window" />
+  <Step tex="W = \operatorname{softmax}(S + M), \quad y = W\,v \in \hl{\mathbb{R}^{B \times H \times T \times C/H}}" words="After masking (next block of steps), the softmax turns each row of scores into weights that sum to 1, and the weighted sum of values is each position's output." />
+  <Step tex="(B, H, T, C/H) \to \hl{(B, T, C)} \xrightarrow{W_O} (B, T, C)" words="The heads are glued back together and a final linear layer mixes them. The output has the same shape as the input, so blocks can be stacked." />
+</MathSteps>
+
+The **causal mask** is what makes this a model that can generate code. When predicting the character at position $t$, the model must not see positions after $t$, because at generation time they do not exist yet.<Cite id="vaswani2017" /> The mask sets those scores to $-\infty$ before the softmax:
+
+<MathSteps
+  title="The causal mask on three tokens"
+  legend={[
+    { symbol: 'S', meaning: 'attention scores (rows = queries, columns = keys)' },
+    { symbol: 'M', meaning: 'mask: 0 where allowed, minus infinity in the future' },
+  ]}
+>
+  <Step tex="S = \begin{bmatrix} 1 & 0 & 2 \\ 2 & 1 & 0 \\ 0 & 1 & 1 \end{bmatrix}" words="Unmasked scores. Row 1 (the first token) would put most weight on token 3, which comes after it: that is cheating." />
+  <Step tex="S + M = \begin{bmatrix} 1 & \hl{-\infty} & \hl{-\infty} \\ 2 & 1 & \hl{-\infty} \\ 0 & 1 & 1 \end{bmatrix}" words="Everything above the diagonal is replaced by minus infinity. Each row now only contains the token itself and earlier tokens." />
+  <Step tex="\operatorname{softmax}(S + M) = \begin{bmatrix} 1 & 0 & 0 \\ \hl{0.731} & \hl{0.269} & 0 \\ 0.155 & 0.422 & 0.422 \end{bmatrix}" words="Because e to the minus infinity is 0, masked positions get exactly zero weight, and each row still sums to 1." example="row 2: e²/(e² + e¹) = 7.389 / 10.107 = 0.731" />
+</MathSteps>
+
+In `model.py` the explicit version builds a lower-triangular boolean matrix with `torch.tril` once and uses `masked_fill` to apply it. The default path calls PyTorch's fused `scaled_dot_product_attention` with `is_causal=True`, which computes the same result faster.<Cite id="pt-sdpa" /> The file's self-test checks that the two paths agree.
+
+<CodeFile path="code/projects/project-code-autocomplete/model.py" lines="25-51" highlight="44" title="model.py: causal self-attention" />
+
+<Analogy breaks="Real readers can choose what to reread; here the weights are computed by fixed arithmetic from learned matrices, and the card always covers exactly the future.">
+The causal mask is like reading a page with a card covering everything below the current line: you can glance back at anything already read, but never ahead.
+</Analogy>
+
+## Step 3: the MLP and the block
+
+After attention, each position passes through a small two-layer network on its own: a linear layer that expands 192 channels to 768, a GELU nonlinearity, and a linear layer back to 192. Attention moves information *between* positions; the MLP processes it *within* each position.
+
+A **block** wraps both parts the way GPT-2 does: <Term slug="weight">weights</Term> pass through LayerNorm first ("pre-LN"), and each sub-layer's output is *added* to its input rather than replacing it.<Cite id="radford2019" /> The additions are residual connections, introduced for very deep image networks, which give gradients a direct path through the stack.<Cite id="he2016" /> LayerNorm rescales each token's vector to zero mean and unit variance, which keeps training stable.<Cite id="ba2016" />
+
+<CodeFile path="code/projects/project-code-autocomplete/model.py" lines="65-76" title="model.py: the pre-LN block" />
+
+## Step 4: the output head and weight tying
+
+After the last block and a final LayerNorm, a linear layer `lm_head` maps each 192-number vector to 97 scores, the **logits**, one per possible next character. The training loss is cross-entropy between those logits and the true next character, computed at all T positions at once, so one window of 128 characters provides 128 training examples.<Cite id="lets-build-gpt" />
+
+The output layer reuses the token-embedding matrix (`lm_head.weight = wte.weight`). Press and Wolf showed that tying the input and output embeddings reduces the parameter count and usually improves language models; GPT-2 and nanoGPT do the same.<Cite id="press2016" /><Cite id="nanogpt" />
+
+<CodeFile path="code/projects/project-code-autocomplete/model.py" lines="79-113" highlight="89,111-112" title="model.py: embeddings, blocks and the loss" />
+
+## Counting the parameters
+
+Counting parameters by hand is a good check that you understand the shapes. Per block, attention has four $C \times C$ matrices (query, key, value, output) and the MLP has two $C \times 4C$ matrices.
+
+<MathSteps
+  title="1,823,040 parameters"
+  legend={[
+    { symbol: 'C', meaning: 'n_embd = 192' },
+    { symbol: 'L', meaning: 'n_layer = 4' },
+  ]}
+>
+  <Step tex="4C^2 + 8C^2 = \hl{12C^2} = 12 \cdot 192^2 = 442{,}368" words="The rule of thumb per block: 4C² for attention plus 8C² for the MLP, ignoring biases and LayerNorm." />
+  <Step tex="442{,}368 + \underbrace{3C + C + 4C + C}_{\text{biases}} + \underbrace{4C}_{\text{2 LayerNorms}} = \hl{444{,}864}" words="Adding the bias vectors (1,728 numbers) and the two LayerNorms (768) gives the exact count per block." />
+  <Step tex="L \cdot 444{,}864 = \hl{1{,}779{,}456}" words="Four blocks." />
+  <Step tex="1{,}779{,}456 + \underbrace{97 \cdot 192}_{\text{wte}} + \underbrace{128 \cdot 192}_{\text{wpe}} + \underbrace{2 \cdot 192}_{\text{ln\_f}} = \hl{1{,}823{,}040}" words="Plus the token table (18,624), the position table (24,576) and the final LayerNorm. The output head adds nothing because it shares the token table." />
+</MathSteps>
+
+Almost all the parameters sit in the blocks; the embeddings are tiny because the vocabulary is only 97 characters. That changes with a larger vocabulary, as the BPE lesson shows. For scale, the largest GPT-2 model has 48 layers, 1,600 channels and 1.5 billion parameters, roughly 850 times more.<Cite id="radford2019" />
+
+## Checking the shapes
+
+Run `python model.py`. It builds a toy model with V = 10, T = 8 and C = 8, and prints:
+
+- `logits shape: (2, 8, 10) (B, T, V)`: one score per vocabulary entry, for every position of both windows.
+- An untrained loss close to $\ln V = \ln 10 \approx 2.30$. A freshly initialised model guesses roughly uniformly, so its cross-entropy is about $\ln V$; a starting loss far from that usually means a bug in the loss or the targets.<Cite id="lets-build-gpt" /> For the real model the value to expect is $\ln 97 \approx 4.57$.
+- `explicit mask == scaled_dot_product_attention: True`.
+- `default config: 1,823,040 parameters`, matching the hand count above.
+
+<Callout type="tip">
+PyTorch also has a built-in `nn.TransformerEncoderLayer` that can act as a GPT block when given a causal mask. Writing the block by hand, as here, costs about 40 lines and makes every shape visible, which is why nanoGPT and this course do it that way.
+</Callout>
+
+## Summary
+
+- A GPT is token and position embeddings, a stack of pre-LN Transformer blocks, a final LayerNorm and an output head tied to the token embedding.
+- Attention reshapes `(B, T, C)` into H heads, builds a `(B, H, T, T)` score table, masks the future with minus infinity, and returns to `(B, T, C)`.
+- The MLP expands to 4C and back; residual connections and LayerNorm keep the stack trainable.
+- The default model has 1,823,040 parameters, about $12C^2$ per block, and should start training at a loss near $\ln 97 \approx 4.57$.

@@ -19,7 +19,7 @@ from pathlib import Path
 
 SKIP_DIRS = {"site-packages", "test", "tests", "idlelib", "__pycache__"}
 MAX_FILE_BYTES = 200_000            # very large files are mostly generated tables
-UNK = "¤"                      # "¤" stands in for any character outside the alphabet
+UNK = "¤"                     # "¤" stands in for any character outside the alphabet
 ALPHABET = "\n" + "".join(chr(c) for c in range(32, 127)) + UNK   # 97 characters
 _ALLOWED = set(ALPHABET)
 SEPARATOR = "# <|file|> {}\n"       # marks the start of each file in the corpus
