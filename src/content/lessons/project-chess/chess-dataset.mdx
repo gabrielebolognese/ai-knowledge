@@ -1,0 +1,213 @@
+---
+title: A training set from the Lichess evaluation database
+slug: chess-dataset
+track: project-chess
+level: advanced
+order: 60
+minutes: 25
+module: The neural evaluator and UCI
+summary: The neural evaluator learns from positions that Stockfish has already scored. This lesson streams the free Lichess evaluation export, keeps quiet positions, converts each score to the side to move, and encodes every position as 768 piece-square features.
+hatnote: This lesson builds the data. For the network that learns from it, see "Training the 768→256→32→1 evaluator".
+prerequisites: [chess-evaluation]
+tools: [Python 3, python-chess, NumPy, zstandard]
+outcomes:
+  - Stream positions from the Lichess evaluation export (CC0) without downloading everything
+  - Pick the deepest evaluation, convert White-relative cp to side-to-move, and skip mates and non-quiet positions
+  - Encode positions as 768 piece-square features and save them compactly
+build: A filtered, encoded training set of Stockfish-scored positions
+reviewed: 2026-11-24
+seeAlso: [chess-evaluation, chess-train-evaluator, chess-nn-search]
+sources:
+  - id: lichess-db
+    title: Lichess open database
+    publisher: Lichess
+    url: https://database.lichess.org/
+    accessed: 2026-11-24
+    type: dataset
+  - id: lichess-evals-hf
+    title: Lichess chess-position-evaluations (Hugging Face)
+    publisher: Lichess
+    url: https://huggingface.co/datasets/Lichess/chess-position-evaluations
+    accessed: 2026-11-24
+    type: dataset
+  - id: python-zstandard
+    title: python-zstandard
+    author: Gregory Szorc
+    publisher: python-zstandard documentation
+    url: https://python-zstandard.readthedocs.io/
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-nnue
+    title: NNUE
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/NNUE
+    accessed: 2026-11-24
+    type: docs
+  - id: nnue-doc
+    title: NNUE (official nnue-pytorch documentation)
+    publisher: Stockfish developers
+    url: https://official-stockfish.github.io/docs/nnue-pytorch-wiki/docs/nnue.html
+    accessed: 2026-11-24
+    type: docs
+  - id: nnue-pytorch
+    title: "official-stockfish/nnue-pytorch: Stockfish NNUE trainer"
+    publisher: Stockfish developers
+    url: https://github.com/official-stockfish/nnue-pytorch
+    accessed: 2026-11-24
+    type: code
+  - id: lichess-github
+    title: "lichess-org/database: the code that builds the Lichess database exports"
+    publisher: Lichess
+    url: https://github.com/lichess-org/database
+    accessed: 2026-11-24
+    type: code
+  - id: python-chess-core
+    title: python-chess core API
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/core.html
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: chess-dataset-feature-index
+    type: numeric
+    difficulty: easy
+    title: Find a feature index
+    prompt: "White is to move. Which of the 768 inputs is switched on by the **black queen on d8**? Piece types run pawn = 1 to king = 6 (queen = 5), and squares run a1 = 0, b1 = 1, … h8 = 63, so d8 = 59."
+    answer: 699
+    tolerance: 0
+    hint: "From White's chair the black queen is an opponent piece, so the block starts at 384."
+    explanation: "$384 + (5 - 1) \\cdot 64 + 59 = 384 + 256 + 59 = 699$. No mirroring is needed because the side to move is White."
+  - id: chess-dataset-sign
+    type: mcq
+    difficulty: medium
+    title: Whose point of view?
+    prompt: "A record has `cp: 150` and its FEN says **Black** to move. Which score does `to_example` store?"
+    options:
+      - "+150, because the record already says who is better"
+      - "−150, because Lichess scores are from White's point of view and the net wants the side to move's"
+      - "0, because positions with Black to move are skipped"
+      - "+150 now, and the network flips the sign later"
+    answer: "−150, because Lichess scores are from White's point of view and the net wants the side to move's"
+    explanation: "+150 means White is better by about a pawn and a half. With Black to move, that is bad news for the mover, so the side-to-move score is −150. The features are also seen from Black's chair, so features and target agree. `self_check` tests exactly this with a known position."
+  - id: chess-dataset-storage
+    type: numeric
+    difficulty: medium
+    title: How much memory?
+    prompt: "Each position is stored as 32 `int16` feature slots plus one `int16` score. How many megabytes (10^6 bytes) do 2,000,000 positions take before compression?"
+    answer: 132
+    tolerance: 1
+    hint: "An `int16` is 2 bytes, so one position is 33 × 2 bytes."
+    explanation: "$33 \\cdot 2 = 66$ bytes per position, and $66 \\cdot 2{,}000{,}000 = 132{,}000{,}000$ bytes ≈ 132 MB. The compressed `.npz` on disk is much smaller (300,000 positions came to 5.0 MB), but this is the size in memory during training."
+  - id: chess-dataset-quiet
+    type: short
+    difficulty: hard
+    title: Why throw away tactical positions?
+    prompt: "`to_example` drops every position whose best move is a capture or a promotion. Explain why, in terms of how the engine will use the trained network."
+    answer: "In those positions the score depends on a tactic that has not happened yet: Stockfish's score already includes winning the piece, while the board still shows equal material. A small network cannot see tactics, so these targets look like noise to it. In the engine, quiescence search resolves captures before the evaluator is called, so the net is mostly asked about quiet positions anyway; training on quiet positions matches the questions it will be asked."
+    explanation: "Train on the kind of input you will see at test time. The official Stockfish trainer applies a similar filter for captures and positions in check while loading data, and the course engine's quiescence search is what makes the filter safe."
+---
+
+A neural evaluator needs examples: positions paired with a good score. The **Lichess evaluation database** supplies hundreds of millions of positions that Stockfish has already analysed, and it is free to use under CC0, a public-domain dedication.<Cite id="lichess-db" /> This lesson turns the first few hundred thousand of them into a training set: streamed instead of downloaded, filtered to quiet positions, and encoded as the 768 features the network in the [next lesson](/course/project-chess/chess-train-evaluator/) will read.
+
+## The source
+
+<Infobox
+  title="Lichess evaluation export"
+  rows={[
+    { label: 'File', value: 'lichess_db_eval.jsonl.zst' },
+    { label: 'Positions', value: '417,862,375 (page updated 2026-11-11)' },
+    { label: 'Size', value: 'about 22.5 GB compressed' },
+    { label: 'Format', value: 'one JSON object per line, Zstandard-compressed' },
+    { label: 'Scores', value: 'Stockfish, White’s point of view' },
+    { label: 'Licence', value: 'CC0 (public domain)' },
+  ]}
+/>
+
+Lichess publishes its game, puzzle and evaluation exports at database.lichess.org, all under CC0, so the data may be used and shared without conditions.<Cite id="lichess-db" /> The code that produces the exports is open source.<Cite id="lichess-github" /> The evaluation file listed 417,862,375 positions evaluated with Stockfish when its page was last updated on 2026-11-11, and its HTTP `Content-Length` on 2026-11-24 was about 22.5 GB.<Cite id="lichess-db" />
+
+### One line of the file
+
+Each line is a JSON object with two fields. `fen` is the position in <Term slug="fen">FEN</Term>, but only the first four parts (pieces, side to move, castling, en passant), without the move counters. `evals` is a list of analyses, each with `knodes` (thousands of nodes searched), `depth` and `pvs`. Every principal variation (PV) has either `cp`, a score in <Term slug="centipawn">centipawns</Term>, or `mate`, when a forced mate was found, plus `line`, the moves in UCI_Chess960 notation.<Cite id="lichess-db" />
+
+A position can have several analyses. Lichess recommends taking the evaluation with the **highest depth** and using its **first PV** if you only want one score, which is what `best_eval` does.<Cite id="lichess-db" /> The first move of that PV is the best move, which the filters below need.
+
+## Streaming instead of downloading
+
+Nobody needs all 22.5 GB for a first network. The companion code opens the file over HTTPS and passes the response to a Zstandard decompressor from the `zstandard` package, which can read a compressed stream piece by piece.<Cite id="python-zstandard" /> Lines are decoded one at a time, and the loop simply stops after the requested number of records, so only the beginning of the file is ever transferred. Interrupting it with Ctrl+C is safe.
+
+An alternative is the Parquet copy of the same data on Hugging Face, split into many files, so you can download one slice and read it with any Parquet reader.<Cite id="lichess-evals-hf" /> The streaming route needs no extra tooling beyond `zstandard` and reads the official file directly.
+
+## Choosing the score and its sign
+
+Lichess reports `cp` from **White's** point of view: +50 means White is half a pawn better, whoever is to move.<Cite id="lichess-db" /> The search, however, uses negamax, which needs every score from the point of view of the **side to move** (the [evaluation lesson](/course/project-chess/chess-evaluation/) made the same conversion for the hand-written tables). `to_example` keeps the score when White is to move and negates it when Black is to move, then clips it to ±2000 cp, because beyond that every position is simply winning.
+
+<Callout type="pitfall">
+A sign bug here is silent: the network still trains and the loss still falls, but it learns that being a queen up is bad whenever Black is to move. `data.py` runs `self_check` before every build. It asserts that a White-relative +40 after 1.e4 becomes −40 for Black to move, and that a position and its colour-mirrored copy produce the same features.
+</Callout>
+
+## Filtering: keep quiet, legal positions
+
+Not every record makes a useful example. `to_example` returns nothing for:
+
+- **Mate scores.** A mate has no centipawn value, and finding mates is the search's job, not the evaluator's.
+- **Invalid FENs and illegal positions.** Some analysed positions were set up by users and are impossible in a game; python-chess's `Board.is_valid()` catches them.<Cite id="python-chess-core" />
+- **Positions where the side to move is in check.** The engine never evaluates these statically: it searches the evasions instead.
+- **Positions whose best move is a capture or a promotion.** Their score depends on a tactic that has not happened yet, so the board and the score disagree.
+
+The engine's quiescence search resolves captures before it calls the evaluator, so the network will mostly be asked about quiet positions; training on quiet positions matches that. The official Stockfish trainer applies a similar skip of capture and in-check positions while loading its data.<Cite id="nnue-pytorch" /> Castling in UCI_Chess960 notation is written as the king moving onto its own rook's square, and python-chess's `is_capture` correctly does not count it as a capture.<Cite id="python-chess-core" />
+
+On the companion run, these filters kept 300,000 of the first 512,708 records, about 59%. The bundled offline sample of 4,000 records keeps 2,255 (56%).
+
+<Callout type="warning">
+These are positions that Lichess users chose to analyse, mostly from human games, at varying depths and with different Stockfish versions. That is fine for learning, but it is not a curated training set like the one Stockfish itself is trained on, and the network will inherit whatever biases the selection has.
+</Callout>
+
+## Encoding: 768 piece-square features
+
+The network's input has one slot for each combination of 2 colours × 6 piece types × 64 squares: 768 inputs, each 1 if that piece stands on that square and 0 otherwise. This is the simple "A" feature set from the official NNUE documentation.<Cite id="nnue-doc" /><Cite id="cpw-nnue" /> At most 32 inputs are on, so the code stores only the list of active indices.
+
+The features are seen from the side to move's chair. Slots 0-383 hold the mover's own pieces and 384-767 the opponent's, and when Black is to move the board is flipped vertically, so "my pawn about to promote" is the same input for both colours.<Cite id="nnue-doc" /> python-chess numbers the squares a1 = 0, b1 = 1, …, h8 = 63, and `chess.square_mirror` does the flip.<Cite id="python-chess-core" />
+
+<MathSteps
+  title="The feature index of a white knight on f3"
+  legend={[
+    { symbol: 't', meaning: 'piece type: pawn 1, knight 2, bishop 3, rook 4, queen 5, king 6' },
+    { symbol: 's', meaning: 'square number, a1 = 0 to h8 = 63 (rank × 8 + file)' },
+  ]}
+>
+  <Step tex="\text{index} = \hl{(0 \text{ or } 384)} + (t - 1) \cdot 64 + s" words="The block for own or opponent pieces, then the piece type, then the square." />
+  <Step tex="\hl{0} + (t - 1) \cdot 64 + s" words="White is to move and the knight is White's, so it is an own piece: block 0." />
+  <Step tex="0 + \hl{(2 - 1) \cdot 64} + s = 64 + s" words="A knight is piece type 2, so it skips the 64 pawn slots." />
+  <Step tex="64 + \hl{21} = 85" words="f3 is rank 3, file f: 2 × 8 + 5 = 21." />
+  <Step tex="\hl{384} + 64 + \text{mirror}(21) = 384 + 64 + 45 = 493" words="If Black were to move, the same knight is an opponent piece and f3 is mirrored to f6 (square 45)." />
+</MathSteps>
+
+### Storage
+
+`encode` writes each position as a fixed row of 32 `int16` indices, padding unused slots with 768 ("no feature"), and the score is one more `int16`. That is 66 bytes per position, so one million positions take about 66 MB in memory. The arrays are saved as a compressed NumPy `.npz`; the 300,000-position run produced a 5.0 MB file, with about 23.8 active features per position on average.
+
+<Exercise id="chess-dataset-feature-index" />
+
+## Try it
+
+The features, from the side to move's chair:
+
+<CodeFile path="code/projects/project-chess/data.py" lines="51-75" highlight="58-61" title="feature_index, features and encode" />
+
+Choosing the score, filtering and streaming:
+
+<CodeFile path="code/projects/project-chess/data.py" lines="79-120" highlight="81-82,89,95,102,104,114" title="best_eval, to_example and stream_lichess" />
+
+The guard against the sign bug:
+
+<CodeFile path="code/projects/project-chess/data.py" lines="181-191" highlight="190-191" title="self_check" />
+
+From `code/projects/project-chess/`, `python data.py --smoke` works offline in seconds: it reads the bundled 4,000-record sample, keeps 2,255 quiet positions and writes `data/smoke.npz`. `python data.py --positions 300000` streams the real export: on a home connection it read 512,708 records in about 7 minutes, kept 300,000 (59%) and saved 5.0 MB, with scores clipped to ±2000 cp. Download time depends on your connection. For a stronger network, 1-2 million positions are better; `--positions 1000000` is the default.
+
+## Summary
+
+- The Lichess evaluation export holds 417,862,375 Stockfish-scored positions under CC0; stream the start of it with `zstandard`, or download Parquet slices from Hugging Face.
+- Take the deepest evaluation and its first PV, then convert the White-relative score to the side to move; `self_check` guards against the sign bug.
+- Keep only quiet, legal positions: no mates, no check, no capture or promotion as best move (59% of records survived).
+- Each position becomes up to 32 of 768 feature indices, $(0 \text{ or } 384) + (t-1) \cdot 64 + s$, about 66 bytes per position before compression.

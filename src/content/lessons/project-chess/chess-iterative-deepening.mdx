@@ -1,0 +1,200 @@
+---
+title: Iterative deepening, Zobrist hashing and a transposition table
+slug: chess-iterative-deepening
+track: project-chess
+level: advanced
+order: 50
+minutes: 25
+module: The classic engine
+summary: Iterative deepening searches depth 1, 2, 3 and so on until the time runs out, so the engine always has a move ready. A transposition table keyed by Zobrist hashes remembers what each search learned, with exact, lower and upper bounds and mate scores stored relative to the node.
+hatnote: This lesson completes the classic engine. For the move ordering that the table feeds, see "Move ordering and quiescence search".
+prerequisites: [chess-ordering-quiescence]
+tools: [Python 3, python-chess]
+outcomes:
+  - Search deeper one ply at a time within a time budget
+  - Hash positions with Zobrist keys and store results in a transposition table with bound types
+  - Adjust mate scores by ply when storing and probing the table
+build: An iterative-deepening search with a time limit and a transposition table
+reviewed: 2026-11-24
+seeAlso: [chess-ordering-quiescence, chess-alpha-beta, chess-uci-elo]
+sources:
+  - id: cpw-id
+    title: Iterative Deepening
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Iterative_Deepening
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-zobrist
+    title: Zobrist Hashing
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Zobrist_Hashing
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-tt
+    title: Transposition Table
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Transposition_Table
+    accessed: 2026-11-24
+    type: docs
+  - id: python-chess-polyglot
+    title: python-chess polyglot (Zobrist hashing)
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/polyglot.html
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-alphabeta
+    title: Alpha-Beta
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Alpha-Beta
+    accessed: 2026-11-24
+    type: docs
+  - id: python-chess-core
+    title: python-chess core API
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/core.html
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: chess-iterative-deepening-overhead
+    type: numeric
+    difficulty: easy
+    title: The price of starting shallow
+    prompt: "If each extra ply multiplies the work by an effective branching factor $b = 5$, how many percent of extra work do all the shallower iterations add on top of the last one? Use $b/(b-1)$."
+    answer: 25
+    tolerance: 0.5
+    hint: "$5/4 = 1.25$."
+    explanation: "$b/(b-1) = 5/4 = 1.25$, so the earlier iterations cost about 25% of the final one. The bigger the branching factor, the cheaper iterative deepening is: for $b = 11$ it would be only 10%."
+  - id: chess-iterative-deepening-tt-bound
+    type: mcq
+    difficulty: medium
+    title: Can the table end the search here?
+    prompt: "The table holds `(depth 3, LOWER, 250, Nf3)` for the current position, which is not the root. You are searching it with 4 plies left and the window $[\\alpha, \\beta] = [-50, 200]$. What does the companion code do?"
+    options:
+      - Return 250 at once, because a lower bound of 250 is already at least beta
+      - Return 200, because the score must stay inside the window
+      - Skip the cutoff because the stored depth is too shallow, but try Nf3 first
+      - Ignore the entry completely, because it is only a bound
+    answer: Skip the cutoff because the stored depth is too shallow, but try Nf3 first
+    explanation: "A stored score may only end the search when it came from a search at least as deep as the one needed now (3 is less than 4). The bound would otherwise qualify (250 ≥ 200), but a 3-ply result can be wrong at 4 plies. The stored move is still the best guess available, so `order_moves` gives it the hash-move priority."
+  - id: chess-iterative-deepening-mate-ply
+    type: reveal
+    difficulty: hard
+    title: Storing a mate score
+    prompt: "At ply 6 the search proves that the side to move mates in 3 more plies, so `negamax` returns $\\text{MATE} - 9$ there (mate 9 plies from the root). (a) What score does `_tt_store` write? (b) Later the same position is reached at ply 2 through another move order. What does `_tt_probe` return? (c) What would it return without the adjustment, and why is that wrong?"
+    answer: "(a) MATE − 9 + 6 = MATE − 3: mate in 3 plies from this node. (b) MATE − 3 − 2 = MATE − 5: mate 5 plies from the root, which is correct because the position now sits at ply 2. (c) Without the adjustment it would return MATE − 9 and claim the mate is 9 plies away. The engine would then compare mates of different lengths wrongly, may choose a slower mate or report the wrong 'mate n', and mate-distance pruning would work with false bounds."
+    explanation: "Mate scores in this engine count plies from the root, but a table entry must mean the same thing wherever the position appears. Converting to 'plies from this node' on the way in and back to 'plies from the root' on the way out fixes that."
+---
+
+**Iterative deepening** searches a position to depth 1, then 2, then 3 and so on until the time is up, and plays the best move of the last completed search.<Cite id="cpw-id" /> It is paired with a **transposition table**, a memory of positions already searched, keyed by a **Zobrist hash** of each position.<Cite id="cpw-tt" /> Together they let the engine respect a clock and reuse work that plain alpha-beta throws away.
+
+## Iterative deepening
+
+A depth-first search has no useful answer until it finishes, and nobody knows in advance how long depth 6 will take. Iterative deepening sidesteps the problem: each finished depth leaves a complete answer behind, and the Chessprogramming Wiki calls it the basic time-management strategy of depth-first search.<Cite id="cpw-id" /> The earlier iterations also feed the next one: their best moves go into the transposition table and come back as the first move to try.<Cite id="cpw-id" />
+
+<Analogy breaks="An exam answer is refined in place; each new iteration starts the search again from the root and only reuses the earlier work through the table and the move ordering.">
+It works like a student who first answers every exam question roughly, then goes back to improve the answers. When the bell rings, there is always a full answer sheet to hand in.
+</Analogy>
+
+### Why it costs so little
+
+Re-searching the shallow depths sounds wasteful, but each extra ply multiplies the work by the *effective branching factor* $b$, the growth of the node count per ply after pruning. With good ordering alpha-beta visits roughly the square root of the number of leaves that minimax would, so this factor is much smaller than the 30-40 legal moves of a middlegame.<Cite id="cpw-alphabeta" /> Even so, the last iteration dominates the total.
+
+<MathSteps
+  title="The overhead of iterative deepening"
+  legend={[
+    { symbol: 'b', meaning: 'effective branching factor (growth in nodes per extra ply)' },
+    { symbol: 'd', meaning: 'depth of the last iteration' },
+  ]}
+>
+  <Step tex="\text{work}(k) \approx \hl{b^k}" words="Searching to depth k costs about b to the power k nodes." />
+  <Step tex="\text{total} = b + b^2 + \dots + \hl{b^d}" words="Iterative deepening pays for every depth from 1 up to d." />
+  <Step tex="\text{total} = \hl{\frac{b\,(b^d - 1)}{b - 1}}" words="This is a geometric series, which has a closed form." />
+  <Step tex="\frac{\text{total}}{b^d} \approx \hl{\frac{b}{b-1}}" words="Divide by the cost of the last iteration alone; for large d the minus 1 hardly matters." />
+  <Step tex="b = 6:\ \frac{6}{5} = \hl{1.2}" words="All the shallow iterations together add about 20% to the cost of the last one." example="depth 4: 6 + 36 + 216 + 1296 = 1554, and 1554 / 1296 ≈ 1.20" />
+</MathSteps>
+
+The companion code behaves close to this. In one measured run on the start position to depth 5, the whole search took 20,367 nodes and the last iteration alone 17,150, so the four shallower iterations added about 19%. The better move ordering they provide usually repays that.<Cite id="cpw-id" />
+
+### Time limits and the stop flag
+
+`Searcher.search` uses three limits. A **hard deadline** at the full time budget, a node limit, and a **stop flag** (a `threading.Event` that the UCI `stop` command sets) are checked every 1,024 nodes; when one trips, the search raises `SearchStopped` and unwinds at once. A partly finished iteration is mostly discarded: its root move is kept only if it beat the previous best after a full search of that move.
+
+The **soft limit** decides whether to start another depth at all. The next iteration costs several times the one just finished, so the code does not begin a new one after 45% of the budget has gone; starting it would usually mean throwing it away. The search also stops early once a forced mate is fully proved. How the budget is set from the game clock is part of the [UCI capstone](/course/project-chess/chess-uci-elo/).
+
+## Zobrist hashing
+
+Different move orders often reach the same position: 1.Nf3 Nf6 2.Nc3 and 1.Nc3 Nf6 2.Nf3 are one position. These repeats are called *transpositions*. To recognise them quickly, the engine needs a short fingerprint of a position, and the standard one is the **Zobrist hash**, invented by Albert Zobrist in 1970.<Cite id="cpw-zobrist" />
+
+<Term slug="zobrist-hashing" /> gives every (piece, square) pair a fixed random 64-bit number, plus numbers for the side to move, the castling rights and the en-passant file. A position's key is the exclusive or (XOR) of the numbers of everything present.<Cite id="cpw-zobrist" /> XOR undoes itself ($x \oplus x = 0$), so a quiet move updates the key with just two XORs: one to take the piece off its old square and one to put it on the new one, plus one for the change of side to move.<Cite id="cpw-zobrist" />
+
+<MathSteps
+  title="Moving a knight with two XORs (4-bit toy numbers)"
+  legend={[
+    { symbol: '\\oplus', meaning: 'exclusive or (XOR), bit by bit' },
+    { symbol: 'R', meaning: 'XOR of the numbers of all the other pieces' },
+  ]}
+>
+  <Step tex="R = 0101,\ N_{g1} = 1011,\ N_{f3} = 0110" words="Toy random numbers: the rest of the board, a knight on g1, a knight on f3. Real keys have 64 bits." />
+  <Step tex="h = R \oplus N_{g1} = \hl{1110}" words="The key of the position with the knight on g1." />
+  <Step tex="h \oplus \hl{N_{g1}} = 1110 \oplus 1011 = 0101" words="XOR the g1 number again: the knight is lifted off and only R is left." />
+  <Step tex="0101 \oplus \hl{N_{f3}} = 0101 \oplus 0110 = 0011" words="XOR in the f3 number: the knight lands on f3." />
+  <Step tex="R \oplus N_{f3} = 0101 \oplus 0110 = \hl{0011}" words="Computing the new position from scratch gives the same key, without touching the rest of the board." />
+</MathSteps>
+
+<Analogy breaks="A fingerprint is unique to a person; two different positions can share a Zobrist key, though with 64 bits that is rare.">
+A Zobrist key is a fingerprint that can be updated by dabbing two fingers instead of rescanning the whole hand.
+</Analogy>
+
+With 64-bit keys collisions are rare in practice; with 32-bit keys the birthday bound makes them likely after only about $2^{16}$ positions.<Cite id="cpw-zobrist" /> The companion code does not build its own keys: it calls `chess.polyglot.zobrist_hash(board)`, which computes the key used by the Polyglot opening-book format.<Cite id="python-chess-polyglot" /> That function rebuilds the key from the whole board on each call rather than with two XORs, which is simple but not the fastest choice in Python. If hashing shows up when you profile the engine, an incremental key of your own is worth measuring. The same keys also detect repetitions: the search keeps a set of the keys of positions from the game (replayed from python-chess's `board.move_stack`) and from the current path, and scores a repeat as a draw.<Cite id="python-chess-core" />
+
+## The transposition table
+
+The <Term slug="transposition-table" /> is a Python dictionary from Zobrist key to a tuple `(depth, flag, score, move)`. It holds up to 1,000,000 entries and, as the simplest possible replacement scheme, is cleared when it fills. The idea is old: the first transposition table appeared in Richard Greenblatt's Mac Hack VI.<Cite id="cpw-tt" />
+
+### Exact, lower and upper bounds
+
+Because alpha-beta searches with a window, the score it returns is not always exact. The table records which kind it got:<Cite id="cpw-tt" />
+
+| Flag | When it is stored | What the score means |
+|---|---|---|
+| EXACT | The best score landed inside the window | The true value |
+| LOWER | A move reached beta (a cutoff) | The true value is at least this |
+| UPPER | Every move failed to beat alpha | The true value is at most this |
+
+When the same position comes up again, an entry may end the search only if it came from a search **at least as deep** as the one needed now. Then an EXACT score is returned directly, a LOWER score if it is at least beta, and an UPPER score if it is at most alpha.<Cite id="cpw-tt" /> Otherwise the stored move is still used as the hash move for ordering. In a measured run to depth 5, turning the table off left the move and score unchanged but raised the node count from 20,367 to 30,372 on the start position, and from 111,999 to 225,866 in the Italian Game position of the benchmark; that saving includes the lost hash move as well as the reused scores.
+
+<Exercise id="chess-iterative-deepening-tt-bound" />
+
+### Mate scores and the ply
+
+The engine scores "checkmated right now" as $-\text{MATE}$ with $\text{MATE} = 100{,}000$, and a mate found $n$ plies from the root as $\text{MATE} - n$, so it prefers the fastest win and the slowest loss. That number counts from the root, but a table entry may be reused at a different ply. The code therefore converts mate scores to "plies from this node" when storing (add the ply) and back to "plies from the root" when probing (subtract the current ply).<Cite id="cpw-tt" />
+
+<Callout type="pitfall">
+Storing mate scores in the table without the ply adjustment is a classic bug. The engine then reports wrong mate distances, can prefer a slower mate to a faster one, and can blunder into a mate it believed was further away.<Cite id="cpw-tt" />
+</Callout>
+
+## Try it
+
+The iterative-deepening loop, with the stop handling, the mate exit and the soft time limit:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="354-375" highlight="357-362,371-375" title="Searcher.search: the iterative-deepening loop" />
+
+Storing and probing the table, including the mate-score adjustment:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="163-184" highlight="169-172,180-183" title="Searcher._tt_store and Searcher._tt_probe" />
+
+The table cutoff and the choice of bound inside `negamax`:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="268-309" highlight="273-279,307-308" title="Searcher.negamax: probe, cutoff and store" />
+
+Run `python search.py --movetime 2000` from `code/projects/project-chess/` to search each test position for two seconds; the engine stops after the last depth it can finish in time. The fixed-depth run `python search.py` should find Ra8# with "mate 1" at depth 1 and the mate in two (Kc7) with "mate 2" at depth 3, which only works because mate scores survive the trip through the table. Node counts and speed depend on the machine (about 13,000 nodes per second on the test laptop).
+
+## Summary
+
+- Iterative deepening searches depth 1, 2, 3 … and always has the last completed answer ready; the shallow iterations cost about $b/(b-1)$ of the last, roughly 20% for $b = 6$.
+- The search stops on a hard deadline, a node limit or a stop flag, and does not start a new depth after 45% of its time.
+- Zobrist keys are XORs of random numbers, so a move updates them with a few XORs; python-chess provides them through `chess.polyglot.zobrist_hash`.
+- A transposition table stores depth, an EXACT, LOWER or UPPER flag, the score and the best move; stored scores may only cut the search when their depth is enough.
+- Mate scores must be converted between "from the root" and "from this node" when they enter and leave the table.

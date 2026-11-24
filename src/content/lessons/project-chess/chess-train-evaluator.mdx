@@ -1,0 +1,268 @@
+---
+title: Training the 768→256→32→1 evaluator
+slug: chess-train-evaluator
+track: project-chess
+level: advanced
+order: 70
+minutes: 30
+module: The neural evaluator and UCI
+summary: Build a 205,121-parameter network with a sparse EmbeddingBag first layer and ClippedReLU, train it with Adam on a laptop CPU to imitate Stockfish scores in win-probability space, and check that what it learned makes sense.
+hatnote: For where the training positions come from, see "A training set from the Lichess evaluation database".
+prerequisites: [chess-dataset]
+tools: [Python 3, PyTorch, python-chess]
+outcomes:
+  - Build the network with EmbeddingBag as a sparse first layer and ClippedReLU
+  - Train in win-draw-loss space (sigmoid of cp / 400) with Adam on CPU
+  - "Sanity-check the net: start position near 0 to +50 cp, queen up far above 0, mirrored position negated"
+build: A 205,121-parameter chess evaluator trained on a CPU, with best-validation checkpointing
+reviewed: 2026-11-24
+seeAlso: [chess-dataset, chess-nn-search, chess-evaluation]
+sources:
+  - id: nnue-doc
+    title: NNUE (official nnue-pytorch documentation)
+    publisher: Stockfish developers
+    url: https://official-stockfish.github.io/docs/nnue-pytorch-wiki/docs/nnue.html
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-nnue
+    title: NNUE
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/NNUE
+    accessed: 2026-11-24
+    type: article
+  - id: pt-embeddingbag
+    title: torch.nn.EmbeddingBag
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.EmbeddingBag.html
+    accessed: 2026-11-24
+    type: docs
+  - id: kingma2014
+    title: "Adam: A Method for Stochastic Optimization"
+    author: Diederik P. Kingma, Jimmy Ba
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1412.6980
+    accessed: 2026-11-24
+    type: paper
+  - id: pt-adam
+    title: torch.optim.Adam
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pt-optim
+    title: torch.optim (including learning-rate schedulers)
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/optim.html
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-texel
+    title: "Texel's Tuning Method"
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Texel%27s_Tuning_Method
+    accessed: 2026-11-24
+    type: article
+  - id: lichess-db
+    title: Lichess open database
+    publisher: Lichess
+    url: https://database.lichess.org/
+    accessed: 2026-11-24
+    type: dataset
+  - id: cs231n-nn3
+    title: "Neural Networks Part 3: Learning and Evaluation"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-3/
+    accessed: 2026-11-24
+    type: course
+  - id: silver2017
+    title: Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm
+    author: David Silver et al.
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1712.01815
+    accessed: 2026-11-24
+    type: paper
+  - id: silver2018
+    title: A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play
+    author: David Silver et al.
+    publisher: Science 362(6419)
+    year: 2018
+    url: https://www.science.org/doi/10.1126/science.aar6404
+    accessed: 2026-11-24
+    type: paper
+exercises:
+  - id: chess-train-evaluator-sigmoid-target
+    type: numeric
+    difficulty: easy
+    title: One training target by hand
+    prompt: "Stockfish scores a position at +200 cp for the side to move. What target does the loss compare against, $\\sigma(200/400)$? Give three decimals."
+    answer: 0.622
+    tolerance: 0.002
+    hint: "$200/400 = 0.5$, and $\\sigma(x) = 1/(1+e^{-x})$. $e^{-0.5} \\approx 0.607$."
+    explanation: "$\\sigma(0.5) = 1/(1 + 0.607) \\approx 0.622$. Two pawns up is a clear but not decisive edge: about 62 % expected score, between the 0.562 of one pawn and the 0.731 of four pawns."
+  - id: chess-train-evaluator-param-count
+    type: numeric
+    difficulty: medium
+    title: Count a smaller network
+    prompt: "You shrink the first hidden layer to 128 neurons: 768 → 128 → 32 → 1, with a bias on every layer. How many trainable parameters does it have?"
+    answer: 102593
+    hint: "Weights are inputs × outputs for each layer, and each layer adds one bias per output."
+    explanation: "768·128 + 128 = 98,432; 128·32 + 32 = 4,128; 32·1 + 1 = 33. Total 102,593. The first layer still holds about 96 % of the parameters, because it is the only layer that touches all 768 inputs."
+  - id: chess-train-evaluator-curves
+    type: mcq
+    difficulty: medium
+    title: Read the curves
+    prompt: "On 300,000 positions the validation loss bottoms out at epoch 7 and then creeps up, while the training loss keeps falling to a quarter of the validation value. What is the best response?"
+    options:
+      - Train for more epochs, because the validation loss will come back down
+      - Keep the epoch-7 weights and collect more training positions
+      - Raise the learning rate so the model escapes the bad region
+      - Drop the validation set so the model can train on all the data
+    answer: Keep the epoch-7 weights and collect more training positions
+    explanation: "A falling training loss with a rising validation loss is overfitting: the network is memorising its training positions. train.py already keeps the best-validation weights; the cure that helps most is more data (1-5 M positions). Without a validation set you could no longer see the problem at all."
+  - id: chess-train-evaluator-power
+    type: reveal
+    difficulty: hard
+    title: Comparing two loss powers
+    prompt: "You train once with `--power 2` and once with `--power 2.6`. The second run prints a much lower validation loss. Does that show the second network is better?"
+    answer: "No. The two numbers measure different things. Every error in win-probability space is smaller than 1, and raising a number below 1 to the power 2.6 makes it smaller than its square, so the 2.6 run reports lower losses even for an identical network. Compare both nets with the same yardstick: evaluate both with power 2, or better, let them play a match."
+    explanation: "A loss is only comparable with itself. Changing its definition changes its scale. For an error of 0.1, the square is 0.01 but the 2.6th power is about 0.0025. The honest comparison uses one fixed metric, and for a chess evaluator the final judge is playing strength (see the next lesson)."
+---
+
+The **768→256→32→1 evaluator** is the small neural network that replaces the hand-written piece-square tables in this project's engine. It reads a position as 768 on/off inputs, passes them through two hidden layers of 256 and 32 neurons, and outputs one score. This lesson builds it in PyTorch, trains it on a laptop CPU to imitate Stockfish's evaluations, and runs the checks that show whether it learned anything sensible.
+
+## The network
+
+Each input answers one yes/no question: "is there a piece of this colour and type on this square?" Two colours, six piece types and 64 squares give 768 inputs, of which at most 32 are switched on. This is the simple "A" feature set used as the worked example in Stockfish's official <Term slug="nnue">NNUE</Term> documentation.<Cite id="nnue-doc" /><Cite id="cpw-nnue" /> As in the previous lesson, the board is always seen from the side to move's chair, so the output is a score for the side to move, which is what negamax expects.
+
+The output is in "centipawns divided by 400". Multiplying it by 400 gives the <Term slug="centipawn" /> score that the search uses.
+
+### A sparse first layer with EmbeddingBag
+
+A normal first layer would multiply a 256×768 <Term slug="weight" /> matrix $W_1$ by the input vector. Because the input is 0 or 1 with at most 32 ones, that product is simply the sum of the columns of $W_1$ that belong to the active features. PyTorch's `nn.EmbeddingBag` with `mode="sum"` computes exactly this: it looks up one row of a table per index and adds the rows of each bag, without ever building the 768-wide vector.<Cite id="pt-embeddingbag" />
+
+In `model.py`, row $i$ of the embedding table plays the role of column $i$ of $W_1$, and a separate vector holds the first-layer <Term slug="bias" />. Every position is padded to 32 indices with the filler index 768; `padding_idx` keeps that row at zero, so padding adds nothing.<Cite id="pt-embeddingbag" /> The first-layer weights start small (standard deviation 0.05) because about 25 of them are summed for every position.
+
+### ClippedReLU
+
+Both hidden layers use **ClippedReLU**, which clamps every value to the range 0 to 1. It is a <Term slug="relu" /> with a ceiling, and it is the <Term slug="activation-function" /> Stockfish's networks use.<Cite id="nnue-doc" /> The ceiling matters later: a value known to lie in 0 to 1 can be stored as a small integer (the NNUE documentation maps it to 0 to 127), which is how real engines run these networks fast.<Cite id="nnue-doc" />
+
+### Counting the parameters
+
+<MathSteps
+  title="Parameters of 768 → 256 → 32 → 1"
+  legend={[
+    { symbol: 'W_1', meaning: 'first-layer weights, 768 inputs × 256 outputs' },
+    { symbol: 'W_2', meaning: 'second-layer weights, 256 × 32' },
+    { symbol: 'W_3', meaning: 'output weights, 32 × 1' },
+  ]}
+>
+  <Step tex="768 \cdot 256 = \hl{196{,}608}" words="One weight for every input-neuron pair in the first layer." />
+  <Step tex="196{,}608 + \hl{256} = 196{,}864" words="Add one bias per first-layer neuron." />
+  <Step tex="196{,}864 + \hl{256 \cdot 32 + 32} = 205{,}088" words="The second layer: 8,192 weights and 32 biases." />
+  <Step tex="205{,}088 + \hl{32 \cdot 1 + 1} = 205{,}121" words="The output neuron: 32 weights and one bias." example="python model.py prints 205,121" />
+</MathSteps>
+
+That is tiny by modern standards: about 0.8 MB of 32-bit floats, and 96 % of it sits in the first layer.
+
+<Exercise id="chess-train-evaluator-param-count" />
+
+## The target: centipawns squashed to win probability
+
+Centipawn scores have no upper limit. A position at +1500 and one at +3000 are both simply won, yet a squared error on raw centipawns would spend most of its effort on the gap between them. The NNUE documentation instead converts each score with a <Term slug="sigmoid" />, dividing by a scaling factor first, and notes that Stockfish uses values "around 400".<Cite id="nnue-doc" /> The result lies between 0 and 1 and reads as an expected score: 0 a loss, 0.5 equal, 1 a win. This is called *win-draw-loss (WDL) space*.
+
+<MathSteps
+  title="The eval-scaling sigmoid, σ(cp / 400)"
+  legend={[
+    { symbol: 'cp', meaning: 'Stockfish score in centipawns, for the side to move' },
+    { symbol: '\\sigma(x)', meaning: 'sigmoid, 1 / (1 + e^(-x))' },
+  ]}
+>
+  <Step tex="\sigma(\hl{0/400}) = \sigma(0) = 0.50" words="An equal position maps to an expected score of one half." />
+  <Step tex="\sigma(\hl{100/400}) = \sigma(0.25) \approx 0.562" words="One pawn up: a modest edge." />
+  <Step tex="\sigma(\hl{400/400}) = \sigma(1) \approx 0.731" words="Four pawns up: clearly better." />
+  <Step tex="\sigma(\hl{1200/400}) = \sigma(3) \approx 0.953" words="Twelve pawns up: almost certainly winning. Further centipawns barely move the target." />
+  <Step tex="L = \left| \sigma(\hat y) - \sigma(cp/400) \right|^{\hl{p}}" words="The loss compares prediction and target in this squashed space, averaged over a batch." />
+</MathSteps>
+
+Squashing puts the network's effort where results change. Moving from 0 to +100 cp shifts the target by 0.062; moving from +1500 to +1600 shifts it by only 0.005, more than ten times less. The dataset also clips scores to ±2000 cp, so the targets never stray beyond about 0.007 and 0.993.
+
+<Exercise id="chess-train-evaluator-sigmoid-target" />
+
+### Power 2 or 2.6
+
+`wdl_loss` raises the absolute error to a power $p$. With $p = 2$ it is the mean squared error in WDL space, the default in `train.py`. The NNUE documentation reports that Stockfish networks "had good training results with an exponent of 2.6"; a higher power gives relatively more weight to large misses.<Cite id="nnue-doc" /> The `--power 2.6` flag lets learners try both.
+
+<Callout type="pitfall">
+Do not compare validation losses across different powers. Errors in WDL space are below 1, so the 2.6 version always prints smaller numbers, even for the same network.
+</Callout>
+
+### Texel tuning: the same idea, older
+
+Chess programmers used this trick before neural networks. Peter Österlund's *Texel tuning method* fits the weights of a hand-written evaluation by minimising the mean squared difference between each game's result (0, ½ or 1) and a sigmoid of the evaluation, with a fitted constant inside the sigmoid.<Cite id="cpw-texel" /> Our training does the same squashing, but it fits all 205,121 network weights and uses Stockfish's scores as targets instead of game results.
+
+### No game results in this data
+
+The NNUE documentation also blends the engine score with the actual game result through a mixing weight λ.<Cite id="nnue-doc" /> The Lichess evaluation database contains positions and evaluations only, with no results, so this project uses pure imitation (λ = 1).<Cite id="lichess-db" />
+
+<Analogy breaks="An appraiser's price is one expert's opinion; the network copies Stockfish's opinion and never sees how the games actually ended.">
+Imitating Stockfish's scores is like learning to price houses by copying an expert appraiser. Blending in game results would be like also checking what the houses actually sold for.
+</Analogy>
+
+## The training loop
+
+`train.py` shuffles the positions once and holds out 5 % as a validation set that the model never trains on. It then runs mini-batches of 1,024 positions through the network and updates the weights with Adam at a <Term slug="learning-rate" /> of 0.001. Adam, introduced by Kingma and Ba in 2014, keeps running averages of each parameter's <Term slug="gradient" /> and squared gradient and uses them to set a separate step size for every parameter.<Cite id="kingma2014" /><Cite id="pt-adam" /> A cosine schedule lowers the learning rate smoothly towards zero over the epochs.<Cite id="pt-optim" />
+
+Before training, the script prints a **baseline**: the loss of a network that always says "equal" (an output of 0, so σ = 0.5). Any useful network must beat it. After every epoch it measures the validation loss and keeps a copy of the weights whenever that loss reaches a new low, marked with `*`. At the end it restores the best copy, which is early stopping done by hand.
+
+## Reading the curves: overfitting
+
+Measured on the course's test machine (numbers vary by machine and data):
+
+| Run | Baseline val loss | Best val loss | Training loss at the end |
+|---|---|---|---|
+| `--smoke`, 2,255 positions, about 15 s | 0.023 | 0.013 (epoch 5) | keeps falling |
+| 300,000 positions, 20 epochs, about 4 min | 0.0205 | 0.0090 (about epoch 7) | 0.0021 |
+
+In both runs the validation loss falls, reaches a minimum and then rises while the training loss keeps falling. That widening gap is the classic sign of **overfitting**: the network starts memorising its training positions instead of learning rules that carry over to new ones.<Cite id="cs231n-nn3" /> Saving the best-validation epoch limits the damage, but the real fix is more data. One to two million positions should take an estimated 20 to 60 minutes of CPU training.
+
+## Sanity checks
+
+A low loss does not prove that the network learned chess. `train.py` therefore asks the trained net about positions with known answers. On 300,000 positions the test run printed:
+
+- start position: **+25 cp** (expected 0 to +50, since White moves first);
+- White a queen up: **+444 cp** (clearly positive);
+- White a queen down: **−343 cp** (clearly negative);
+- mirror check: **exact**.
+
+The queen-up score is well below a queen's usual 900 cp, a sign that 300,000 positions teach material only roughly; the check tests the sign and the order of magnitude. The mirror check plays 1.e4, then flips the board and swaps the colours. Seen from the side to move's chair both positions produce identical features, so their side-to-move scores must match exactly, which from White's point of view means the score is negated.
+
+<Callout type="warning">
+Sign bugs are the most common failure in this project: a White-relative score fed into a side-to-move search makes Black play for White. If the queen-up check comes out negative, look for a sign error before touching the network.
+</Callout>
+
+## Why imitation and not self-play
+
+AlphaZero, from DeepMind, learned chess from self-play alone: it started from random play and trained a deep residual network with a policy head and a value head to guide a Monte Carlo tree search.<Cite id="silver2017" /><Cite id="silver2018" /> The 2017 preprint reports 5,000 first-generation TPUs generating self-play games and 64 second-generation TPUs training the network.<Cite id="silver2017" /> That is far beyond a laptop.
+
+This project takes the cheaper route: supervised learning on positions Stockfish has already evaluated, which trains in minutes on a CPU. It is also how NNUE networks are trained, by fitting evaluations of large sets of positions.<Cite id="nnue-doc" />
+
+## Try it
+
+The model and the loss:
+
+<CodeFile path="code/projects/project-chess/model.py" lines="54-83" highlight="69-70" title="Evaluator and wdl_loss" />
+
+The training loop with best-validation checkpointing:
+
+<CodeFile path="code/projects/project-chess/train.py" lines="103-124" highlight="118-120" title="training loop" />
+
+Run `python model.py` to see the layers and `trainable parameters: 205,121`. Then `python train.py --smoke` trains on the bundled sample in about 15 seconds: the baseline is near 0.023, validation loss drops to about 0.013 by epoch 5 and then rises. For a real network, run `python data.py --positions 300000` and `python train.py --epochs 20`; expect 10 to 20 seconds per epoch and the sanity checks listed above. The weights land in `checkpoints/evaluator.npz`, ready for the next lesson.
+
+## Summary
+
+- The evaluator is a 768→256→32→1 network with 205,121 parameters; `EmbeddingBag` computes its sparse first layer as a sum of at most 32 columns.
+- ClippedReLU clamps hidden values to 0 to 1, as in Stockfish's NNUE networks.
+- The loss compares prediction and target after σ(cp/400), which squashes won positions together; power 2 is MSE, and the NNUE docs report 2.6.
+- Adam trains the net on a CPU in minutes; the best-validation epoch is saved because the loss curves show overfitting on small data.
+- Sanity checks (start near 0, queen up positive, mirror exact) catch sign bugs that the loss alone cannot reveal.

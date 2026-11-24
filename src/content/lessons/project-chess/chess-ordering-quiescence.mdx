@@ -1,0 +1,210 @@
+---
+title: Move ordering and quiescence search
+slug: chess-ordering-quiescence
+track: project-chess
+level: advanced
+order: 40
+minutes: 25
+module: The classic engine
+summary: Alpha-beta prunes most when the best move is tried first. This lesson orders moves with the hash move, MVV-LVA, killer moves and the history heuristic, measures the node savings, and adds a captures-only quiescence search that cures the horizon effect.
+hatnote: This lesson extends the search from "Negamax search with alpha-beta pruning". For reusing results between searches, see "Iterative deepening, Zobrist hashing and a transposition table".
+prerequisites: [chess-alpha-beta]
+tools: [Python 3, python-chess]
+outcomes:
+  - Order moves with MVV-LVA, killer moves and the history heuristic
+  - Measure the drop in nodes at depth 4 that ordering buys (the goal is about 5×)
+  - Explain the horizon effect and fix it with a captures-only quiescence search
+build: Move ordering and a quiescence search for the alpha-beta engine
+reviewed: 2026-11-24
+seeAlso: [chess-alpha-beta, chess-iterative-deepening, chess-nn-search]
+sources:
+  - id: cpw-mvvlva
+    title: MVV-LVA
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/MVV-LVA
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-killer
+    title: Killer Heuristic
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Killer_Heuristic
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-history
+    title: History Heuristic
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/History_Heuristic
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-quiescence
+    title: Quiescence Search
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Quiescence_Search
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-horizon
+    title: Horizon Effect
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Horizon_Effect
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-alphabeta
+    title: Alpha-Beta
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Alpha-Beta
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-tt
+    title: Transposition Table
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Transposition_Table
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-see
+    title: Static Exchange Evaluation
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Static_Exchange_Evaluation
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-simplified-eval
+    title: Simplified Evaluation Function
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Simplified_Evaluation_Function
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: chess-ordering-quiescence-mvv-lva-score
+    type: numeric
+    difficulty: easy
+    title: Score a capture
+    prompt: "With $P = 100$, $N = 320$, $R = 500$ and $Q = 900$, what MVV-LVA score does a knight taking a rook (NxR) get, using $10 \\cdot \\text{victim} - \\text{attacker}$?"
+    answer: 4680
+    tolerance: 0
+    hint: "The victim is the rook (500) and the attacker is the knight (320)."
+    explanation: "$10 \\cdot 500 - 320 = 5000 - 320 = 4680$. That ranks NxR below PxQ (8,900) but well above QxP (100), which matches chess sense: winning a rook with a knight is good even if the knight is recaptured."
+  - id: chess-ordering-quiescence-losing-capture
+    type: mcq
+    difficulty: medium
+    title: A queen takes a defended pawn
+    prompt: "Inside `qsearch`, the side to move is **not** in check and one capture is QxP where the pawn is defended. What does the companion code do with that move?"
+    options:
+      - It searches it first, because it wins a pawn
+      - It searches it last, because its MVV-LVA score is only 100
+      - It skips it, because `_losing_capture` flags a bigger piece taking a smaller one on a defended square
+      - It searches it only if there are no other captures
+    answer: It skips it, because `_losing_capture` flags a bigger piece taking a smaller one on a defended square
+    explanation: "`_losing_capture` returns true when the attacker is worth more than the victim (900 > 100) and the target square is attacked by the opponent. Quiescence drops such moves. The main search (`negamax`) still tries them, so a QxP that really wins is not lost; it is only kept out of the capture-only tail of the tree."
+  - id: chess-ordering-quiescence-horizon
+    type: reveal
+    difficulty: hard
+    title: Why the depth-1 engine grabs the pawn
+    prompt: "In `4k3/8/4p3/3p4/8/8/8/3QK3 w - - 0 1` a depth-1 search **without** quiescence plays Qxd5 and reports about +805 cp. With quiescence, the same depth-1 search plays a quiet king move at about +705 cp. Explain both numbers."
+    answer: "Without quiescence the search stops right after Qxd5 and calls the evaluator: White has a queen against a pawn, roughly +800, so the pawn grab looks like a free +100. The recapture exd5 lies one ply beyond the horizon, so it is never seen. With quiescence, Black's reply exd5 is a capture, so the search keeps going, finds that the queen is lost, and the stand-pat score of a quiet move (+705, the current material and table bonuses) is better."
+    explanation: "This is the horizon effect in its smallest form. Quiescence does not search deeper everywhere; it only refuses to evaluate a position while a capture is still pending, and the stand-pat score lets each side stop capturing when that is better for it."
+---
+
+**Move ordering** is the choice of which move a search tries first, and **quiescence search** is a short extra search of captures at the end of each line so the evaluator never judges a position in the middle of an exchange.<Cite id="cpw-quiescence" /> <Term slug="alpha-beta-pruning">Alpha-beta pruning</Term> returns the same answer whatever the order, but it skips far more of the tree when the best move comes first.<Cite id="cpw-alphabeta" /> Together these two changes turn the bare search from the [previous lesson](/course/project-chess/chess-alpha-beta/) into a recognisably classic engine.
+
+## Why the order of moves matters
+
+Alpha-beta stops searching a position as soon as one move proves that the opponent would never allow it: a *beta cutoff*. The earlier that refuting move is tried, the fewer siblings are searched. In the worst order alpha-beta visits all $b^d$ leaves, like plain <Term slug="minimax" />; in the best order it visits about $b^{\lceil d/2 \rceil} + b^{\lfloor d/2 \rfloor} - 1$, which roughly doubles the depth reachable for the same work.<Cite id="cpw-alphabeta" />
+
+No engine knows the best move in advance, so it guesses with cheap rules of thumb. The companion code gives every move a priority number and sorts by it, highest first:
+
+1. **The hash move**: the best move stored for this position by an earlier, shallower search in the <Term slug="transposition-table" />. The Chessprogramming Wiki reports that in Stockfish 75% of cutoffs in positions with a hash move come from that move.<Cite id="cpw-tt" />
+2. **Captures, best first by MVV-LVA**, plus promotions.<Cite id="cpw-mvvlva" />
+3. **Two killer moves**: quiet moves that caused a cutoff at the same depth in a sibling branch.<Cite id="cpw-killer" />
+4. **Everything else, by history score**: a table indexed by the from-square and to-square that rewards quiet moves which often cause cutoffs.<Cite id="cpw-history" />
+
+<Analogy breaks="A detective questions people one at a time; a search may still need to examine every suspect when nobody confesses, which happens at nodes where all moves fail low.">
+Move ordering is a detective interviewing the most likely suspect first. If that suspect confesses (a cutoff), the rest of the line-up can go home.
+</Analogy>
+
+## MVV-LVA: ranking captures
+
+"Most Valuable Victim, Least Valuable Aggressor" sorts captures so that taking a big piece with a small one comes first.<Cite id="cpw-mvvlva" /> The code scores a capture as ten times the victim's value minus the attacker's value, using the material values from the [evaluation lesson](/course/project-chess/chess-evaluation/) (pawn 100, knight 320, bishop 330, rook 500, queen 900).<Cite id="cpw-simplified-eval" />
+
+<MathSteps
+  title="The MVV-LVA score of a capture"
+  legend={[
+    { symbol: 'v', meaning: 'value of the captured piece (victim), in centipawns' },
+    { symbol: 'a', meaning: 'value of the capturing piece (attacker)' },
+  ]}
+>
+  <Step tex="\text{score} = \hl{10 \cdot v} - a" words="The victim dominates: multiplying by 10 makes any queen capture outrank any rook capture." />
+  <Step tex="\text{PxQ} = 10 \cdot \hl{900} - 100 = 8{,}900" words="A pawn taking a queen gets the highest score of all, so it is searched first." />
+  <Step tex="\text{QxP} = 10 \cdot 100 - \hl{900} = 100" words="A queen taking a pawn scores lowest: it may well walk into a recapture." />
+  <Step tex="\text{priority} = \hl{1{,}000{,}000} + \text{score}" words="In order_moves every capture gets this base, so all captures sort after the hash move (10,000,000) and before the killers (900,000 and 800,000)." />
+</MathSteps>
+
+The king has a value of 0 in the evaluator, so the code treats it as an attacker worth 1,000: a king capture is tried after other captures of the same victim. MVV-LVA ignores whether the victim is defended. Stronger engines use static exchange evaluation (SEE), which plays out the whole exchange on one square, to tell good captures from bad ones.<Cite id="cpw-see" />
+
+## Killer moves and the history heuristic
+
+Quiet moves have no victim to rank. The **killer heuristic** assumes that a quiet move which refuted one line at a given ply will often refute its siblings too, for example a move that threatens mate. Engines usually keep two or three killers per ply; the companion code keeps two and shifts the older one down when a new killer arrives.<Cite id="cpw-killer" />
+
+The **history heuristic**, introduced by Jonathan Schaeffer in 1983, keeps a 64 × 64 table indexed by from-square and to-square. Every time a quiet move causes a cutoff, its entry grows by $\text{depth}^2$, so cutoffs found high in the tree, which save more work, count more.<Cite id="cpw-history" /> Quiet moves that are neither hash move nor killer are then sorted by this score.
+
+## Measuring the saving
+
+Every change to a search should be judged by "same move, fewer nodes". The companion benchmark searches three positions to depth 4 with and without `order_moves` (quiescence and the table stay on in both runs):
+
+| Configuration | Nodes | Time |
+|---|---|---|
+| Material + tables, no move ordering | 241,333 | 34.8 s |
+| Material + tables, with move ordering | 50,149 | 7.0 s |
+
+That is a **4.8× reduction** at the same speed of about 7,000 nodes per second. The curriculum's target is "5× or larger"; the measured 4.8× falls just short, and the ratio changes from position to position and with depth, because deeper searches give good ordering more cutoffs to exploit.<Cite id="cpw-alphabeta" /> The "unordered" run still sorts captures inside quiescence, so the true gain over a fully unordered engine is somewhat larger.
+
+## The horizon effect
+
+A fixed-depth search has a horizon: whatever happens one ply beyond it is invisible. If the last move searched is "my queen takes your pawn", the evaluator sees a pawn up and never sees the recapture that loses the queen. This error is called the **horizon effect**.<Cite id="cpw-horizon" /> A worse form is the engine pushing an unavoidable loss beyond its horizon with delaying moves, so it believes the loss has gone away.<Cite id="cpw-horizon" />
+
+You can see the simple form with the companion code. In `4k3/8/4p3/3p4/8/8/8/3QK3 w - - 0 1` a depth-1 search built with `Searcher(use_qsearch=False)` plays Qxd5 and reports about +805 cp, although exd5 wins the queen back at once. With quiescence on, the same depth-1 search plays a quiet king move at about +705 cp (measured on 2026-11-24; your node counts may differ slightly).
+
+## Quiescence search
+
+The standard cure is a <Term slug="quiescence-search" /> at every leaf: instead of evaluating straight away, keep searching **captures only** (and here queen promotions) until no capture is worth making.<Cite id="cpw-quiescence" />
+
+### Stand pat
+
+In quiescence the side to move is not forced to capture. The static evaluation of the current position, called the **stand-pat** score, is therefore a lower bound on its value: "do nothing more" is always an option. If stand-pat already reaches beta, the search returns at once; otherwise it raises alpha to stand-pat and tries the captures.<Cite id="cpw-quiescence" />
+
+<Analogy breaks="A photographer can wait as long as needed; quiescence stops at the first quiet position, which may still hide a quiet threat such as a fork in two moves.">
+A photographer does not take the picture mid-sneeze. Quiescence waits until the captures have settled before it freezes the frame for the evaluator.
+</Analogy>
+
+### No standing pat in check
+
+When the side to move is in check, "doing nothing" is not a legal choice, so stand-pat is not allowed. The companion code then searches every legal evasion, not only captures, and returns a mate score if there is none.<Cite id="cpw-quiescence" /> The main search adds a *check extension* (one extra ply when in check) for the same reason.
+
+### Skipping losing captures
+
+Quiescence has no depth limit, so the number of capture sequences can explode. The code skips a capture in quiescence when a more valuable piece takes a less valuable one on a square the opponent defends. This is a cheap stand-in for SEE.<Cite id="cpw-see" /> Without it, a weak evaluator, such as material only or an early neural network, sees little reason to stop, and quiescence spends most of the time on queen-for-pawn trades that a human would never consider.
+
+<Callout type="pitfall">
+Order captures before you add quiescence. The Chessprogramming Wiki advises that simple capture ordering such as MVV-LVA is "crucial" before implementing quiescence search, because a poorly ordered quiescence search cuts off late and searches many useless capture sequences.<Cite id="cpw-quiescence" />
+</Callout>
+
+<Exercise id="chess-ordering-quiescence-mvv-lva-score" />
+
+## Try it
+
+The scoring function and the move ordering, with the killer and history updates:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="67-77" highlight="77" title="mvv_lva: 10 × victim − attacker" />
+
+<CodeFile path="code/projects/project-chess/search.py" lines="134-160" highlight="141-151,160" title="Searcher.order_moves and _store_killer" />
+
+The quiescence search, with the losing-capture test above it:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="191-240" highlight="200,215-218,222-225,227" title="Searcher._losing_capture and Searcher.qsearch" />
+
+Run `python bench.py --speed --depth 4` from `code/projects/project-chess/`. It prints the two lines of the table above: about 241,000 nodes without ordering and about 50,000 with it. The two runs took about 42 seconds together on the test laptop; times and nodes per second vary by machine, but the node counts depend only on the code and the positions. `python search.py` should still find the free queen (exd5, about +975 cp) and the back-rank mate in one (Ra8#).
+
+## Summary
+
+- Alpha-beta prunes most when the best move comes first, so engines try the hash move, then captures by MVV-LVA, then killer moves, then quiet moves by history score.
+- MVV-LVA scores a capture as $10 \cdot \text{victim} - \text{attacker}$: PxQ = 8,900, QxP = 100.
+- On the benchmark positions at depth 4, ordering cut the nodes from 241,333 to 50,149 (4.8×); the ratio varies by position.
+- Quiescence search keeps playing captures at the leaves to avoid the horizon effect, with stand-pat as a lower bound, no stand-pat in check, and losing captures skipped so it does not explode.

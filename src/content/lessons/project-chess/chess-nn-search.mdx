@@ -1,0 +1,233 @@
+---
+title: Plugging the network into search (and the NNUE idea)
+slug: chess-nn-search
+track: project-chess
+level: advanced
+order: 80
+minutes: 25
+module: The neural evaluator and UCI
+summary: Run the trained network in NumPy inside alpha-beta search, keep quiescence and mate scores in front of it, learn the NNUE accumulator that updates only 2-4 columns per move, and measure speed and strength honestly.
+hatnote: This lesson uses the network trained in "Training the 768→256→32→1 evaluator". For the full Elo statistics, see "Capstone, a UCI engine and an Elo estimate against Stockfish".
+prerequisites: [chess-train-evaluator, chess-iterative-deepening]
+tools: [Python 3, NumPy, python-chess]
+outcomes:
+  - Run the network in NumPy inside search and keep quiescence in front of it
+  - "Explain the NNUE accumulator: update 2-4 columns per move instead of recomputing"
+  - Run a 100-game match against the piece-square engine and read the Elo and its error bars
+build: A neural evaluator for the search, with a cache and an incremental two-perspective accumulator
+reviewed: 2026-11-24
+seeAlso: [chess-train-evaluator, chess-ordering-quiescence, chess-iterative-deepening, chess-uci-elo]
+sources:
+  - id: nnue-doc
+    title: NNUE (official nnue-pytorch documentation)
+    publisher: Stockfish developers
+    url: https://official-stockfish.github.io/docs/nnue-pytorch-wiki/docs/nnue.html
+    accessed: 2026-11-24
+    type: docs
+  - id: nnue-history
+    title: NNUE architecture history
+    publisher: Stockfish developers
+    url: https://official-stockfish.github.io/docs/nnue-pytorch-wiki/docs/nnue_architecture_history.html
+    accessed: 2026-11-24
+    type: docs
+  - id: sf-nnue-blog
+    title: Introducing NNUE Evaluation (Stockfish 12)
+    publisher: Stockfish
+    year: 2020
+    url: https://stockfishchess.org/blog/2020/introducing-nnue-evaluation/
+    accessed: 2026-11-24
+    type: article
+  - id: cpw-nnue
+    title: NNUE
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/NNUE
+    accessed: 2026-11-24
+    type: article
+  - id: cpw-match-stats
+    title: Match Statistics
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Match_Statistics
+    accessed: 2026-11-24
+    type: article
+  - id: nasu2018
+    title: "Efficiently Updatable Neural-Network-based Evaluation Functions for Computer Shogi (unofficial English translation by Dominik Klein)"
+    author: Yu Nasu
+    publisher: Ziosoft Computer Shogi Club
+    year: 2018
+    url: https://github.com/asdfjkl/nnue
+    accessed: 2026-11-24
+    type: paper
+  - id: sf-faq
+    title: Stockfish FAQ
+    publisher: Stockfish
+    url: https://official-stockfish.github.io/docs/stockfish-wiki/Stockfish-FAQ.html
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-quiescence
+    title: Quiescence Search
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Quiescence_Search
+    accessed: 2026-11-24
+    type: article
+  - id: sunfish
+    title: Sunfish
+    author: Thomas Ahle
+    publisher: GitHub
+    url: https://github.com/thomasahle/sunfish
+    accessed: 2026-11-24
+    type: code
+exercises:
+  - id: chess-nn-search-capture-columns
+    type: numeric
+    difficulty: easy
+    title: Columns touched by a capture
+    prompt: "A knight captures a pawn (not en passant). How many columns of $W_1$ does `push()` add or subtract in ONE perspective's accumulator?"
+    answer: 3
+    hint: "List the features that change: where the knight was, where it lands, and what disappears."
+    explanation: "Knight off its old square (subtract), knight on its new square (add), captured pawn off (subtract): 3 column operations. `push()` does this for both perspectives, so 6 in total, still far fewer than re-adding about 25 columns twice."
+  - id: chess-nn-search-two-perspectives
+    type: mcq
+    difficulty: medium
+    title: Why two accumulators?
+    prompt: Our network sees the board from the side to move's chair. Why does `eval_nn.py` keep two accumulators instead of one?
+    options:
+      - After every move the side to move changes, so every feature index of a single flipped accumulator would change
+      - Two accumulators halve the number of additions per move
+      - One accumulator stores the material score and the other the positional score
+      - The second accumulator is a backup in case the first one drifts from rounding errors
+    answer: After every move the side to move changes, so every feature index of a single flipped accumulator would change
+    explanation: "With one side-to-move accumulator, each move flips the point of view and every active feature gets a new index, forcing a full refresh. Keeping a White-view and a Black-view accumulator lets both be updated with 2-4 columns, and `evaluate` picks `acc[board.turn]`. Real NNUE keeps two perspectives for the same reason and feeds both to the next layer. It actually doubles the additions per move, so option 2 is wrong."
+  - id: chess-nn-search-match-elo
+    type: numeric
+    difficulty: medium
+    title: Elo from a match against the tables
+    prompt: "The network engine scores +55 =10 −35 in 100 games against the piece-square engine. Using $\\Delta = 400 \\log_{10}(s/(1-s))$, what is the Elo difference? Round to the nearest whole number."
+    answer: 70
+    tolerance: 1
+    hint: "First $s = (55 + 10/2)/100$."
+    explanation: "$s = 0.60$, so $\\Delta = 400 \\log_{10}(0.6/0.4) = 400 \\log_{10}(1.5) \\approx 400 \\cdot 0.176 \\approx 70$. With roughly ±70 Elo of uncertainty at 100 games, the interval runs from about 0 to +140: a likely improvement, but not yet a precise one."
+  - id: chess-nn-search-why-small-speedup
+    type: reveal
+    difficulty: hard
+    title: Why only 1.2×?
+    prompt: "The accumulator replaces about 25 column additions with about 2-3 per perspective, yet nodes per second rise only from 4,330 to 5,146. Why so little, and what would make the gain larger?"
+    answer: "The column sum was only a small part of the work per node. Most of the time goes to python-chess move generation, Python function calls, hashing and the 256→32→1 head, which the accumulator does not touch; and push() now runs for every move searched, including moves whose positions are never evaluated. The gain becomes large only when the rest of the engine is fast: compiled code with SIMD and integer arithmetic, as in Stockfish."
+    explanation: "Speeding up one part of a program only helps in proportion to that part's share of the total time. In C++ the first layer dominates the evaluation cost, so updating it incrementally is decisive; in Python the interpreter dominates, so the accumulator is best taught as the idea that makes NNUE possible, not as a big Python speed-up."
+---
+
+**NNUE**, short for *efficiently updatable neural network*, is the idea that lets a chess engine call a neural network at every node of its search without slowing to a crawl.<Cite id="cpw-nnue" /> This lesson plugs the network from the previous lesson into the alpha-beta search, explains the trick behind NNUE (an "accumulator" updated move by move) and measures what it buys in Python. It ends with a 100-game match that tests whether the network actually plays better than the hand-written tables.
+
+## From PyTorch to NumPy
+
+Alpha-beta asks for one evaluation at a time, thousands of times per second. Each PyTorch call carries a fixed overhead, roughly tens of microseconds (a rough figure worth measuring with `timeit`), which is more than the arithmetic of this small network. So `train.py` exports plain NumPy arrays, and `eval_nn.py` evaluates a position in three lines: sum the active rows of $W_1$ and add the bias, clip and multiply by $W_2$, clip and multiply by $W_3$, then scale by 400. The first step is the "sum of columns" view of a sparse layer from the NNUE documentation.<Cite id="nnue-doc" /> NumPy is also enough to run the engine: PyTorch is only needed for training.
+
+### An evaluation cache
+
+<Term slug="quiescence-search">Quiescence search</Term> keeps reaching the same positions through different capture orders. The evaluator therefore stores each result in a dictionary keyed by the <Term slug="zobrist-hashing">Zobrist hash</Term> that the search has already computed, and clears it when it reaches 500,000 entries. A cache hit costs one dictionary lookup instead of a network pass.
+
+### Keep quiescence in front of the net
+
+The training positions were filtered to be quiet: no side in check and no capture as the best move. In the middle of an exchange the network is outside the kind of data it has seen, and its score can be wildly wrong. The search must therefore resolve captures before it trusts the net. In `search.py`, with quiescence switched on (the default), the network is only consulted for the "stand pat" score inside quiescence search, and captures are still tried after it.<Cite id="cpw-quiescence" />
+
+<Callout type="pitfall">
+Never call the network directly at depth 0 of the main search. Without quiescence in front of it, the engine will happily "win" a queen that is recaptured one move later, and the better network will look worse than the tables.
+</Callout>
+
+Quiescence in `search.py` also skips likely losing captures (a bigger piece taking a smaller one on a defended square). Without that filter, quiescence explodes in size when the evaluator is still weak.
+
+### Keep mate scores outside the net
+
+The network only replaces `evaluate()`. Checkmate and stalemate are still detected by the search, which scores a mate in $n$ plies as 100,000 minus $n$. `eval_nn.py` clamps network scores to ±10,000 cp, so no network output can ever be mistaken for a mate.
+
+## The NNUE idea
+
+NNUE was introduced in 2018 by Yu Nasu for computer shogi, in the paper *Efficiently Updatable Neural-Network-based Evaluation Functions for Computer Shogi*, published by the Ziosoft Computer Shogi Club. An unofficial English translation is available.<Cite id="nasu2018" /><Cite id="cpw-nnue" /> It was ported to Stockfish as a proof of concept, and the large strength gain arrived with Stockfish 12 in 2020.<Cite id="cpw-nnue" /><Cite id="sf-nnue-blog" />
+
+The design has a wide, sparse first layer whose output, the **accumulator**, is updated incrementally as moves are made and unmade, followed by a few tiny dense layers, all run with integer arithmetic on the CPU.<Cite id="nnue-doc" /> Stockfish's FAQ states that the engine uses only the CPU for evaluation, and that NNUE is stronger than the old hand-crafted evaluation but "significantly slower" per node.<Cite id="sf-faq" />
+
+The sizes have changed many times. The official documentation describes the Stockfish 12 network (called SFNNv1 on the history page, dated 2020-08-06) as `256x2->32->32->1`; later versions grew the first layer to thousands of neurons and changed the input features.<Cite id="nnue-doc" /><Cite id="nnue-history" /> For any current size, read the architecture history page and quote the version with it.<Cite id="nnue-history" />
+
+### The accumulator update
+
+The first layer's output depends only on which features are switched on, and a move switches very few of them.<Cite id="nnue-doc" />
+
+<MathSteps
+  title="Updating the accumulator instead of recomputing it"
+  legend={[
+    { symbol: 'a', meaning: 'accumulator: first-layer output before ClippedReLU (256 numbers)' },
+    { symbol: 'W_1[:, i]', meaning: 'the column of first-layer weights for feature i' },
+    { symbol: 'b_1', meaning: 'first-layer bias' },
+  ]}
+>
+  <Step tex="a = b_1 + \hl{\sum_{i \in \text{active}} W_1[:, i]}" words="Full refresh: add the columns of the 25 to 32 active features." />
+  <Step tex="a' = a \hl{- W_1[:, \text{old}] + W_1[:, \text{new}]}" words="A quiet move such as Ng1-f3: knight off g1, knight on f3. Two column operations." />
+  <Step tex="a' = a - W_1[:, \text{from}] + W_1[:, \text{to}] \hl{- W_1[:, \text{victim}]}" words="A capture also removes the captured piece: three operations." />
+  <Step tex="a' = a - W_1[:, K_\text{from}] + W_1[:, K_\text{to}] \hl{- W_1[:, R_\text{from}] + W_1[:, R_\text{to}]}" words="Castling moves king and rook: four operations, the maximum for this feature set." />
+  <Step tex="\text{unmake: } a \leftarrow \hl{\text{stack.pop()}}" words="Undoing a move restores the saved vector, so nothing is recomputed on the way back." />
+</MathSteps>
+
+The documentation puts it the same way: with the simple 768-input set, a move changes at most four inputs (castling), and fewer than three on average.<Cite id="nnue-doc" /> The test run of `bench.py --accumulator` measured 2.31 column updates per move per perspective over 80 random moves, compared with 25 to 32 for a full refresh, and a maximum difference of 0 cp from full recomputation.
+
+<Analogy breaks="A bank balance needs one entry per transaction; the accumulator still has to run the small dense layers after every update.">
+The accumulator is like keeping a running bank balance instead of re-adding every receipt each time you check your account. Each move is a couple of deposits and withdrawals.
+</Analogy>
+
+### Why two accumulators
+
+There is a catch, explained in the docstring of `model.py`. The network sees the board from the side to move's chair, and after every move the side to move changes. Seen through a single flipped accumulator, every active feature would get a new index after each move, so nothing could be updated incrementally.
+
+The fix in `eval_nn.py` is to keep **two** accumulators, one built from White's point of view and one from Black's. Every `push()` updates both with the same 2 to 4 columns, and `evaluate()` simply picks the one belonging to the side to move. Real NNUE networks keep two perspectives for this reason, and go one step further: they concatenate both accumulators, the side to move's first, so the next layer knows whose turn it is without flipping anything.<Cite id="nnue-doc" />
+
+<CodeFile path="code/projects/project-chess/eval_nn.py" lines="105-148" highlight="137-143" title="changed_features, push and pop" />
+
+<Exercise id="chess-nn-search-capture-columns" />
+
+## Honest speed numbers
+
+`bench.py --speed --depth 4` searches three positions with each evaluator. Measured on the course's test machine (yours will differ):
+
+| Evaluator | Nodes per second |
+|---|---|
+| Material + piece-square tables, with move ordering | 7,135 |
+| Network, full first layer at every evaluation | 4,330 |
+| Network with the incremental accumulator | 5,146 |
+
+The accumulator gives about 1.2× more nodes per second, at the low end of the 1.2-2× range one should expect in Python. The column sum was never the main cost: python-chess move generation and the Python interpreter dominate, and the accumulator does not touch them. In compiled code with SIMD instructions the same idea is decisive, which is why Stockfish uses it.<Cite id="nnue-doc" />
+
+The network is also slower per node than the tables, just as Stockfish's FAQ says of NNUE versus its old evaluation.<Cite id="sf-faq" /> A slower evaluator searches less deeply in the same time, so the network must judge positions well enough to make up for it. Only a match can tell.
+
+## Does the network beat the tables?
+
+The command
+
+```bash
+python bench.py --match pst --games 100 --movetime 200
+```
+
+plays 100 games at 0.2 seconds per move between the network engine and the piece-square engine. The games cycle through eight short openings, each played with both colours, which cancels most of the advantage a particular opening gives. A 100-ply game takes about 20 seconds at this speed, so the match runs for roughly half an hour or more. The script prints a running score, then a line such as `Elo difference +X (95% interval lo to hi), likelihood of superiority Y%`.
+
+Read it in three steps. The score $s$ is wins plus half the draws, divided by the number of games, and the Elo difference is $400 \log_{10}(s/(1-s))$.<Cite id="cpw-match-stats" /> The 95 % interval is wide: at 100 games it spans roughly ±70 Elo around a 50 % score, so if it includes 0 the match has not shown which engine is stronger. The *likelihood of superiority* (LOS) is the probability that the network engine really is the stronger one, computed from wins and losses only.<Cite id="cpw-match-stats" />
+
+The research estimate for this step is a gain of +50 to +250 Elo over the piece-square engine; it is an estimate, not a measurement. One published data point supports the range: the small Python engine Sunfish reports that its 4 kB NNUE variant measured about +200 Elo over its classic version at tournament time controls.<Cite id="sunfish" /> {/* TODO-MEASURED: result of `python bench.py --match pst --games 100 --movetime 200` with the 300k-position network (W/D/L, Elo difference, 95% interval, LOS). */}
+
+<Exercise id="chess-nn-search-match-elo" />
+
+## Try it
+
+The evaluation with its cache and the choice of perspective:
+
+<CodeFile path="code/projects/project-chess/eval_nn.py" lines="71-86" highlight="78" title="NNEvaluator.evaluate" />
+
+The check that the incremental accumulator matches a full recomputation:
+
+<CodeFile path="code/projects/project-chess/bench.py" lines="110-142" highlight="133" title="run_accumulator_check" />
+
+Run `python bench.py --accumulator`: it should report about 2.3 column updates per move per perspective and a maximum difference of 0 cp. Then `python bench.py --speed --depth 4` prints the speed table above for your machine; with no trained network it skips the network rows and says so. Finally, start the 100-game match and note the Elo difference together with its interval.
+
+## Summary
+
+- Inside search the network runs in NumPy, because per-call PyTorch overhead outweighs the arithmetic of a 205k-parameter net; a Zobrist-keyed cache saves repeated work.
+- Quiescence search must resolve captures before the network is asked, and mate scores stay in the search, far above the clamped network output.
+- NNUE (Nasu, 2018) updates the first layer incrementally: 2 operations for a quiet move, 3 for a capture, 4 for castling.
+- A side-to-move network needs two accumulators, one per colour, which is the reason real NNUE has two perspectives.
+- In Python the accumulator gives about 1.2× (4,330 to 5,146 nodes/s), and a 100-game match measures strength only to about ±70 Elo.

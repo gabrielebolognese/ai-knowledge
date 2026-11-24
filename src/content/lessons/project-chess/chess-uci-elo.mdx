@@ -1,0 +1,309 @@
+---
+title: "Capstone: a UCI engine and an Elo estimate against Stockfish"
+slug: chess-uci-elo
+track: project-chess
+level: advanced
+order: 90
+minutes: 30
+module: The neural evaluator and UCI
+summary: Wrap the engine in the UCI protocol with a search thread and safe time management, load it in a chess GUI, check it for compliance, then estimate its Elo against weakened Stockfish with honest error bars and learn how SPRT decides A/B tests.
+hatnote: This lesson wraps the engine built in the earlier lessons of this track. For the network inside it, see "Plugging the network into search (and the NNUE idea)".
+prerequisites: [chess-nn-search]
+tools: [Python 3, python-chess, Stockfish, fastchess (optional), a chess GUI (optional)]
+outcomes:
+  - Implement the UCI commands (uci, isready, position, go, stop, quit) with safe time management
+  - Pass a fastchess compliance check and play in a GUI
+  - Estimate Elo with error bars against Stockfish UCI_Elo anchors and explain SPRT
+  - State which numbers are estimates and how to measure your own
+build: A UCI chess engine that runs in GUIs and match runners, plus an Elo estimate with a 95 % interval
+reviewed: 2026-11-24
+seeAlso: [chess-nn-search, chess-iterative-deepening, chess-board-moves]
+sources:
+  - id: uci-spec
+    title: UCI protocol specification (April 2006)
+    author: Rudolf Huber, Stefan Meyer-Kahlen
+    publisher: backscattering.de (mirror)
+    year: 2006
+    url: https://backscattering.de/chess/uci/
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-uci
+    title: UCI
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/UCI
+    accessed: 2026-11-24
+    type: article
+  - id: sf-uci-commands
+    title: Stockfish UCI options and commands
+    publisher: Stockfish
+    url: https://official-stockfish.github.io/docs/stockfish-wiki/UCI-Protocol-and-Stockfish-Commands.html
+    accessed: 2026-11-24
+    type: docs
+  - id: fastchess
+    title: fastchess
+    author: Disservin
+    publisher: GitHub
+    url: https://github.com/Disservin/fastchess
+    accessed: 2026-11-24
+    type: code
+  - id: cpw-sprt
+    title: Sequential Probability Ratio Test
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Sequential_Probability_Ratio_Test
+    accessed: 2026-11-24
+    type: article
+  - id: wiki-elo
+    title: Elo rating system
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Elo_rating_system
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: sf-download
+    title: Stockfish download
+    publisher: Stockfish
+    url: https://stockfishchess.org/download/
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-match-stats
+    title: Match Statistics
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Match_Statistics
+    accessed: 2026-11-24
+    type: article
+  - id: sf-faq
+    title: Stockfish FAQ
+    publisher: Stockfish
+    url: https://official-stockfish.github.io/docs/stockfish-wiki/Stockfish-FAQ.html
+    accessed: 2026-11-24
+    type: docs
+  - id: python-chess-engine
+    title: python-chess engine communication (UCI client)
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/engine.html
+    accessed: 2026-11-24
+    type: docs
+  - id: python-chess-repo
+    title: python-chess source repository (GPL-3.0)
+    author: Niklas Fiekas
+    publisher: GitHub
+    url: https://github.com/niklasf/python-chess
+    accessed: 2026-11-24
+    type: code
+  - id: sf-github
+    title: Stockfish source repository
+    publisher: Stockfish developers (GitHub)
+    url: https://github.com/official-stockfish/Stockfish
+    accessed: 2026-11-24
+    type: code
+  - id: gpl3
+    title: GNU General Public License, version 3
+    publisher: Free Software Foundation
+    url: https://www.gnu.org/licenses/gpl-3.0.en.html
+    accessed: 2026-11-24
+    type: docs
+  - id: silver2017
+    title: Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm
+    author: David Silver et al.
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1712.01815
+    accessed: 2026-11-24
+    type: paper
+  - id: cutechess
+    title: Cute Chess and cutechess-cli
+    publisher: GitHub
+    url: https://github.com/cutechess/cutechess
+    accessed: 2026-11-24
+    type: code
+exercises:
+  - id: chess-uci-elo-time-budget
+    type: numeric
+    difficulty: easy
+    title: How long will the engine think?
+    prompt: "The GUI sends `go wtime 60000 btime 60000 winc 600 binc 600` with White to move and no `movestogo`. With the default Move Overhead of 100 ms, how many seconds does `time_budget` allow?"
+    answer: 2.35
+    tolerance: 0.001
+    hint: "Budget = left / 30 + 0.75 × increment, capped at half the clock, minus the overhead. All in milliseconds."
+    explanation: "60,000 / 30 + 0.75 × 600 = 2,000 + 450 = 2,450 ms. Half the clock is 30,000 ms, so the cap does not bite. Subtract 100 ms of overhead: 2,350 ms = 2.35 s. The search also stops starting new iterations after 45 % of that, so it usually returns well inside the budget."
+  - id: chess-uci-elo-score-to-elo
+    type: numeric
+    difficulty: medium
+    title: Elo from a match against an anchor
+    prompt: "Against Stockfish at `UCI_Elo 1320`, your engine scores +30 =20 −50 in 100 games. What is the Elo difference $\\Delta$? Round to the nearest whole number."
+    answer: -70
+    tolerance: 1
+    hint: "$s = (30 + 20/2)/100$, then $\\Delta = 400 \\log_{10}(s/(1-s))$."
+    explanation: "$s = 0.40$, so $\\Delta = 400 \\log_{10}(0.4/0.6) \\approx 400 \\cdot (-0.176) \\approx -70$. The rough rating is 1320 − 70 = 1250 on Stockfish's CCRL-anchored scale, with an interval of roughly ±70: about 1180 to 1320. Since that touches the anchor, play a weaker anchor (Skill Level 0) as a second data point."
+  - id: chess-uci-elo-what-it-means
+    type: mcq
+    difficulty: medium
+    title: What does the number mean?
+    prompt: "A learner reports: 'My engine is 1450 ± 70, measured against Stockfish UCI_Elo anchors.' Which reading is correct?"
+    options:
+      - It plays like a 1450 FIDE-rated club player
+      - It would have a 1450 rating on Lichess
+      - It is an estimate on Stockfish's CCRL-anchored engine scale, with a 95 % interval of roughly 1380 to 1520
+      - Its true strength is exactly 1450; the ± 70 is the variation between games
+    answer: It is an estimate on Stockfish's CCRL-anchored engine scale, with a 95 % interval of roughly 1380 to 1520
+    explanation: "UCI_Elo is calibrated against the CCRL 40/4 engine rating list at 120 s + 1 s. Engine-list ratings do not convert to FIDE or Lichess ratings; Stockfish's FAQ calls comparing them with FIDE Elo virtually impossible. The ± is a statistical interval for the estimate, not game-to-game variation."
+  - id: chess-uci-elo-sprt
+    type: reveal
+    difficulty: hard
+    title: A small change, a noisy result
+    prompt: "You add a new move-ordering trick. A 100-game match against the old version gives +15 Elo with a 95 % interval of −55 to +85. What do you conclude, and how should you test it instead?"
+    answer: "Nothing yet: the interval contains 0, so the change could be good, neutral or slightly bad. Instead of guessing a game count, run an SPRT, for example `-sprt elo0=0 elo1=20 alpha=0.05 beta=0.05` in fastchess, and let it play until it accepts one of the two hypotheses. For a large expected gain, elo1=50 finishes sooner."
+    explanation: "At 100 games the error bar is about ±70 Elo, so a +15 Elo change is invisible. Measuring an effect of size d to a given precision needs a number of games that grows with 1/d², which is why SPRT is used: it stops early when the evidence is clear and keeps playing only when it is not. elo0 and elo1 state the two hypotheses; alpha and beta are the accepted error rates."
+---
+
+The **Universal Chess Interface (UCI)** is the plain-text protocol through which chess GUIs, match runners and testing tools talk to engines.<Cite id="cpw-uci" /> This capstone lesson wraps the engine from the previous lessons in UCI, loads it into a graphical interface, checks that it follows the protocol, and then measures its strength against weakened Stockfish. The goal is an Elo estimate with an honest error bar, not a flattering single number.
+
+## The UCI protocol
+
+UCI was designed by Rudolf Huber and Stefan Meyer-Kahlen; the specification most engines follow is dated April 2006.<Cite id="uci-spec" /> The GUI writes commands to the engine's standard input and reads replies from its standard output, one line at a time. Moves are written in long algebraic notation, such as `e2e4` or `e7e8q` for a promotion.<Cite id="uci-spec" /><Cite id="cpw-uci" />
+
+| Direction | Command | Meaning |
+|---|---|---|
+| GUI → engine | `uci` | identify yourself and list options, then answer `uciok` |
+| GUI → engine | `isready` | answer `readyok` when ready, even during a search |
+| GUI → engine | `ucinewgame`, `setoption` | reset for a new game; change an option |
+| GUI → engine | `position startpos` or `position fen ...`, then `moves ...` | set up the board |
+| GUI → engine | `go` with `wtime btime winc binc movestogo movetime depth nodes infinite` | start searching |
+| GUI → engine | `stop`, `quit` | stop now and reply; exit |
+| engine → GUI | `info depth ... score cp ... nodes ... nps ... pv ...` | progress report |
+| engine → GUI | `bestmove e2e4` | the chosen move |
+
+A short session with `uci.py` looks like this (lines from the GUI first):
+
+```text
+uci
+id name AIK MiniFish 1.0
+id author AI Knowledge course
+option name Eval type combo default auto var auto var nn var material
+...
+uciok
+isready
+readyok
+position startpos moves e2e4
+go movetime 1000
+info depth 1 score cp ... nodes ... nps ... time ... pv ...
+bestmove ...
+```
+
+### Threading: stop, isready and bestmove
+
+The specification requires two things that a simple loop cannot provide. `isready` must be answered even while the engine is searching, and `bestmove` must always be sent once a search ends, including after `stop`.<Cite id="uci-spec" /> `uci.py` therefore runs every search on a background thread while the main thread keeps reading commands. `stop` sets a flag that the search checks every 1,024 nodes, then waits for the thread to finish and send its move.
+
+Three details guard the `bestmove` rule. A `go infinite` search does not reply until `stop` arrives, even if it finishes early. If the search raises an exception, the thread still sends the first legal move. If there is no legal move at all, it sends the null move `0000`. All output goes through one locked function, so `info` lines from the search never interleave with `readyok`.
+
+<CodeFile path="code/projects/project-chess/uci.py" lines="145-183" highlight="174-180" title="Engine.cmd_go: the search thread" />
+
+### Time management and Move Overhead
+
+Under a clock, the GUI sends the remaining time and increment for both sides. `time_budget` spends the remaining time divided by `movestogo` (30 when not given) plus 75 % of the increment, never more than half the clock, minus a safety margin called **Move Overhead**. The search then starts no new iteration after 45 % of the budget, because an unfinished deeper iteration would be wasted.
+
+Stockfish's own Move Overhead defaults to 10 ms.<Cite id="sf-uci-commands" /> `uci.py` uses 100 ms because a Python process has slower start-up and garbage-collection pauses, and a move that arrives a few milliseconds late loses the game on time.
+
+<CodeFile path="code/projects/project-chess/uci.py" lines="65-80" highlight="78-79" title="time_budget" />
+
+<Exercise id="chess-uci-elo-time-budget" />
+
+## Playing in a GUI
+
+A GUI starts the engine as a program, so the project ships two tiny launchers: `minifish.bat` for Windows and `minifish.sh` for macOS and Linux. Each changes into the project folder and runs `python -u uci.py`, the `-u` keeping output unbuffered. The README explains the steps for each interface:
+
+- [Cute Chess](https://github.com/cutechess/cutechess): add an engine with `python uci.py` (or the path to `minifish.bat`) as the command, the project folder as the working directory and UCI as the protocol.<Cite id="cutechess" />
+- Arena (Windows): install a new engine and select `minifish.bat`.
+- [En Croissant](https://encroissant.org/): add a local engine and pick `minifish.bat` or `minifish.sh` (run `chmod +x minifish.sh` first).
+
+For a quick game without a GUI, `play.py` plays in the terminal; it accepts moves in standard notation such as `Nf3` or in UCI form such as `g1f3`, and prints the engine's depth, score and speed after every move.
+
+<CodeFile path="code/projects/project-chess/play.py" lines="95-100" highlight="96" title="play.py: the engine's turn" />
+
+## Checking protocol compliance
+
+Before playing hundreds of games, check the protocol. The match runner [fastchess](https://github.com/Disservin/fastchess) has a compliance mode, run as `fastchess --compliance minifish.bat`, that sends a series of standard commands and reports any violation.<Cite id="fastchess" /> The project's own `python bench.py --uci-check` performs a similar test through python-chess, which can drive any UCI engine as a subprocess.<Cite id="python-chess-engine" />
+
+On the course's test machine, the check read `id name AIK MiniFish 1.0` and the options Accumulator, Eval, EvalFile, Hash and Move Overhead; played 6 plies at 0.2 s per move; found the mate in one `a1a8` through `analyse`; and handled both `go infinite` followed by `stop` and a clock-based `go wtime btime winc binc`.
+
+## Stockfish as a measuring stick
+
+Stockfish is free and can be downloaded for every major platform.<Cite id="sf-download" /> At full strength it is hopeless as an opponent: the AlphaZero paper quotes it at about 70 million positions per second, while this Python engine searches a few thousand.<Cite id="silver2017" /> **Expect to lose every game against full-strength Stockfish.**
+
+Stockfish offers two ways to play weaker. `Skill Level` runs from 0 to 20. `UCI_LimitStrength` with `UCI_Elo` sets a target rating between 1320 and 3190; the documentation says it is "calibrated at a time control of 120s+1s and anchored to CCRL 40/4", and that it takes precedence over Skill Level.<Cite id="sf-uci-commands" /> Only `UCI_Elo` comes with a calibration, so a Skill Level match tells you how you compare with that one opponent, not where you stand on a scale.
+
+```bash
+python bench.py --match stockfish --stockfish path/to/stockfish --sf-elo 1320 --games 50
+```
+
+fastchess runs the same kind of match through UCI, with `-repeat` playing every opening with both colours to cancel opening bias:<Cite id="fastchess" />
+
+```text
+fastchess -engine cmd=minifish.bat name=MiniFish -engine cmd=stockfish name=SF1320 option.UCI_LimitStrength=true option.UCI_Elo=1320 -each tc=60+0.6 -rounds 50 -repeat -concurrency 2
+```
+
+## Elo from a match score
+
+An <Term slug="elo-rating">Elo rating</Term> difference predicts an expected score, and a match score can be turned back into a rating difference.<Cite id="wiki-elo" /><Cite id="cpw-match-stats" />
+
+<MathSteps
+  title="From wins, draws and losses to Elo with an error bar"
+  legend={[
+    { symbol: 'W, D, L, N', meaning: 'wins, draws, losses, games played' },
+    { symbol: 's', meaning: 'score fraction, 0 to 1' },
+    { symbol: '\\Delta', meaning: 'Elo difference (yours minus the opponent)' },
+    { symbol: '\\mathrm{SE}', meaning: 'standard error of the score' },
+  ]}
+>
+  <Step tex="s = \frac{W + \hl{D/2}}{N}" words="A draw counts as half a win." example="40 W, 20 D, 40 L in 100 games gives s = 0.50" />
+  <Step tex="E = \frac{1}{1 + 10^{\hl{-\Delta/400}}}" words="The Elo model: the expected score for a rating gap Δ." />
+  <Step tex="\Delta = \hl{400 \log_{10}\frac{s}{1-s}}" words="Solve for Δ. A score of 0.64 means about +100; 0.76 means about +200." />
+  <Step tex="\mathrm{SE} \le \sqrt{\frac{s(1-s)}{\hl{N}}} = \sqrt{\frac{0.25}{100}} = 0.05" words="The score is an average of noisy games, so it has an error; draws make it smaller than this bound." />
+  <Step tex="s = 0.5 \pm \hl{1.96 \cdot 0.05} = 0.402 \text{ to } 0.598 \Rightarrow \Delta \approx \pm 70" words="A 95 % interval in score, converted to Elo: about ±70 at 100 games." />
+  <Step tex="\text{rating} \approx \hl{\text{anchor}} + \Delta" words="Against UCI_Elo 1320, a result of Δ gives roughly 1320 + Δ on Stockfish's scale." />
+  <Step tex="\mathrm{LOS} = \tfrac12\left[1 + \mathrm{erf}\left(\frac{W - L}{\sqrt{\hl{2W + 2L}}}\right)\right]" words="Likelihood of superiority: the chance you are really the stronger side. Draws drop out." />
+</MathSteps>
+
+The lesson of the error bar is that 100 games can only separate large differences.<Cite id="cpw-match-stats" /> An estimate is most informative when the score lies between about 20 % and 80 %; near 0 % or 100 % the logarithm makes the Elo value unstable. Use two or three anchors, for example `UCI_Elo` 1320 and 1500, plus `Skill Level 0` for an engine below the 1320 floor.
+
+`bench.py` computes all of this in `elo_report`. Its standard error uses the actual spread of results rather than the bound, so draws narrow the interval.
+
+<CodeFile path="code/projects/project-chess/bench.py" lines="232-244" highlight="236-237" title="elo_report" />
+
+<Exercise id="chess-uci-elo-score-to-elo" />
+
+### SPRT: stop when the evidence is enough
+
+To decide whether a change helps, engine developers do not fix the number of games in advance. The *Sequential Probability Ratio Test* (SPRT) plays games until the evidence clearly favours one of two hypotheses, "the gain is at most elo0" or "the gain is at least elo1", with accepted error rates alpha and beta. The Chessprogramming Wiki calls it "generally regarded as the most important process in modern engine development" and gives the fastchess form `-sprt elo0=0 elo1=5 alpha=0.05 beta=0.05`.<Cite id="cpw-sprt" /> Stockfish's distributed testing (Fishtest) uses even tighter bounds, such as elo0=0 and elo1=2.<Cite id="cpw-sprt" />
+
+A learner engine makes big jumps, such as adding quiescence or the network, so wider bounds like `elo0=0 elo1=20` or `elo1=50` are a sensible choice that finishes in tens to a few hundred games. This is a recommendation, not a rule.
+
+<Analogy breaks="A coin has one fixed bias; an engine's result also depends on the openings, the time control and the opponent.">
+SPRT is like testing whether a coin is fair by flipping it only until you are confident, instead of committing to 10,000 flips up front.
+</Analogy>
+
+## Honest expectations
+
+The project's research gives strength ranges for each stage, and they are estimates, not measurements: about 1300 to 1600 for the piece-square engine with ordering, quiescence, iterative deepening and a transposition table, and a further +50 to +250 Elo for the trained network. Treat them as a guess to beat or disprove. {/* TODO-MEASURED: result of `python bench.py --match stockfish --sf-elo 1320 --games 50` (and Skill Level 0) for the network engine: W/D/L, Elo difference, 95% interval, rough rating on the CCRL-anchored scale. */}
+
+Any number you produce lives on Stockfish's CCRL-anchored engine scale. It is not a FIDE or Lichess rating; Stockfish's FAQ notes that comparing engine ratings with FIDE Elo "has become virtually impossible".<Cite id="sf-faq" /> To measure your own numbers, report the anchor, the time control, the number of games, the W/D/L counts and the 95 % interval, and say what machine you used. Never quote the single Elo value alone.
+
+## Licences
+
+python-chess is released under the GNU GPL version 3, and so is Stockfish.<Cite id="python-chess-repo" /><Cite id="sf-github" /> The course's engine code is MIT-licensed and only imports python-chess; anyone who distributes a combined program should check the GPL's terms first.<Cite id="gpl3" />
+
+## Try it
+
+The command loop that ties everything together:
+
+<CodeFile path="code/projects/project-chess/uci.py" lines="196-225" highlight="204-205" title="Engine.loop" />
+
+Run `python uci.py` and type `uci`, `isready`, `position startpos moves e2e4`, `go movetime 1000` and `quit` to hold the conversation by hand. Then run `python bench.py --uci-check`; it should print the engine name, the five options, six legal moves, `a1a8` for the mate in one and end with `ok`. With Stockfish downloaded, play a 20-game Skill Level 0 match and a 50-game match at `--sf-elo 1320`, and write down the result with its interval.
+
+## Summary
+
+- UCI is a line-based text protocol; the engine must answer `isready` at any time and always finish a search with `bestmove`, which is why the search runs on its own thread.
+- The time budget is a fraction of the clock plus most of the increment, capped at half the clock, minus a Move Overhead margin (100 ms here, 10 ms by default in Stockfish).
+- Elo difference is 400·log₁₀(s/(1−s)); at 100 games the 95 % interval is about ±70 Elo, and SPRT decides A/B tests with as few games as the evidence allows.
+- `UCI_Elo` (1320 to 3190) is calibrated to CCRL 40/4, so results are engine-scale estimates, not FIDE or Lichess ratings; full-strength Stockfish wins every game.
+- python-chess and Stockfish are GPL-3; the course code is MIT and only imports python-chess.

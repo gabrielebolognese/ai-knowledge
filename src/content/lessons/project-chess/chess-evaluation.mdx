@@ -1,0 +1,183 @@
+---
+title: Material and piece-square tables
+slug: chess-evaluation
+track: project-chess
+level: intermediate
+order: 20
+minutes: 20
+module: The classic engine
+summary: A static evaluation turns one chess position into a score in centipawns. This lesson builds the classic baseline, material plus piece-square tables, returns it from the side to move's point of view, and shows why the tables are a linear model with 768 weights.
+hatnote: For the search that calls this function at the end of every line, see "Negamax search with alpha-beta pruning".
+prerequisites: [chess-board-moves]
+tools: [Python 3, python-chess]
+outcomes:
+  - Write a material evaluation in centipawns
+  - Add piece-square tables and explain what they encode
+  - Return scores from the side to move's point of view and test the sign with a mirrored position
+build: The engine's first evaluate(board), with self-checks for the score and its sign
+reviewed: 2026-11-24
+seeAlso: [chess-board-moves, chess-alpha-beta, chess-train-evaluator]
+sources:
+  - id: cpw-simplified-eval
+    title: Simplified Evaluation Function
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Simplified_Evaluation_Function
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: cpw-pst
+    title: Piece-Square Tables
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Piece-Square_Tables
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: python-chess-core
+    title: python-chess core API
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/core.html
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-tapered
+    title: Tapered Eval
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Tapered_Eval
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: cpw-negamax
+    title: Negamax
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Negamax
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: nnue-doc
+    title: NNUE (official nnue-pytorch documentation)
+    publisher: Stockfish developers
+    url: https://official-stockfish.github.io/docs/nnue-pytorch-wiki/docs/nnue.html
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: chess-evaluation-material-count
+    type: numeric
+    difficulty: easy
+    title: Count the wallets
+    prompt: "Using material only (P = 100, N = 320, B = 330, R = 500, Q = 900), White has lost a bishop and Black has lost a knight and a pawn. What is the material score from White's point of view, in centipawns?"
+    answer: 90
+    hint: Start from 0 (equal material) and subtract what White lost, then add what Black lost.
+    explanation: "White is down a bishop: $-330$. Black is down a knight and a pawn, which counts in White's favour: $+320 + 100$. Total $-330 + 420 = +90$, a little less than one pawn for White."
+  - id: chess-evaluation-nf3
+    type: numeric
+    difficulty: medium
+    title: One knight move, both effects
+    prompt: "In the knight table, g1 is worth $-40$ and f3 is worth $+10$. After `1.Nf3` it is Black's turn. What does `evaluate(board)` (material + PST, side to move) return?"
+    answer: -50
+    hint: First find the White-relative score, then think about whose turn it is.
+    explanation: "Material is still equal. The knight's table value goes from $-40$ to $+10$, so the White-relative score is $+50$. Black is to move, so `evaluate` returns $-50$: Black is half a pawn worse. Running the companion code confirms it."
+  - id: chess-evaluation-weights
+    type: mcq
+    difficulty: medium
+    title: Counting the weights
+    prompt: Treat a piece-square evaluation as a linear model with one weight for every (colour, piece type, square) combination. How many weights does it have?
+    options:
+      - "768"
+      - "384"
+      - "64"
+      - "12"
+    answer: "768"
+    explanation: "There are 2 colours, 6 piece types and 64 squares: $2 \\times 6 \\times 64 = 768$. The companion code shares one table per piece type between the colours (mirrored for Black), so only 384 of those numbers are free, but the model itself has 768 inputs, the same 768 the neural evaluator uses later."
+  - id: chess-evaluation-limits
+    type: mcq
+    difficulty: hard
+    title: What a table cannot see
+    prompt: Which of these ideas can a material + piece-square evaluation NOT express, however its numbers are chosen?
+    options:
+      - Knights are better in the centre than in the corner
+      - A pawn on the seventh rank is worth more than one at home
+      - Owning both bishops is worth a bonus on top of their two separate values
+      - The king should stay in a castled corner during the middlegame
+    answer: Owning both bishops is worth a bonus on top of their two separate values
+    explanation: "Each table entry depends on one piece and one square, and the score is a plain sum. A bishop-pair bonus depends on two pieces at once, a combination, which a sum of independent terms cannot represent. The other three are single-piece, single-square facts that a table encodes directly. Learning combinations is what the hidden layers of the neural evaluator add."
+---
+
+A **static evaluation** looks at one frozen position, without searching any further, and returns a single number that says who is better and by how much.<Cite id="cpw-pst" /> The number is measured in <Term slug="centipawn">centipawns</Term>, where 100 means roughly one pawn's advantage.<Cite id="cpw-simplified-eval" /> This lesson builds the classic baseline evaluator, piece values plus piece-square tables, and makes it the single function `evaluate(board)` that the search calls and that a trained network will later replace.
+
+## Material
+
+The simplest useful evaluation counts material. The companion code uses the values from Tomasz Michniewski's **Simplified Evaluation Function**, a deliberately small evaluator published on the Chessprogramming Wiki:<Cite id="cpw-simplified-eval" />
+
+| Piece | Pawn | Knight | Bishop | Rook | Queen | King |
+|---|---|---|---|---|---|---|
+| Value (cp) | 100 | 320 | 330 | 500 | 900 | 20,000 |
+
+The bishop is given a small edge over the knight, and the king's huge value simply means "cannot be traded".<Cite id="cpw-simplified-eval" /> The companion code sets the king to 0 instead: both sides always have exactly one, so it cancels out, and checkmate is detected by the search, not by the evaluation. Material is White's total minus Black's total, so the start position scores 0.
+
+python-chess makes the counting cheap: `board.pieces_mask(piece_type, color)` returns a bitboard of those pieces, and `chess.popcount` counts its set bits.<Cite id="python-chess-core" />
+
+## Piece-square tables
+
+Material alone cannot tell a knight in the centre from a knight stuck in a corner. A **piece-square table** (PST) adds a small bonus or penalty for every piece type on every square.<Cite id="cpw-pst" /> In Michniewski's tables a knight in a corner gets −50 and one in the centre +20; a pawn that reaches the seventh rank gets +50; the untouched centre pawns on d2 and e2 get −20, which nudges the engine to develop them; and in the middlegame the king prefers a castled square such as g1 (+30) to the centre.<Cite id="cpw-simplified-eval" />
+
+<Analogy breaks="A house keeps its value whoever lives next door, but a chess piece's real worth depends on the other pieces around it, which a table cannot see.">
+Material is counting the money in each player's wallet. Piece-square tables are "location, location, location": the same house is worth more in a good neighbourhood.
+</Analogy>
+
+The tables are written the way a chess diagram is printed, rank 8 at the top. python-chess numbers squares from `a1 = 0` to `h8 = 63`, rank 1 first, so the code needs one small index conversion:<Cite id="python-chess-core" />
+
+<CodeFile path="code/projects/project-chess/eval_material.py" lines="113-120" highlight="120" title="eval_material.py: from a square to a table index" />
+
+For a White piece, `square ^ 56` flips the rank (a1 becomes index 56, the bottom-left of the printed table). A Black piece looks at the board from the other side, so its own square number already points to the right entry: a Black pawn on rank 2 picks up the same +50 that a White pawn gets on rank 7.
+
+The king needs different advice in the endgame, where it should walk to the centre instead of hiding. Michniewski's rule switches to an endgame king table when neither side has a queen, or when every side with a queen has at most one minor piece and no rook.<Cite id="cpw-simplified-eval" /> Most modern engines go further: they keep a full opening set and a full endgame set of tables and blend the two smoothly according to how much material is left, a technique called a **tapered evaluation**.<Cite id="cpw-pst" /><Cite id="cpw-tapered" />
+
+## The score, step by step
+
+Three numbers from the companion code show how the pieces fit together. Take the start position with White's b1 knight removed, then the position after `1.e4`.
+
+<MathSteps
+  title="From piece values to a side-to-move score"
+  legend={[
+    { symbol: 'v_p', meaning: 'value of piece type p in centipawns' },
+    { symbol: 'n_p^W, n_p^B', meaning: 'number of White and Black pieces of type p' },
+    { symbol: 'S_W, S_B', meaning: 'sum of table values of White and Black pieces' },
+    { symbol: 'E_{white}', meaning: 'score from White’s point of view' },
+    { symbol: 'E', meaning: 'score for the side to move' },
+  ]}
+>
+  <Step tex="M = \sum_p v_p \, (n_p^W - n_p^B) = 320 \cdot (1 - 2) = \hl{-320}" words="Material: White has one knight, Black has two, so White is a knight down." example="material only, b1 knight missing → −320" />
+  <Step tex="E_{white} = M + \hl{S_W - S_B} = -320 + 40 = -280" words="Add the tables. The missing knight stood on b1, whose table value is −40, so removing it also removes a penalty and the positional part becomes +40." example="material + PST → −280" />
+  <Step tex="E = \hl{s} \cdot E_{white}, \quad s = +1 \text{ if White is to move, else } -1" words="Turn the White-relative score into a score for the player whose turn it is." />
+  <Step tex="1.\,e4: \; E_{white} = 20 - (-20) = +40, \quad E = \hl{-40}" words="After 1.e4 the pawn moves from e2 (−20) to e4 (+20), a gain of 40 for White. It is Black's turn, so evaluate returns −40." />
+  <Step tex="E(\text{mirror}(p)) = \hl{E(p)}" words="Test: swap the colours and flip the board. The mirrored copy has White to move, and its score must be exactly the same, −40." />
+</MathSteps>
+
+## Why the score is relative to the side to move
+
+The search in the next lesson is written as **negamax**: one function serves both players by flipping the sign of the score at every move. That trick only works if the evaluation always answers "how good is this for the player to move?".<Cite id="cpw-negamax" /> The companion code therefore computes the White-relative score once and negates it when Black is to move. A score of +50 always means "the player whose turn it is stands half a pawn better".
+
+<Callout type="pitfall">
+Sign bugs are the most common error in a first engine. A White-relative evaluation plugged into negamax makes Black play the moves that are best for White, and the engine looks as if it were giving pieces away on purpose. Test the sign with `board.mirror()`, which flips the board, swaps the colours and the side to move: the score must stay exactly the same.<Cite id="python-chess-core" />
+</Callout>
+
+## A piece-square table is a linear model
+
+Describe a position by 768 yes/no inputs, one for every combination of colour (2), piece type (6) and square (64): an input is 1 if that piece stands on that square and 0 otherwise, so at most 32 of them are 1. Give each input a number, its <Term slug="weight" />, equal to the piece value plus its table entry, with a minus sign for Black pieces. The material + PST score is then exactly the <Term slug="dot-product" /> of the inputs with the weights, $E_{white} = \sum_i w_i x_i$: a **linear model** with 768 weights, the same form as a single <Term slug="artificial-neuron" /> without an activation function.
+
+This view explains both the strength and the limit of the tables. Each weight answers one question about one piece on one square, so a linear model cannot express a *combination* such as "the two bishops together are worth a bonus" or "a weak king matters more while the queens are on". The neural evaluator later in this track keeps exactly the same 768 inputs, which is also the simplest feature set described in Stockfish's NNUE documentation, and adds hidden layers so it can learn such combinations from data.<Cite id="nnue-doc" /> In the companion code Black reuses White's tables mirrored, so only 384 of the 768 numbers are independent; a [trained network](/course/project-chess/chess-train-evaluator/) learns all of its weights from data instead.
+
+## Try it
+
+The heart of the evaluator is two short functions: one adds up material and tables from White's side, the other converts the result for the side to move.
+
+<CodeFile path="code/projects/project-chess/eval_material.py" lines="145-162" highlight="161-162" title="eval_material.py: evaluate_white and evaluate" />
+
+`evaluate` takes an extra `key` argument that it ignores: the neural evaluator uses it for a cache, and giving both the same signature is what makes `evaluate(board)` a single swap point. Run `python eval_material.py`. It should print `+0` for the start position, −320 for material without the b1 knight, −280 with the tables, −40 after `1.e4` with Black to move, and −40 again for the colour-mirrored copy, followed by `all checks passed`.
+
+<Exercise id="chess-evaluation-nf3" />
+
+With a working evaluation the engine can judge a position, but only one; the [alpha-beta lesson](/course/project-chess/chess-alpha-beta/) adds the search that looks several moves ahead and calls `evaluate` at the end of every line.
+
+## Summary
+
+- A static evaluation scores one position in centipawns; 100 cp is about one pawn.
+- Material uses fixed piece values (here 100, 320, 330, 500, 900); piece-square tables add a bonus or penalty per piece per square.
+- Negamax needs the score from the side to move's point of view: negate the White-relative score when Black is to move, and test it with a mirrored position.
+- Material + PST is a linear model with 768 weights; the neural evaluator keeps the same inputs and adds hidden layers to learn combinations.

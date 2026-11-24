@@ -1,0 +1,240 @@
+---
+title: Negamax search with alpha-beta pruning
+slug: chess-alpha-beta
+track: project-chess
+level: advanced
+order: 30
+minutes: 25
+module: The classic engine
+summary: Negamax searches the move tree for the best move assuming both sides play well, and alpha-beta pruning skips branches that cannot change the result. This lesson traces alpha-beta by hand, handles mate and draw scores, and counts nodes against plain minimax.
+hatnote: This lesson applies game-tree search to chess. For the general idea on small games, see the "Game-tree search" lesson in the Advanced track.
+prerequisites: [chess-evaluation]
+tools: [Python 3, python-chess]
+outcomes:
+  - Implement negamax with alpha-beta on real chess positions
+  - Handle checkmate (−MATE + ply), stalemate and repetition draws
+  - Count nodes and confirm the same best move as plain minimax
+  - Solve mate-in-2 puzzles at depth 4
+build: The engine's search, which finds mates and wins hanging pieces
+reviewed: 2026-11-24
+seeAlso: [chess-evaluation, chess-ordering-quiescence, chess-iterative-deepening]
+sources:
+  - id: cpw-negamax
+    title: Negamax
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Negamax
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: cpw-alphabeta
+    title: Alpha-Beta
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Alpha-Beta
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: knuth1975
+    title: An Analysis of Alpha-Beta Pruning
+    author: Donald E. Knuth, Ronald W. Moore
+    publisher: Artificial Intelligence 6(4), 293-326
+    year: 1975
+    url: https://doi.org/10.1016/0004-3702%2875%2990019-3
+    accessed: 2026-11-24
+    type: paper
+  - id: lichess-db
+    title: Lichess open database
+    publisher: Lichess
+    url: https://database.lichess.org/
+    accessed: 2026-11-24
+    type: dataset
+  - id: cpw-minimax
+    title: Minimax
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Minimax
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: python-chess-core
+    title: python-chess core API
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/core.html
+    accessed: 2026-11-24
+    type: docs
+  - id: python-chess-polyglot
+    title: python-chess polyglot (Zobrist hashing)
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/polyglot.html
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: chess-alpha-beta-mate-score
+    type: mcq
+    difficulty: easy
+    title: Why subtract the ply?
+    prompt: The search scores "checkmated at ply $p$" as $-\text{MATE} + p$, so a mate the engine delivers in 3 plies is worth $\text{MATE} - 3$. Why not simply $\text{MATE}$ for every mate?
+    options:
+      - So that the engine prefers the fastest mate and, when losing, the slowest one
+      - Because every ply of search costs one centipawn of time
+      - To keep the score from overflowing a 32-bit integer
+      - Because the UCI protocol only accepts odd mate scores
+    answer: So that the engine prefers the fastest mate and, when losing, the slowest one
+    explanation: "If every mate scored the same, the engine could keep postponing a forced mate forever, because each line looks equally good. Subtracting the distance makes a mate in 1 ($\\text{MATE}-1$) beat a mate in 3 ($\\text{MATE}-3$), and makes the losing side prefer being mated later. UCI then reports the distance in moves (`mate 2`)."
+  - id: chess-alpha-beta-count-leaves
+    type: numeric
+    difficulty: medium
+    title: Trace a second tree
+    prompt: "You are to move with two moves, A and B, searched in that order. After A the opponent's replies lead to leaves worth 4 and 6 (from your point of view, in that order). After B they lead to 7, 1 and 5. How many leaves does alpha-beta evaluate?"
+    answer: 4
+    hint: "After A, $\\alpha = 4$. Inside B, stop as soon as a reply scores at most $\\alpha$."
+    explanation: "A needs both leaves: its value is $\\min(4, 6) = 4$, so $\\alpha = 4$. In B the first reply, 7, is above $\\alpha$, so B might still be good and the search goes on. The second reply, 1, shows that B is worth at most 1, which is below $\\alpha = 4$: cutoff, and the leaf 5 is never evaluated. Total: 2 + 2 = 4 leaves instead of minimax's 5, and the answer is the same (play A, value 4)."
+  - id: chess-alpha-beta-best-case
+    type: numeric
+    difficulty: medium
+    title: Perfect ordering at an odd depth
+    prompt: "With perfect move ordering, alpha-beta evaluates $b^{\\lceil d/2 \\rceil} + b^{\\lfloor d/2 \\rfloor} - 1$ leaves. How many is that for $b = 40$ and $d = 5$?"
+    answer: 65599
+    hint: "$\\lceil 5/2 \\rceil = 3$ and $\\lfloor 5/2 \\rfloor = 2$."
+    explanation: "$40^3 + 40^2 - 1 = 64{,}000 + 1{,}600 - 1 = 65{,}599$, against $40^5 = 102{,}400{,}000$ leaves for minimax: about 1,560 times fewer."
+  - id: chess-alpha-beta-order
+    type: reveal
+    difficulty: hard
+    title: When alpha-beta prunes nothing
+    prompt: In the hand trace of this lesson, searching B before A evaluates all six leaves. Explain why, using alpha, and say what this means for a chess engine.
+    answer: "Searched first, B returns 1 (its worst reply), so alpha is only 1. In A every reply (5, 3, 6) scores above 1, so none of them proves A bad and none causes a cutoff. A cutoff needs a reply that is already no better than the best alternative, and that only happens early when the best move was searched first. A chess engine therefore sorts its moves so that the most promising come first: captures of valuable pieces, the move that was best in a shallower search, moves that caused cutoffs before."
+    explanation: "Alpha-beta always returns the minimax value, but how much it saves depends entirely on move order: from $b^d$ leaves in the worst order down to about $2\\sqrt{b^d}$ in the best. That is why move ordering gets its own lesson."
+---
+
+**Negamax with alpha-beta pruning** is the search at the heart of classic chess engines: it looks several moves ahead, assumes both sides always pick their best reply, and returns the move with the best guaranteed outcome.<Cite id="cpw-negamax" /> Alpha-beta pruning gives exactly the same answer as a full <Term slug="minimax" /> search while skipping branches that cannot change it, often most of the tree.<Cite id="cpw-alphabeta" /> This lesson traces the algorithm by hand, then reads the companion `Searcher.negamax`, which also handles checkmate, stalemate and draws.
+
+## Minimax written once: negamax
+
+Minimax alternates two rules: on my turn take the move with the **highest** score, on the opponent's turn assume the **lowest**.<Cite id="cpw-minimax" /> Negamax writes both as one rule, using the identity $\max(a, b) = -\min(-a, -b)$. If $V(p)$ is the value of position $p$ for the player to move, then $V(p) = \max_m \big(-V(p \text{ after } m)\big)$: a position worth +3 to my opponent, who moves next, is worth −3 to me.<Cite id="cpw-negamax" />
+
+At the leaves the search calls the evaluation, which must also score from the side to move's point of view; that is why the [evaluation lesson](/course/project-chess/chess-evaluation/) negates its score when Black is to move.<Cite id="cpw-negamax" /> The cost is the problem: with about 35 moves per position, a full 6-ply tree has about 1.8 billion leaves.
+
+## The alpha-beta window
+
+<Term slug="alpha-beta-pruning">Alpha-beta</Term> carries two bounds down the tree.<Cite id="cpw-alphabeta" />
+
+- $\alpha$ (alpha) is the score the side to move is **already guaranteed** by a move it has searched.
+- $\beta$ (beta) is the most the **opponent will allow**: they already have a better option elsewhere, so a line scoring $\beta$ or more will never be reached.
+
+When a move scores at least $\beta$, the rest of the moves at that node do not matter: the opponent will avoid this position anyway. Stopping there is a **beta cutoff**. In negamax the window is handed to the child with signs flipped and swapped, $(-\beta, -\alpha)$, because one player's floor is the other's ceiling.<Cite id="cpw-alphabeta" /> The Chessprogramming Wiki stresses that this saving comes "without any potential of overlooking a better move".<Cite id="cpw-alphabeta" />
+
+<Analogy breaks="A fare can only go up as you read on, but in a game tree the opponent's later replies can be anything; the cutoff is safe only because the opponent will pick the worst one for you.">
+You are shopping for a flight and already hold a €100 ticket. The next airline's cheapest fare starts at €140, so you close that site without reading the rest of its offers.
+</Analogy>
+
+## Alpha-beta on a tiny tree
+
+The tree below has a root (you to move) with two moves. After move A the opponent can reply three ways, leading to leaves worth 5, 3 and 6 from your point of view. After move B the replies lead to 2, 9 and 1. Minimax evaluates all six leaves.
+
+<MathSteps
+  title="Alpha-beta, one leaf at a time"
+  legend={[
+    { symbol: '\\alpha', meaning: 'score you are already guaranteed' },
+    { symbol: '\\beta', meaning: 'most the opponent will allow' },
+    { symbol: 'V(X)', meaning: 'value of move X for you' },
+  ]}
+>
+  <Step tex="\alpha = -\infty, \quad \beta = +\infty" words="At the root nothing is known yet, so the window is wide open." />
+  <Step tex="V(A) = \min(5, 3, 6) = 3 \;\Rightarrow\; \hl{\alpha = 3}" words="Search A completely. The opponent will pick the reply that is worst for you, 3. You now have a guaranteed 3, so alpha rises to 3." example="3 leaves evaluated so far" />
+  <Step tex="B \to 2: \quad V(B) \le \hl{2}" words="Start on B. Its first reply already gives 2, and the opponent can only make B worse for you, never better." example="4 leaves evaluated" />
+  <Step tex="V(B) \le 2 \le \alpha = 3 \;\Rightarrow\; \hl{\text{cutoff}}" words="B can never beat the 3 that A guarantees, so the replies worth 9 and 1 are never evaluated. Seen from the opponent at node B (negamax), their window is (−∞, −3), their score −2 is at least their beta, −3, and this is a beta cutoff." />
+  <Step tex="V(\text{root}) = 3 \text{ (play A)}, \quad \hl{4} \text{ leaves instead of } 6" words="Same move and same value as minimax, with two of the six leaves skipped. Even the hidden 1 could only have made B worse." />
+</MathSteps>
+
+<Exercise id="chess-alpha-beta-count-leaves" />
+
+Order matters. If B is searched first, it returns its worst reply, 1, so $\alpha = 1$; then every reply of A (5, 3, 6) is above 1, nothing is cut off, and all six leaves are evaluated. Alpha-beta always returns the minimax value, but how much it saves depends on searching good moves first.<Cite id="cpw-alphabeta" />
+
+## How much can it save?
+
+Donald Knuth and Ronald Moore analysed the algorithm in 1975.<Cite id="knuth1975" /> In the worst move order alpha-beta evaluates as many leaves as minimax; with the best move always searched first it needs far fewer.<Cite id="cpw-alphabeta" /><Cite id="knuth1975" />
+
+<MathSteps
+  title="Leaves searched: worst case versus best case"
+  legend={[
+    { symbol: 'b', meaning: 'branching factor (moves per position)' },
+    { symbol: 'd', meaning: 'search depth in plies' },
+    { symbol: '\\lceil x \\rceil, \\lfloor x \\rfloor', meaning: 'x rounded up, x rounded down' },
+  ]}
+>
+  <Step tex="L_{worst} = \hl{b^{d}}" words="Worst order: no cutoffs at all, every leaf of the tree is evaluated, exactly as in minimax." />
+  <Step tex="L_{best} = \hl{b^{\lceil d/2 \rceil} + b^{\lfloor d/2 \rfloor} - 1}" words="Best order: roughly the square root of the tree, plus a second similar term." />
+  <Step tex="40^{6} = \hl{4{,}096{,}000{,}000}" words="Plug in b = 40 and d = 6: minimax needs about four billion leaves." />
+  <Step tex="40^{3} + 40^{3} - 1 = \hl{127{,}999}" words="Perfect alpha-beta needs about 128 thousand, some 32,000 times fewer." />
+  <Step tex="b^{d/2} \text{ at depth } d \;\approx\; b^{d'} \text{ at depth } \hl{d' = d/2}" words="Rule of thumb: perfect ordering roughly doubles the depth you can reach for the same work." />
+</MathSteps>
+
+Real engines land between the two cases, which is why the [move ordering lesson](/course/project-chess/chess-ordering-quiescence/) is worth so much.<Cite id="cpw-alphabeta" />
+
+## Mate, stalemate and draws
+
+When the side to move has **no legal moves**, the game is over and the evaluation is not called. In check, that is checkmate; otherwise it is stalemate, a draw, scored 0.<Cite id="python-chess-core" /> The companion code sets $\text{MATE} = 100{,}000$ and scores "checkmated at ply $p$" as $-\text{MATE} + p$, so a mate the engine delivers in $n$ plies is worth $\text{MATE} - n$. The engine therefore prefers the fastest mate and, when losing, the slowest one. Mate scores are converted to the UCI form `mate 1`, `mate 2` (moves, not plies) when printed.
+
+Draws by rule are scored 0 as well. The 50-move rule is a halfmove clock of 100 or more.<Cite id="python-chess-core" /> For repetitions, the search keeps a set of position fingerprints, the Zobrist keys from `chess.polyglot.zobrist_hash`, for every position of the game so far and of the current search path, and returns 0 when a position comes back.<Cite id="python-chess-polyglot" /> The official rule needs a threefold repetition before a draw can be claimed; treating the first repeat inside the search as a draw is a common simplification in engines.<Cite id="python-chess-core" />
+
+<Callout type="pitfall">
+Repetition checks must include the positions already played in the game, not only those on the search path. Otherwise the engine cannot see that a move repeats an earlier position, and it may walk into a draw while winning, or miss a saving draw while losing. `search()` fills the set from `board.move_stack` before the first iteration.
+</Callout>
+
+Two smaller refinements live in the same function. A **check extension** searches one ply deeper when the side to move is in check, so a line never ends in the middle of a check sequence. **Mate-distance pruning** narrows the window to the best and worst mate scores still possible at this ply, and stops when no line could improve on a mate already found.
+
+## Reading Searcher.negamax
+
+The first part of the function handles everything that ends a line early:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="242-266" highlight="251-252,263-266" title="search.py: draws, mate distance, check extension and leaves" />
+
+At depth 0 it hands over to quiescence search, a capture-only extension explained in the [next lesson](/course/project-chess/chess-ordering-quiescence/). Lines 268 to 279 read the transposition table, covered in the [iterative deepening lesson](/course/project-chess/chess-iterative-deepening/). Then comes the alpha-beta loop itself:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="281-309" highlight="283,292,298-303" title="search.py: the move loop and the beta cutoff" />
+
+Line 283 scores checkmate and stalemate. Line 292 is negamax: the child is searched with the window $(-\beta, -\alpha)$ and its score negated. Lines 298 to 303 raise $\alpha$ and break on a beta cutoff. The function returns `best` even when it falls outside the window, a variant called **fail-soft**.<Cite id="cpw-alphabeta" />
+
+## Counting nodes: the yardstick
+
+Every later improvement in this track is judged by one test: the **same best move with fewer nodes**. The file keeps a plain negamax without pruning, `minimax`, as the reference:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="381-395" highlight="393" title="search.py: the no-pruning reference" />
+
+To compare, search the start position 3 plies deep with both, turning off ordering, quiescence and the transposition table in the `Searcher` so that only pruning differs:
+
+```python
+import chess
+from search import minimax, Searcher
+from eval_material import evaluate, MaterialEvaluator
+
+board, counter, scores = chess.Board(), [0], {}
+for move in board.legal_moves:
+    board.push(move)
+    scores[move] = -minimax(board, 2, evaluate, counter)
+    board.pop()
+best = max(scores, key=scores.get)
+print("minimax   ", board.san(best), scores[best], counter[0], "nodes")
+
+r = Searcher(MaterialEvaluator(), use_ordering=False, use_qsearch=False, use_tt=False).search(board, max_depth=3)
+print("alpha-beta", board.san(r.move), r.score, r.nodes, "nodes")
+```
+
+On the test machine both chose `Nf3` with a score of +50; minimax visited 9,322 nodes (20 + 400 + 8,902, every position of the tree), and alpha-beta 883, even counting its depth-1 and depth-2 iterations. When several moves share the best score the two may pick different moves of equal value, so compare the **scores** first.
+
+## Try it
+
+Run `python search.py`. It searches five test positions at depth 4 with the full engine; your times will vary with the machine.
+
+- Start position: best move `Nf3`, score `cp 0`, 3,217 nodes, about 13,000 nodes per second.
+- Back-rank mate in 1, `6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1`: `Ra8#`, `mate 1`, found at depth 1 in 23 nodes.
+- Mate in 2, `k7/8/2K5/8/8/8/8/7R w - - 0 1`: `Kc7` (`Kb6` also mates in two), `mate 2` at depth 3 in about 400 nodes. A mate in 2 is three plies deep, and the search stops as soon as the mate is proven, so it never needs the fourth ply.
+- A free queen, `rnb1kbnr/ppp1pppp/8/3q4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1`: `exd5`, about +975 cp.
+- Kiwipete, a busy middlegame: about 35,000 nodes in about 3.6 s.
+
+For a larger test set, the Lichess puzzle database is free under CC0: about 6.2 million rated puzzles in a CSV file with columns such as `FEN`, `Moves`, `Rating` and `Themes`.<Cite id="lichess-db" /> The first move in `Moves` is the opponent's move that sets up the puzzle, so play it before searching.<Cite id="lichess-db" /> A useful milestone measure is the share of puzzles in a rating band that the engine solves at a fixed depth or time per move.
+
+## Summary
+
+- Negamax is minimax written once: $V(p) = \max_m (-V(p \text{ after } m))$, with a side-to-move evaluation at the leaves.
+- Alpha-beta keeps a window $[\alpha, \beta]$ and stops searching a node once a move scores at least $\beta$; the result equals minimax.
+- Savings depend on move order: from $b^d$ leaves down to $b^{\lceil d/2 \rceil} + b^{\lfloor d/2 \rfloor} - 1$, for $b = 40, d = 6$ from 4,096,000,000 to 127,999.
+- Checkmate scores $-\text{MATE} + \text{ply}$, stalemate and rule draws score 0, and repetitions must include the game history.
+- Count nodes: every later improvement must find the same move with fewer of them.

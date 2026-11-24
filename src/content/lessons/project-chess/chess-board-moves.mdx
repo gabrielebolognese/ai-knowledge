@@ -1,0 +1,230 @@
+---
+title: Boards, moves and perft with python-chess
+slug: chess-board-moves
+track: project-chess
+level: intermediate
+order: 10
+minutes: 20
+module: The classic engine
+summary: A chess engine starts with a board and a list of legal moves. This lesson installs python-chess, reads and writes positions in FEN, makes and unmakes moves with push and pop, and counts the exponential move tree with perft.
+hatnote: For the search that walks this tree and picks a move, see "Negamax search with alpha-beta pruning".
+prerequisites: []
+tools: [Python 3, python-chess]
+outcomes:
+  - Read and write positions in FEN
+  - Generate legal moves and make/unmake them with push/pop
+  - Write a perft function and confirm perft(3) = 8,902 from the start position
+build: A ten-line perft function that checks python-chess against published move counts
+reviewed: 2026-11-24
+seeAlso: [chess-evaluation, chess-alpha-beta]
+sources:
+  - id: python-chess-core
+    title: python-chess core API
+    author: Niklas Fiekas
+    publisher: python-chess documentation
+    url: https://python-chess.readthedocs.io/en/latest/core.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pypi-chess
+    title: chess on PyPI
+    publisher: PyPI
+    url: https://pypi.org/project/chess/
+    accessed: 2026-11-24
+    type: docs
+  - id: cpw-fen
+    title: Forsyth-Edwards Notation
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Forsyth-Edwards_Notation
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: cpw-board
+    title: Board Representation
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Board_Representation
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: cpw-bitboards
+    title: Bitboards
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Bitboards
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: cpw-perft
+    title: Perft
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Perft
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: cpw-perft-results
+    title: Perft Results
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Perft_Results
+    accessed: 2026-11-24
+    type: wikipedia
+  - id: cpw-minimax
+    title: Minimax
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Minimax
+    accessed: 2026-11-24
+    type: wikipedia
+furtherReading:
+  - title: python-chess documentation (home)
+    url: https://python-chess.readthedocs.io/en/latest/
+exercises:
+  - id: chess-board-moves-install
+    type: mcq
+    difficulty: easy
+    title: The right package
+    prompt: Your code starts with `import chess`. Which command installs the library it needs?
+    options:
+      - pip install chess
+      - pip install python-chess
+      - pip install pychess
+      - pip install stockfish
+    answer: pip install chess
+    explanation: "The library is published on PyPI under the name `chess` and imported as `chess`. `python-chess` is the project's old package name, kept only so that old instructions still work, so new code should install `chess`. `pychess` and `stockfish` are other projects, not this library."
+  - id: chess-board-moves-branching
+    type: numeric
+    difficulty: easy
+    title: Growth from ply 3 to ply 4
+    prompt: From the start position, perft(3) = 8,902 and perft(4) = 197,281. On average, how many legal moves does each position at depth 3 have? Round to one decimal.
+    answer: 22.2
+    tolerance: 0.1
+    hint: Every leaf at depth 4 is one legal move played from a position at depth 3.
+    explanation: "$197{,}281 / 8{,}902 \\approx 22.2$. That ratio is the average branching factor at that depth. It is a little above the 20 moves of the start position because the first moves open lines for the bishops and the queen."
+  - id: chess-board-moves-depth6
+    type: numeric
+    difficulty: medium
+    title: A middlegame tree
+    prompt: "A middlegame position has about $b = 35$ legal moves per position. Roughly how many leaves does a full 6-ply tree have, in billions? Round to two decimals."
+    answer: 1.84
+    tolerance: 0.02
+    hint: "Compute $35^6$, or square $35^3 = 42{,}875$."
+    explanation: "$35^6 = 1{,}838{,}265{,}625 \\approx 1.84$ billion leaves. A Python engine that visits about 7,000 positions per second would need roughly three days to search that tree completely for a single move, which is why real engines prune it (see the alpha-beta lesson)."
+  - id: chess-board-moves-debug
+    type: short
+    difficulty: hard
+    title: Hunting a move-generation bug
+    prompt: You wrote your own move generator. It gives perft(3) = 8,902 from the start position but the wrong number at depth 4. How do you find the bug without reading every line of the generator?
+    answer: "Run a divide: print the perft(3) count below each of the 20 root moves, from both your generator and a trusted one such as python-chess. Pick the root move whose count differs, play it, and repeat one level deeper until a single position shows the missing or extra move."
+    explanation: "Perft only says that something is wrong. Splitting the count by root move (often called divide) narrows the search to one branch, then one position, then one move. Typical culprits are checks, pins, castling rights and en passant, which appear only deeper in the tree."
+---
+
+Before a chess engine can think about a position, it needs a **board representation**: a data structure that records where every piece stands, whose turn it is, and the few extra facts the rules depend on, plus a function that lists every legal move.<Cite id="cpw-board" /> This lesson uses the python-chess library for both, writes positions as text in <Term slug="fen">FEN</Term>, and builds a small <Term slug="perft" /> function that counts how fast the tree of possible moves grows.<Cite id="python-chess-core" /> Every later lesson in this track, starting with [Material and piece-square tables](/course/project-chess/chess-evaluation/), builds on these few calls.
+
+## Installing python-chess
+
+The library is published on PyPI under the name `chess`, not `python-chess`, and it is imported as `import chess`.<Cite id="pypi-chess" /> It is released under the GPL-3 licence, and the current release needs Python 3.11 or newer.<Cite id="pypi-chess" />
+
+```bash
+pip install chess
+python -c "import chess; print(chess.__version__)"
+```
+
+The companion code was tested with version 1.11.2. Writing a move generator yourself is a classic exercise, but it costs a lot of debugging time around castling, en passant, pins and promotions, so this project reuses a mature one and spends the effort on search and evaluation instead.
+
+## Writing positions in FEN
+
+**Forsyth-Edwards Notation** (FEN) describes a whole position in one line of text.<Cite id="cpw-fen" /> The start position is:
+
+```text
+rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+```
+
+The line has six fields separated by spaces:<Cite id="cpw-fen" />
+
+1. **Piece placement**, rank 8 first and rank 1 last, ranks separated by `/`. Upper-case letters are White pieces, lower-case are Black, and a digit counts empty squares.
+2. **Side to move**: `w` or `b`.
+3. **Castling rights**: any of `KQkq`, or `-` when nobody can castle.
+4. **En passant target square**, the square a pawn skipped over on a double step, or `-`.
+5. **Halfmove clock**: plies since the last capture or pawn move, used for the 50-move rule.
+6. **Fullmove number**, which starts at 1 and grows after each Black move.
+
+In python-chess, `chess.Board(fen)` reads a FEN and `board.fen()` writes one; `chess.Board()` with no argument gives the start position.<Cite id="python-chess-core" />
+
+<Callout type="note">
+After `1.e4`, python-chess writes `rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1` with `-` in the en passant field. By default it lists the en passant square only when an en passant capture is actually legal, while the FEN standard writes `e3` after any double pawn step; `board.fen(en_passant="fen")` gives the strict form.<Cite id="python-chess-core" /><Cite id="cpw-fen" /> Both describe the same position.
+</Callout>
+
+## How programs store the board
+
+The simplest representation is a **mailbox**: an array of 64 squares (or 120, with a border of sentinel squares that makes off-board moves easy to detect), each holding a piece or "empty".<Cite id="cpw-board" /> Strong engines use **bitboards** instead: one 64-bit integer per piece type and colour, with one bit per square, so a single machine word covers the whole board.<Cite id="cpw-bitboards" /> Questions such as "which squares do White's pawns attack?" then become a few shifts and bitwise operations instead of a loop over squares.<Cite id="cpw-bitboards" />
+
+<Analogy breaks="Real overlays are only looked at, while bitboards are combined with arithmetic, and a position also needs facts no overlay shows: side to move, castling rights, en passant and the move counters.">
+Bitboards are like twelve transparent sheets laid on the board, one per kind of piece, each with dots where those pieces stand. Asking where the white pawns attack means sliding one sheet up a row and diagonally.
+</Analogy>
+
+python-chess uses bitboards internally and exposes them as plain Python integers, for example `board.pieces_mask(chess.KNIGHT, chess.WHITE)`. Squares are numbered from `a1 = 0` to `h8 = 63`.<Cite id="python-chess-core" /> You rarely need the bitboards directly in this project, but the evaluation lesson uses them to count pieces quickly.
+
+## Legal moves, push and pop
+
+`board.legal_moves` lists every **legal** move: moves that would leave your own king in check are already removed.<Cite id="python-chess-core" /> `board.push(move)` plays a move and `board.pop()` takes the last one back, so the same board object can walk down a line and back up again.<Cite id="python-chess-core" />
+
+```python
+import chess
+
+board = chess.Board()                     # start position
+print(board.legal_moves.count())          # 20
+board.push_san("e4")                      # standard algebraic notation
+board.push(chess.Move.from_uci("e7e5"))   # or UCI text: from-square, to-square
+print(board.fen())   # rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2
+board.pop()                               # back to the position after 1.e4
+```
+
+This make/unmake pattern is the heartbeat of every search in the track. A search plays a move, looks at the resulting position, and undoes the move, millions of times per game, so it reuses one board rather than copying it at every step. The board also remembers the moves played (`board.move_stack`), which the search later needs to detect repeated positions.<Cite id="python-chess-core" />
+
+## The exponential tree
+
+Each legal move leads to a new position with its own legal moves, so the possible futures form a tree that branches at every **ply** (one move by one side). The number of positions at each depth grows roughly by a constant factor per ply, called the **branching factor** $b$.<Cite id="cpw-perft-results" /><Cite id="cpw-minimax" />
+
+<MathSteps
+  title="How fast the start-position tree grows"
+  legend={[
+    { symbol: 'N(d)', meaning: 'number of move sequences d plies deep (perft d)' },
+    { symbol: 'b', meaning: 'average branching factor (legal moves per position)' },
+    { symbol: 'd', meaning: 'depth in plies' },
+  ]}
+>
+  <Step tex="N(1) = \hl{20}" words="White has 20 first moves: each of the 8 pawns can step one or two squares (16 moves), and each knight has 2 squares (4 moves)." />
+  <Step tex="N(2) = 20 \times \hl{20} = 400" words="Whatever White plays, Black also has exactly 20 replies, so the count multiplies." />
+  <Step tex="N(3) = \hl{8{,}902} \approx 400 \times 22.3" words="After one move each, bishops and queens get open lines, so the average number of moves rises a little above 20." />
+  <Step tex="N(4) = \hl{197{,}281} \approx 8{,}902 \times 22.2" words="Every extra ply multiplies the tree again by about 20 to 25 in the opening." />
+  <Step tex="N(d) \approx \hl{b^{d}}" words="In general the tree has about b to the power d leaves. Middlegames have about 30 to 40 legal moves, so with b = 35 a 4-ply tree has about 1.5 million leaves and a 6-ply tree about 1.8 billion." example="35⁴ = 1,500,625 and 35⁶ = 1,838,265,625" />
+</MathSteps>
+
+The published start-position counts continue with 4,865,609 at depth 5 and 119,060,324 at depth 6.<Cite id="cpw-perft-results" /> This explosion is why an engine cannot simply look at every line: plain <Term slug="minimax" /> search visits every leaf of this tree, and the [alpha-beta lesson](/course/project-chess/chess-alpha-beta/) shows how to skip most of them without changing the answer.<Cite id="cpw-minimax" />
+
+## Perft: counting the tree
+
+**Perft** (short for "performance test") walks the legal-move tree to a fixed depth and counts the leaves.<Cite id="cpw-perft" /> Its main use is debugging move generators: the correct counts for many test positions are published, so any mismatch proves a bug, and the count also serves as a simple speed benchmark.<Cite id="cpw-perft" /><Cite id="cpw-perft-results" />
+
+| Position | Depth 1 | Depth 2 | Depth 3 | Depth 4 |
+|---|---|---|---|---|
+| Start position | 20 | 400 | 8,902 | 197,281 |
+| "Kiwipete" (busy middlegame) | 48 | 2,039 | 97,862 | 4,085,603 |
+
+The second row comes from a position nicknamed Kiwipete, `r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -`, built so that castling, en passant, promotions and pins all appear within a few plies.<Cite id="cpw-perft-results" /> Its tree is much bushier: 48 moves at the root instead of 20.
+
+Two tricks make perft practical. **Bulk counting** stops one ply early and adds up the number of legal moves at the last level instead of playing each one.<Cite id="cpw-perft" /> **Divide** prints a separate count under each root move, so a wrong total can be traced to one branch, then one position, then one move.<Cite id="cpw-perft" />
+
+<Callout type="tip">
+python-chess is already well tested, so your perft will match the table. The point here is to see the exponential tree with your own eyes and to have a reference: if you ever write your own move generator, perft against python-chess is how you test it.
+</Callout>
+
+## Try it
+
+The companion benchmark contains the perft function and a small suite of reference counts:
+
+<CodeFile path="code/projects/project-chess/bench.py" lines="39-56" highlight="49-50" title="bench.py: perft with bulk counting" />
+
+Line 49 is the bulk-counting shortcut: at depth 1 it returns the number of legal moves without playing them. Run `python bench.py --perft`. It prints `ok` next to each depth: 20 / 400 / 8,902 / 197,281 for the start position and 48 / 2,039 / 97,862 for Kiwipete. On the test machine perft(3) from the start took about 0.05 s and Kiwipete perft(3) about 0.5 s; your times will differ, but the counts must not.
+
+<Exercise id="chess-board-moves-branching" />
+
+## Summary
+
+- Install the library with `pip install chess` and import it as `chess`.
+- FEN stores a position in six fields: pieces, side to move, castling, en passant, halfmove clock and move number.
+- Engines store the board as a mailbox array or as bitboards; python-chess uses bitboards internally.
+- `legal_moves`, `push` and `pop` let one board walk down a line and back, which is how every search works.
+- The move tree grows by roughly $b^d$, and perft counts it exactly: 20, 400, 8,902, 197,281 from the start position.

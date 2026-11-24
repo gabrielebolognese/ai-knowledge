@@ -3974,7 +3974,7 @@
       "title": "Mini chess engine",
       "kind": "project",
       "level": "advanced",
-      "codeDir": "code/projects/chess/",
+      "codeDir": "code/projects/project-chess/",
       "blurb": "Build a mini-Stockfish: alpha-beta search with a neural-network evaluator trained on Lichess positions, speaking UCI.",
       "outcome": "A Python UCI engine with alpha-beta, quiescence, iterative deepening and a transposition table, using a 768→256→32→1 network as its evaluator, with a measured Elo estimate against Stockfish at limited strength.",
       "datasets": [
@@ -4052,7 +4052,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/perft.py"
+                "code/projects/project-chess/bench.py"
               ]
             },
             {
@@ -4096,7 +4096,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/evaluate.py"
+                "code/projects/project-chess/eval_material.py"
               ]
             },
             {
@@ -4146,7 +4146,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/search.py"
+                "code/projects/project-chess/search.py"
               ]
             },
             {
@@ -4198,8 +4198,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/search.py",
-                "code/projects/chess/ordering.py"
+                "code/projects/project-chess/search.py"
               ]
             },
             {
@@ -4247,8 +4246,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/search.py",
-                "code/projects/chess/tt.py"
+                "code/projects/project-chess/search.py"
               ]
             }
           ]
@@ -4303,8 +4301,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/make_dataset.py",
-                "code/projects/chess/features.py"
+                "code/projects/project-chess/data.py"
               ]
             },
             {
@@ -4355,8 +4352,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/nn_model.py",
-                "code/projects/chess/train_eval.py"
+                "code/projects/project-chess/model.py",
+                "code/projects/project-chess/train.py"
               ]
             },
             {
@@ -4410,8 +4407,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/nn_eval.py",
-                "code/projects/chess/engine.py"
+                "code/projects/project-chess/eval_nn.py",
+                "code/projects/project-chess/bench.py"
               ]
             },
             {
@@ -4472,7 +4469,9 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/chess/uci.py"
+                "code/projects/project-chess/uci.py",
+                "code/projects/project-chess/play.py",
+                "code/projects/project-chess/bench.py"
               ]
             }
           ]
