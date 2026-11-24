@@ -1,0 +1,26 @@
+# Node / Astro
+node_modules/
+dist/
+.astro/
+.vercel/
+
+# Test output
+playwright-report/
+test-results/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Companion-code data and model artifacts (downloaded / generated locally)
+code/**/data/
+code/**/checkpoints/
+*.pt
+*.pth
+*.npy
+*.npz
+
+# OS files
+.DS_Store
+Thumbs.db
