@@ -3022,9 +3022,9 @@
       "title": "Doodle recognition",
       "kind": "project",
       "level": "intermediate",
-      "codeDir": "code/projects/doodles/",
+      "codeDir": "code/projects/project-doodles/",
       "blurb": "Classify quick sketches from Google's Quick, Draw! dataset and build a live guessing app.",
-      "outcome": "A CNN at about 88-93% on 10 doodle classes and a canvas app that guesses what you draw.",
+      "outcome": "A CNN at about 95-96% on 10 doodle classes (measured: 95.7% after 5 CPU epochs) and a canvas app that guesses while you draw.",
       "datasets": [
         "quickdraw-repo"
       ],
@@ -3096,8 +3096,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/doodles/download.py",
-                "code/projects/doodles/data.py"
+                "code/projects/project-doodles/download.py",
+                "code/projects/project-doodles/data.py"
               ]
             },
             {
@@ -3118,7 +3118,7 @@
                 "convolutional-networks",
                 "training-loop"
               ],
-              "covers": "Same CNN family, expected 88-93%, why sketches are harder than digits.",
+              "covers": "Same CNN family, measured 95.7% test accuracy on 10 classes after 5 epochs (planning estimate was 88-93%), why sketches are harder than digits.",
               "sources": [
                 {
                   "id": "ha2017",
@@ -3143,8 +3143,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/doodles/model.py",
-                "code/projects/doodles/train.py"
+                "code/projects/project-doodles/models.py",
+                "code/projects/project-doodles/train.py"
               ]
             },
             {
@@ -3189,8 +3189,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/doodles/augment.py",
-                "code/projects/doodles/train.py"
+                "code/projects/project-doodles/augment.py",
+                "code/projects/project-doodles/train.py"
               ]
             }
           ]
@@ -3240,7 +3240,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/doodles/evaluate.py"
+                "code/projects/project-doodles/evaluate.py"
               ]
             },
             {
@@ -3285,8 +3285,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/doodles/preprocess.py",
-                "code/projects/doodles/draw_app.py"
+                "code/projects/project-doodles/preprocess.py",
+                "code/projects/project-doodles/draw_app.py"
               ]
             }
           ]

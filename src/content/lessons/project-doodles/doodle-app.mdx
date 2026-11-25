@@ -1,0 +1,190 @@
+---
+title: "Capstone: a live doodle-guessing app"
+slug: doodle-app
+track: project-doodles
+level: intermediate
+order: 50
+minutes: 25
+module: Errors and the app
+summary: Build a tkinter app that guesses your doodle while you draw. It records strokes like the Quick, Draw! game and converts them with the dataset's own recipe (bounding box, 256-unit square, 16-unit lines, antialiased shrink), which reproduces the official bitmaps to within 0.8% per pixel.
+hatnote: "The handwriting project has a similar app with MNIST-style preprocessing (see the handwriting capstone). This lesson explains why doodles need a different recipe."
+prerequisites: [doodle-errors]
+tools: [Python 3, PyTorch, tkinter, Pillow]
+outcomes:
+  - Build a canvas app that guesses while you draw
+  - Preprocess strokes like Quick, Draw! (bounding box, margin, line width, antialiased downsample)
+  - Show top-3 guesses with probabilities and explain confidence vs correctness
+build: preprocess.py and draw_app.py, a live doodle guesser with the dataset credit in its window
+reviewed: 2026-11-25
+seeAlso: [doodle-errors, quickdraw-dataset, handwriting-app]
+sources:
+  - id: quickdraw-repo
+    title: "The Quick, Draw! Dataset"
+    publisher: Google Creative Lab (GitHub)
+    url: https://github.com/googlecreativelab/quickdraw-dataset
+    accessed: 2026-11-25
+    type: dataset
+  - id: qd-issue19
+    title: "Quick, Draw! dataset issue #19: code snippet used to generate the bitmaps"
+    author: HalfdanJ (repository contributor)
+    publisher: GitHub
+    year: 2018
+    url: https://github.com/googlecreativelab/quickdraw-dataset/issues/19#issuecomment-402247262
+    accessed: 2026-11-25
+    type: code
+  - id: cc-by-4
+    title: "Creative Commons Attribution 4.0 International (CC BY 4.0)"
+    publisher: Creative Commons
+    url: https://creativecommons.org/licenses/by/4.0/
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-save-load
+    title: "Saving and loading models"
+    publisher: PyTorch Tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html
+    accessed: 2026-11-25
+    type: docs
+  - id: wiki-rdp
+    title: Ramer–Douglas–Peucker algorithm
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: py-tkinter
+    title: "tkinter: Python interface to Tcl/Tk"
+    publisher: Python documentation
+    url: https://docs.python.org/3/library/tkinter.html
+    accessed: 2026-11-25
+    type: docs
+  - id: guo2017
+    title: "On Calibration of Modern Neural Networks"
+    author: Chuan Guo, Geoff Pleiss, Yu Sun, Kilian Q. Weinberger
+    publisher: Proceedings of ICML 2017
+    year: 2017
+    url: https://arxiv.org/abs/1706.04599
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Quick, Draw! — the original game"
+    url: https://quickdraw.withgoogle.com/
+  - title: "Pillow: ImageDraw module"
+    url: https://pillow.readthedocs.io/en/stable/reference/ImageDraw.html
+exercises:
+  - id: doodle-app-framing
+    type: mcq
+    difficulty: easy
+    title: Which framing?
+    prompt: "The handwriting app shifts each drawing so that its centre of mass sits in the middle of the image. Why does the doodle app centre the **bounding box** instead?"
+    options:
+      - "Because the centre of mass cannot be computed for strokes"
+      - "Because the model must see inputs framed the way its training images were, and the Quick, Draw! bitmaps were centred on the bounding box"
+      - "Because bounding-box centring always gives higher accuracy"
+      - "Because doodles are larger than digits"
+    answer: 1
+    explanation: "Neither method is better in general. What matters is matching the training data: MNIST digits were placed by centre of mass, the Quick, Draw! bitmaps by bounding box. A drawing framed differently from the training images is a small [distribution shift](/glossary/#distribution-shift), and the check in this lesson shows how much accuracy that can cost."
+  - id: doodle-app-linewidth
+    type: short
+    difficulty: medium
+    title: Line width in pixels
+    prompt: "The generation snippet draws 16-unit lines in a 256-unit square with 16 units of padding on each side, then scales everything to 28 pixels. About how wide is a stroke in the final 28×28 image? What would happen if the app drew 4-pixel-wide strokes instead?"
+    answer: "The full width is 256 + 2·16 + 16 = 304 units, so one unit is 28/304 ≈ 0.092 px and a 16-unit line is about 1.5 px wide. Strokes 4 px wide would look much bolder than any training image, so the model would see unfamiliar inputs and its accuracy would drop."
+    explanation: "This is why `preprocess.py` works in the snippet's units and lets the final shrink set the width, instead of choosing a brush size by eye. The canvas brush in the app (5 screen pixels) only affects what you see, never what the model receives."
+  - id: doodle-app-confidence
+    type: reveal
+    difficulty: medium
+    title: "100% sure, and wrong"
+    prompt: "You draw a round apple with a short stem and the app says `clock 99.8%`. Does the 99.8% mean the model is almost certainly right? What does the number actually tell you?"
+    answer: "No. The softmax output is the model's score for each of the classes it knows, rescaled to sum to 1. It says the drawing looks much more like the model's idea of a clock than like any other of its ten classes, not that the answer is correct. On the test set the baseline model gave 100 wrong answers with more than 90% confidence, and it can never answer 'none of these'."
+    explanation: "Modern neural networks are often over-confident: their probabilities are higher than their actual accuracy, a property called poor calibration (Guo et al., 2017). The model also has no 'other' class, so a drawing of a dog still gets 100% spread over apple … umbrella. Treat the top-3 list as a ranking, not as a guarantee."
+---
+
+The **doodle-guessing app** is the end point of this project: you draw with the mouse and the trained network names your drawing, updating its top three guesses several times a second. The hard part is not the window but the conversion from strokes to pixels. The model only works well if your drawing reaches it framed exactly like the 28×28 Quick, Draw! bitmaps it was trained on, and that recipe differs from MNIST's.<Cite id="quickdraw-repo" />
+
+## How the bitmaps were made
+
+The dataset's README describes the simplified drawings: each drawing was moved to the top-left corner, scaled uniformly so that its larger side spans 0 to 255, resampled, and simplified with the Ramer–Douglas–Peucker algorithm with $\varepsilon = 2.0$.<Cite id="quickdraw-repo" /> That algorithm removes points that lie within $\varepsilon$ of the straight line between their neighbours, keeping the shape with fewer points.<Cite id="wiki-rdp" />
+
+The bitmaps were then rendered from these simplified strokes, but centred on the drawing's bounding box. The README links the generation code: lines 16 units wide with round ends, 16 units of padding, in a 256-unit square, scaled to 28×28 with antialiasing.<Cite id="qd-issue19" /> `preprocess.py` follows those steps with Pillow instead of the cairo graphics library used in the snippet.
+
+<MathSteps
+  title="From canvas coordinates to 28×28 pixels"
+  legend={[
+    { symbol: '(x, y)', meaning: 'a point of a stroke, in canvas pixels' },
+    { symbol: 'm, M', meaning: 'smallest coordinate, and largest extent (width or height) of the drawing' },
+    { symbol: 'w', meaning: 'largest x of the normalised drawing (its width)' },
+  ]}
+>
+  <Step tex="x' = (x - m_x)\cdot \frac{255}{M}" words="Move the drawing to the corner and scale it so its larger side spans 0 to 255. The same factor is used for x and y, so the shape keeps its proportions." />
+  <Step tex="x'' = x' + \hl{\frac{256 - w}{2}}" words="Centre the bounding box in a 256-unit square (and the same for y with the height). A tall drawing gets margins on the left and right." />
+  <Step tex="\text{total} = 256 + 2\cdot 16 + 16 = 304\ \text{units}" words="Padding of 16 on each side, plus half a line width on each side so thick strokes are not cut off." />
+  <Step tex="\frac{28}{304} \approx 0.092\ \text{px per unit} \;\Rightarrow\; 16\ \text{units} \approx \hl{1.5\ \text{px}}" words="Shrinking to 28 pixels makes the 16-unit lines about one and a half pixels wide, with grey antialiased edges." />
+</MathSteps>
+
+<CodeFile path="code/projects/project-doodles/preprocess.py" lines="46-83" highlight="53,54,55,66,67,75" title="preprocess.py: normalise, centre, draw, shrink" />
+
+Pillow cannot antialias thick lines directly, so `render` draws at ten times the final size (280×280) and shrinks with a box filter, which averages each 10×10 block into one pixel. Round caps and joints are drawn as small discs at every point.
+
+<Analogy breaks="A photocopier keeps every detail it is given; this recipe also throws away detail (simplification, a fixed line width), which is exactly what makes your drawing look like the training data.">
+The recipe works like a photocopier with fixed settings: whatever size or position you draw at, the copy comes out the same size, centred, and in the same pen, so the model always reads the same kind of page.
+</Analogy>
+
+<Exercise id="doodle-app-framing" />
+
+## Checking the recipe against the real bitmaps
+
+A recipe that "looks right" can still be subtly off. The dataset makes an exact test possible: the simplified stroke files and the bitmap files list the drawings in the same order. `python preprocess.py --check` downloads the first 200 simplified drawings of each class (about 70 KB per class, again with a Range request), renders them, and compares them pixel by pixel with the official bitmaps. On the test machine:<Cite id="qd-issue19" />
+
+| Measurement (2,000 drawings) | Result |
+|---|---|
+| Mean absolute pixel difference from the official bitmaps (0 to 1 scale) | **0.0079** |
+| Drawings that differ by less than 0.02 | 99% |
+| Baseline model accuracy on the official bitmaps | 97.2% |
+| … on the same drawings rendered by `preprocess.py` | **97.4%** |
+| … on the same drawings drawn on a 280-pixel canvas and simply shrunk | 50.4% |
+
+These drawings mix training, validation and test rows, so compare the three accuracy lines with each other, not with the test accuracy. The difference is clear: with the recipe, the model cannot tell your rendering from the original. Shrinking a canvas with the drawing off-centre and smaller than the frame halves the accuracy, even though the strokes have the right width.
+
+## The app
+
+`draw_app.py` builds the window with tkinter, the GUI toolkit in Python's standard library.<Cite id="py-tkinter" /> Unlike the handwriting app, it does not keep a bitmap of the canvas. It records each stroke as two lists of coordinates, the way the Quick, Draw! game recorded them, and passes the whole list to `strokes_to_input` whenever it guesses.<Cite id="quickdraw-repo" />
+
+<CodeFile path="code/projects/project-doodles/draw_app.py" lines="39-99" highlight="41,42,43,72,82,95" title="draw_app.py: strokes, live guesses, top 3" />
+
+- **Live prediction.** While the mouse button is held, the app guesses at most about seven times a second (every 0.15 s), and once more when you lift the pen. One forward pass of this small CNN takes a few milliseconds on a CPU, so drawing stays smooth.
+- **Top 3 with probabilities.** Softmax turns the ten scores into probabilities that sum to 1, and `topk` picks the three largest.
+- **What the model sees.** The preview on the right shows the 28×28 input, enlarged. If a guess surprises you, look there first.
+- **Credit line.** The window shows "Model trained on the Quick, Draw! dataset by Google (CC BY 4.0)", which is the attribution the licence asks for when you share the app or screenshots of it.<Cite id="cc-by-4" />
+
+The app loads a checkpoint written by `train.py`, which stores the weights together with the class names and the model settings, so it can rebuild the right network without extra arguments. Calling `model.eval()` after loading switches dropout and batch normalization to their evaluation behaviour.<Cite id="pt-save-load" />
+
+<Figure src="/figures/doodles/draw-app.png" alt="The app window: on the left a white canvas with a black umbrella drawn in three strokes; on the right a small black square with the same umbrella in white at 28 by 28 pixels, and the guesses umbrella 100.0%, tree 0.0%, house 0.0%. A grey credit line at the bottom reads: Model trained on the Quick, Draw! dataset by Google (CC BY 4.0)." caption="draw_app.py with the baseline model (95.67% test accuracy). The strokes were sent as mouse events to the canvas; screenshot taken on Windows 11." credit="Own work" license="CC BY 4.0" />
+
+<Exercise id="doodle-app-linewidth" />
+
+## Confidence is not correctness
+
+The percentages in the app are easy to misread. A softmax output says how the drawing compares with the classes the model knows; it is not the probability that the answer is right. Modern networks tend to be over-confident, giving probabilities higher than their real accuracy.<Cite id="guo2017" /> `evaluate.py` measures this for the baseline model: it is 97.7% confident on average when right, 57.2% when wrong, and 100 of its 865 test mistakes came with more than 90% confidence.
+
+The model also has no way to say "none of these". Draw a dog and all of the probability is still shared among apple, banana, cat … umbrella; it will probably say cat with high confidence. Handling unknown inputs needs an extra class or a separate check, which is beyond this project.
+
+<Exercise id="doodle-app-confidence" />
+
+## Try it
+
+From `code/projects/project-doodles/`:
+
+```bash
+python preprocess.py --check   # pixel difference and accuracy, as in the table above
+python draw_app.py --selftest  # no window: four shapes drawn with code
+python draw_app.py             # draw! Left button draws, right button clears
+```
+
+The app picks `checkpoints/doodles-aug-bn-e15.pt` if it exists (the 15-epoch regularised model from the augmentation lesson, which makes fewer confident mistakes), otherwise `doodles.pt`; `--ckpt` chooses another. With the baseline model, the self-test's circle with two hands, five-pointed star, square with a roof and trunk with a round crown were read as clock, star, house and tree, each at 100%; the regularised model gave the same answers, with 98.8% for the tree. `tkinter` ships with the python.org installers; on Debian and Ubuntu, install the `python3-tk` package.
+
+## Summary
+
+- The Quick, Draw! bitmaps were rendered from simplified strokes, centred on the bounding box, with 16-unit lines and 16 units of padding in a 256-unit square, then shrunk to 28×28.
+- `preprocess.py` reproduces that recipe; its output differs from the official bitmaps by 0.8% per pixel on average, and the model scores the same on both.
+- Skipping the recipe (just shrinking the canvas) cut accuracy from 97% to 50% in the check.
+- The app records strokes, guesses up to seven times a second and shows the top three classes, plus the dataset credit.
+- Softmax confidence is a ranking among known classes, not a probability of being right.

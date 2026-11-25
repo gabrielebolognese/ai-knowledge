@@ -1,0 +1,198 @@
+---
+title: Training a doodle classifier
+slug: doodle-cnn
+track: project-doodles
+level: intermediate
+order: 20
+minutes: 25
+module: Data and model
+summary: Reuse the 421,642-parameter CNN from the digits project on 10 classes of Quick, Draw! doodles, train it on a CPU in about four minutes to 95.7% test accuracy, read the per-epoch training and validation curves, and explain why doodles are harder than digits.
+hatnote: The architecture is explained layer by layer in "A CNN that reads digits at 99%"; this lesson only changes the data.
+prerequisites: [quickdraw-dataset]
+tools: [Python 3, PyTorch, matplotlib]
+outcomes:
+  - Adapt the CNN to 10 doodle classes and train it on CPU
+  - Compare its accuracy with the digits model and explain the gap
+  - Track train and validation curves per epoch
+build: train.py, which trains DoodleCNN and records training and validation accuracy per epoch
+reviewed: 2026-11-25
+seeAlso: [quickdraw-dataset, doodle-augmentation, mnist-cnn]
+sources:
+  - id: ha2017
+    title: "A Neural Representation of Sketch Drawings"
+    author: David Ha, Douglas Eck
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1704.03477
+    accessed: 2026-11-25
+    type: paper
+  - id: cs231n-cnn
+    title: "CS231n: Convolutional Neural Networks for Visual Recognition"
+    publisher: Stanford University
+    url: https://cs231n.github.io/convolutional-networks/
+    accessed: 2026-11-25
+    type: course
+  - id: pt-conv2d
+    title: torch.nn.Conv2d
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
+    accessed: 2026-11-25
+    type: docs
+  - id: quickdraw-repo
+    title: "The Quick, Draw! Dataset"
+    publisher: Google Creative Lab (GitHub)
+    url: https://github.com/googlecreativelab/quickdraw-dataset
+    accessed: 2026-11-25
+    type: dataset
+  - id: pt-ce
+    title: torch.nn.CrossEntropyLoss
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
+    accessed: 2026-11-25
+    type: docs
+  - id: kingma2014
+    title: "Adam: A Method for Stochastic Optimization"
+    author: Diederik P. Kingma, Jimmy Ba
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1412.6980
+    accessed: 2026-11-25
+    type: paper
+  - id: d2l-dropout
+    title: "Dive into Deep Learning, 5.6 Dropout"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/dropout.html
+    accessed: 2026-11-25
+    type: book
+furtherReading:
+  - title: "Karpathy: A Recipe for Training Neural Networks"
+    url: https://karpathy.github.io/2019/04/25/recipe/
+  - title: "CNN Explainer (interactive visualisation)"
+    url: https://poloclub.github.io/cnn-explainer/
+exercises:
+  - id: doodle-chance-loss
+    type: numeric
+    difficulty: easy
+    title: The loss of a clueless model
+    prompt: "Before training, the network gives roughly equal probability to all 10 classes. What cross-entropy loss do you expect at the very first step? (Natural logarithm, two decimals.)"
+    answer: 2.30
+    tolerance: 0.01
+    hint: "Cross-entropy is $-\\ln p$, where $p$ is the probability given to the correct class."
+    explanation: "With $p = 1/10$ for the correct class, the loss is $-\\ln 0.1 = \\ln 10 \\approx 2.30$. If the first printed losses are far above this, something is wrong (for example softmax applied twice or labels shifted). For the 2-class smoke test the same reasoning gives $\\ln 2 \\approx 0.69$, which is the threshold `train.py --smoke` checks."
+  - id: doodle-val-above-train
+    type: mcq
+    difficulty: medium
+    title: Validation above training
+    prompt: "In the first epoch, `train.py` reports 85.3% training accuracy but 92.7% validation accuracy. What is the most likely explanation?"
+    options:
+      - "The validation set is easier, so the split is broken"
+      - "Training accuracy is averaged over the whole epoch while the weights are still improving, and it is measured with dropout switched on; validation is measured once at the end, with dropout off"
+      - "The model is overfitting"
+      - "The learning rate is too high"
+    answer: 1
+    explanation: "The training figure is a running average: batches from the start of the epoch were scored by a much worse model. It is also measured in `model.train()` mode, where dropout removes half of the hidden units. Validation is measured after the epoch in `model.eval()` mode. Both effects make training accuracy look lower. Overfitting would show the opposite, training clearly **above** validation."
+  - id: doodle-why-harder
+    type: reveal
+    difficulty: medium
+    title: Why are doodles harder than digits?
+    prompt: "The same network, with the same number of parameters, reaches about 99% on MNIST but 95.7% on 10 doodle classes, and the gap grows with more classes. Name three properties of the doodle data that explain this."
+    answer: "1) Much more variety inside each class: a cat can be a face, a whole body or a side view, while a digit has a few standard shapes. 2) Drawings are rough and often unfinished, because players had at most 20 seconds and stopped once the game guessed. 3) Some labels are loose or wrong: the dataset keeps drawings the game did not recognise, so some 'clouds' are a single line. Also, different objects can share an outline (a round apple and a round clock face)."
+    explanation: "Digits were written carefully on forms by people who were asked to write one specific digit, and MNIST was normalised to a common size. Doodles are quick sketches of whole objects, drawn in many styles. The next lessons address the parts a model can fix (variety in position and size, through augmentation) and show which errors are really label problems."
+---
+
+A **doodle classifier** is a neural network that takes a small sketch and says which object it shows. This lesson trains one with the same <Term slug="convolutional-neural-network">convolutional network</Term> used for handwritten digits, changing only the data: 90,000 Quick, Draw! drawings of ten everyday objects.<Cite id="quickdraw-repo" /> On a laptop CPU it reaches about 95.7% test accuracy in roughly four minutes, against about 99% for digits, and the curves show what happens in each epoch.
+
+## The same network, new data
+
+The doodle bitmaps have exactly the format of MNIST: 28×28 pixels, one channel, white strokes on black. So the model needs no change except the number of outputs, which is ten here as well. `DoodleCNN` is the digits CNN with one optional extra, batch normalization, which stays off until the next lesson.
+
+<CodeFile path="code/projects/project-doodles/models.py" lines="11-39" highlight="23,28,29,32,34" title="models.py: DoodleCNN" />
+
+Two convolutional blocks turn the 28×28 image into 64 feature maps of 7×7; each block is a 3×3 convolution, a ReLU and a 2×2 max-pool.<Cite id="pt-conv2d" /> A fully connected layer of 128 units with <Term slug="dropout" /> then produces ten scores, one per class. `python models.py` confirms 421,642 parameters, the same count as for digits.
+
+<Analogy breaks="A person who has learned to read digits does not need retraining to look at sketches; the network keeps only its architecture and starts again from random weights.">
+Using the same network on doodles is like giving the same pair of eyes a new picture book: the machinery for finding edges, corners and loops is the same, but what those parts add up to has to be learned again.
+</Analogy>
+
+Why does a network built for digits suit sketches at all? Convolutional layers assume that useful patterns are local and can appear anywhere in the image, and that holds for strokes of any kind.<Cite id="cs231n-cnn" /> Early filters learn short line segments and curves; later ones combine them into parts such as a roof corner, a whisker or a clock hand.
+
+## The training loop, with a validation check
+
+`train.py` follows the standard five steps per batch: forward pass, loss, clear the old gradients, backpropagation, update. The loss is <Term slug="cross-entropy" />, which applies softmax to the ten raw scores and penalises a low probability for the correct class.<Cite id="pt-ce" /> The optimiser is Adam with a learning rate of 0.001, a common default that adapts the step size of each weight separately.<Cite id="kingma2014" />
+
+<CodeFile path="code/projects/project-doodles/train.py" lines="47-69" highlight="48,51,52,53,54,55,64" title="train.py: one epoch, and accuracy on a held-out set" />
+
+After every epoch the script measures accuracy on the 10,000 validation doodles, which the model never trains on. The test set is used only once, at the very end. This keeps the test result honest: any setting you choose by looking at validation curves (number of epochs, dropout, augmentation) has not been tuned on the test data.
+
+### What the loss should look like
+
+<MathSteps
+  title="Cross-entropy at the start and at the end"
+  legend={[
+    { symbol: 'p_y', meaning: 'probability the model gives to the correct class' },
+    { symbol: 'L', meaning: 'cross-entropy loss for one doodle' },
+  ]}
+>
+  <Step tex="L = -\ln p_y" words="The loss is small when the correct class gets a high probability and large when it gets a low one." />
+  <Step tex="p_y = \tfrac{1}{10} \;\Rightarrow\; L = \ln 10 \approx \hl{2.30}" words="An untrained network spreads its bets evenly, so the very first losses should be close to 2.30." />
+  <Step tex="L = 0.171 \;\Rightarrow\; p_y \approx e^{-0.171} \approx \hl{0.84}" words="The average loss after five epochs. Read loosely: a typical training doodle gets about 84% probability on its true class. Accuracy is higher, because it needs only the largest of the ten scores, not a confident one." />
+</MathSteps>
+
+<Exercise id="doodle-chance-loss" />
+
+## Results on a CPU
+
+Measured on the course's test machine (Windows 11 laptop CPU, PyTorch 2.15 CPU build, default seed), `python train.py` took 4 minutes 16 seconds for five epochs:
+
+| Epoch | Train loss | Train accuracy | Validation accuracy | Time so far |
+|---|---|---|---|---|
+| 1 | 0.484 | 85.34% | 92.72% | 49 s |
+| 2 | 0.264 | 92.33% | 94.01% | 96 s |
+| 3 | 0.222 | 93.55% | 95.17% | 145 s |
+| 4 | 0.193 | 94.30% | 95.28% | 196 s |
+| 5 | 0.171 | 94.95% | **95.75%** | 242 s |
+
+The final test accuracy was **95.67%** on 20,000 doodles: 865 mistakes. The planning estimate for this project was 88-93%; these ten classes turned out easier than expected because they look quite different from one another. Expect a few tenths of a percent of variation between machines and seeds, and lower numbers if you pick classes that resemble each other.
+
+<Figure src="/figures/doodles/curves-doodles.png" alt="Line chart of accuracy over five epochs. The validation line starts at about 0.93 and rises to about 0.96. The training line starts lower, at about 0.85, and rises to about 0.95, staying just below the validation line." caption="Training and validation accuracy per epoch for the baseline model (from train.py). Validation stays above training throughout; the two lines are converging, and neither has flattened out completely after five epochs." credit="Own work" license="CC BY 4.0" />
+
+### Reading the curves
+
+Validation accuracy is *above* training accuracy in every epoch. That looks wrong but is normal here, for two reasons. First, the training figure is averaged over the epoch while the model is still improving, so early batches drag it down. Second, it is measured with dropout active, which removes half of the hidden units at every step; validation is measured in evaluation mode with all units present.<Cite id="d2l-dropout" />
+
+The warning sign to watch for is the opposite: training accuracy climbing while validation accuracy stalls or falls. That gap is overfitting, and the next lesson measures how much dropout and other regularisers prevent it.
+
+<Exercise id="doodle-val-above-train" />
+
+## Why doodles are harder than digits
+
+On MNIST the same network reaches about 99% in three epochs; here it reaches 95.7% in five. The data explains most of the gap:
+
+- **More variety per class.** A digit has a handful of standard shapes. A cat can be a face with whiskers, a whole body from the side, or a few loops.
+- **Rough, unfinished drawings.** Players had at most 20 seconds per word, so many sketches are minimal or incomplete.<Cite id="ha2017" />
+- **Loose labels.** The data keeps every moderated drawing with the word the player was given, including drawings the game failed to recognise, and each record notes whether it was recognised.<Cite id="quickdraw-repo" /> A "cloud" that is a single line is labelled cloud all the same.
+
+The sketch-rnn authors also observed that their generative model struggled once it had to cover many classes at once: samples from a model trained on 75 classes mixed features of several objects.<Cite id="ha2017" /> Classification with a small CNN shows a milder version of the same effect: every class you add brings new look-alikes.
+
+<Exercise id="doodle-why-harder" />
+
+## Try it
+
+From `code/projects/project-doodles/`, after `python download.py`:
+
+```bash
+python train.py --smoke     # 2 classes x 500 doodles, 2 epochs: about 2 s of training
+python train.py             # 10 classes, 5 epochs: about 4 minutes on a laptop CPU
+python train.py --epochs 8  # a longer run; compare the validation curve
+```
+
+The smoke test is a setup check, not a result. It needs `python download.py --smoke` first and confirms that the loss falls below $\ln 2 \approx 0.69$ (95.8% test accuracy on 166 doodles on the test machine). Each run saves a checkpoint in `checkpoints/`, the history as JSON in `outputs/`, and the curves as a PNG.
+
+## Summary
+
+- The doodle bitmaps have MNIST's format, so the digits CNN (421,642 parameters) works without changes.
+- Five epochs on 90,000 doodles took about four minutes on a CPU and reached 95.67% test accuracy, against about 99% for digits.
+- The first loss should be near $\ln 10 \approx 2.30$; a validation set checked after each epoch guides decisions, and the test set is used once.
+- Validation above training is expected early on (running average, dropout on); training clearly above validation would mean overfitting.
+- Doodles are harder because of variety within classes, rough unfinished drawings and loose labels.

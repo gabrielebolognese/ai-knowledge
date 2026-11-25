@@ -1,0 +1,233 @@
+---
+title: Data augmentation and regularization for sketches
+slug: doodle-augmentation
+track: project-doodles
+level: intermediate
+order: 30
+minutes: 20
+module: Data and model
+summary: Add random shifts, rotations and rescaling as data augmentation, switch dropout and batch normalization on and off, and measure each change one at a time on the validation set, both with the full 90,000 doodles and with a small 9,000-doodle training set where overfitting is easy to see.
+hatnote: Overfitting and the regularisers themselves are introduced in the intermediate track; this lesson measures them on real data.
+prerequisites: [doodle-cnn]
+tools: [Python 3, PyTorch, torchvision]
+outcomes:
+  - Add small shifts, rotations and scaling as augmentation
+  - Add dropout and batch normalization and measure the effect
+  - Run a controlled before/after comparison on the validation set
+build: augment.py and the --augment, --batch-norm and --dropout options of train.py
+reviewed: 2026-11-25
+seeAlso: [doodle-cnn, doodle-errors]
+sources:
+  - id: d2l-dropout
+    title: "Dive into Deep Learning, 5.6 Dropout"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/dropout.html
+    accessed: 2026-11-25
+    type: book
+  - id: ioffe2015
+    title: "Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift"
+    author: Sergey Ioffe, Christian Szegedy
+    publisher: arXiv
+    year: 2015
+    url: https://arxiv.org/abs/1502.03167
+    accessed: 2026-11-25
+    type: paper
+  - id: goodfellow2016-reg
+    title: "Deep Learning, chapter 7: Regularization for Deep Learning"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/regularization.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-aug
+    title: "Dive into Deep Learning, 14.1 Image Augmentation"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_computer-vision/image-augmentation.html
+    accessed: 2026-11-25
+    type: book
+  - id: tv-randomaffine
+    title: torchvision.transforms.v2.RandomAffine
+    publisher: PyTorch (torchvision)
+    url: https://docs.pytorch.org/vision/stable/generated/torchvision.transforms.v2.RandomAffine.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-bn2d
+    title: torch.nn.BatchNorm2d
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
+    accessed: 2026-11-25
+    type: docs
+  - id: srivastava2014
+    title: "Dropout: A Simple Way to Prevent Neural Networks from Overfitting"
+    author: Nitish Srivastava, Geoffrey Hinton, Alex Krizhevsky, Ilya Sutskever, Ruslan Salakhutdinov
+    publisher: Journal of Machine Learning Research
+    year: 2014
+    url: https://jmlr.org/papers/v15/srivastava14a.html
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Shorten & Khoshgoftaar (2019): A survey on Image Data Augmentation for Deep Learning"
+    url: https://doi.org/10.1186/s40537-019-0197-0
+  - title: "torchvision: Getting started with transforms v2"
+    url: https://docs.pytorch.org/vision/stable/auto_examples/transforms/plot_transforms_getting_started.html
+exercises:
+  - id: aug-safe-transform
+    type: mcq
+    difficulty: easy
+    title: Which augmentation keeps the label?
+    prompt: "Which of these random transformations is **least** safe for the ten doodle classes?"
+    options:
+      - "Shift by up to 2 pixels"
+      - "Rotate by up to ±10 degrees"
+      - "Rotate by up to ±180 degrees"
+      - "Scale between 90% and 110%"
+    answer: 2
+    explanation: "Small shifts, tilts and size changes describe how people really draw, so the label stays true. A rotation of up to 180 degrees turns trees and houses upside down and a banana into a smile; such images never occur in the test set, and the model wastes capacity learning them. For digits the danger is worse: a 6 rotated by 180 degrees is a 9."
+  - id: aug-one-variable
+    type: mcq
+    difficulty: medium
+    title: A fair comparison
+    prompt: "You want to know whether augmentation helps. Which experiment answers that question?"
+    options:
+      - "Train with augmentation for 10 epochs and without for 5, then compare test accuracy"
+      - "Train with and without augmentation, everything else identical (epochs, seed, data, dropout, batch norm), and compare validation accuracy"
+      - "Add augmentation and batch normalization at once, and compare with the baseline on the test set"
+      - "Run the augmented model several times and keep the best test score"
+    answer: 1
+    explanation: "Change one variable at a time and keep everything else fixed, otherwise you cannot tell which change caused the difference. Compare on the validation set, so the test set stays an unbiased final check. Picking the best of several runs by test score is a quiet way of training on the test set."
+  - id: aug-explain-small
+    type: reveal
+    difficulty: medium
+    title: Why does augmentation matter more with less data?
+    prompt: "In this lesson's measurements, augmentation changed validation accuracy only a little with 90,000 training doodles, but noticeably with 9,000. Explain why."
+    answer: "With 9,000 doodles the network can nearly memorise the training set within a few epochs: training accuracy keeps rising while validation accuracy stalls, which is overfitting. Augmentation shows the model a slightly different version of every doodle in every epoch, so memorising exact pixels no longer works and it has to learn shapes that survive small changes. With 90,000 doodles the data already contains a lot of natural variation in position and size, and five epochs are not enough to memorise it, so there is less overfitting for augmentation to fix."
+    explanation: "Regularisation helps in proportion to how much the model overfits. Always look at the gap between training and validation accuracy before adding regularisers; if there is no gap, they mostly slow learning down."
+---
+
+**Data augmentation** is the practice of training on randomly altered copies of the training examples, using changes that do not alter the label: a doodle moved two pixels to the left is still an umbrella.<Cite id="d2l-aug" /> Together with dropout and batch normalization it is one of the standard tools against overfitting. This lesson adds each tool to the doodle CNN one at a time and measures what it does, first on the full training set and then on a small one where the effect is easier to see.
+
+## Three regularisers in one sentence each
+
+- **<Term slug="data-augmentation">Augmentation</Term>** gives the model a fresh variant of every image in every epoch, so it cannot memorise exact pixels.<Cite id="d2l-aug" />
+- **<Term slug="dropout" />** sets a random half of the hidden units to zero at each training step, so no single unit can be relied on.<Cite id="srivastava2014" />
+- **<Term slug="batch-normalization">Batch normalization</Term>** re-centres and re-scales each channel using the statistics of the current batch; its authors reported reaching the same accuracy with 14 times fewer training steps on their image model.<Cite id="ioffe2015" />
+
+All three count as regularisation in the broad sense used by Goodfellow, Bengio and Courville: any change to training intended to reduce the error on new data rather than on the training data.<Cite id="goodfellow2016-reg" />
+
+<Analogy breaks="A pupil understands the point of practising variations; the network only adjusts weights to reduce the loss on whatever images it is shown.">
+Augmentation is like practising a sport under slightly different conditions every day: a new court, a bit of wind, another ball. You stop relying on one exact setting and learn the movement itself.
+</Analogy>
+
+## Augmentation for doodles
+
+`augment.py` defines one random affine transform: rotate by up to ±10 degrees, shift by up to 8% of the width (about 2 pixels) and scale between 90% and 110%. torchvision's `RandomAffine` draws new random values every time it is called.<Cite id="tv-randomaffine" />
+
+<CodeFile path="code/projects/project-doodles/augment.py" lines="14-16" highlight="16" title="augment.py: the transform" />
+
+The transform is applied in the training `Dataset`, per image and on every read, so each epoch sees different variants. The validation and test sets are never augmented: they must look like real inputs.
+
+<CodeFile path="code/projects/project-doodles/data.py" lines="65-82" highlight="75,82" title="data.py: augmentation is applied when an image is read" />
+
+<Figure src="/figures/doodles/augment-examples.png" alt="Nine small doodles of the same apple side by side. The first is the original; the eight others are slightly shifted, tilted, enlarged or shrunk copies. In one enlarged copy the top of the stem touches the edge of the frame." caption="One training doodle and eight random augmentations from augment.py. The changes are small enough that the label stays obvious. Because the doodles fill most of the frame, scaling up by 10% can push a stroke over the edge." credit="Quick, Draw! dataset by Google; augmentations made with augment.py" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://github.com/googlecreativelab/quickdraw-dataset" />
+
+### Which changes keep the label
+
+A change is safe when real inputs vary in the same way. People draw slightly off-centre, slightly tilted and at slightly different sizes, so those changes describe the test data. Large rotations do not: an upside-down tree or house never appears in the test set, and for digits a half turn changes the label outright (6 and 9). Mirroring is harmless for most of these ten classes but would be wrong for text.
+
+<Exercise id="aug-safe-transform" />
+
+## Batch normalization in a few steps
+
+<MathSteps
+  title="What BatchNorm2d does to one channel"
+  legend={[
+    { symbol: 'x_i', meaning: 'one value of the channel, at one position, in one image of the batch' },
+    { symbol: '\\mu, \\sigma^2', meaning: 'mean and variance of that channel over the batch and all positions' },
+    { symbol: '\\gamma, \\beta', meaning: 'learned scale and shift (one pair per channel)' },
+    { symbol: '\\epsilon', meaning: 'a tiny constant against division by zero' },
+  ]}
+>
+  <Step tex="\mu = \frac{1}{m}\sum_{i=1}^{m} x_i, \qquad \sigma^2 = \frac{1}{m}\sum_{i=1}^{m} (x_i - \mu)^2" words="Average the channel over every image in the batch and every pixel position, and measure its spread." />
+  <Step tex="\hat{x}_i = \frac{x_i - \mu}{\sqrt{\sigma^2 + \epsilon}}" words="Shift and divide so the channel has mean 0 and variance 1 in this batch." />
+  <Step tex="y_i = \hl{\gamma}\,\hat{x}_i + \hl{\beta}" words="Let the network undo the normalisation if it helps: γ and β are learned, two numbers per channel, 192 in total for 32 + 64 channels." />
+  <Step tex="\text{eval: } \mu, \sigma^2 \leftarrow \text{running averages from training}" words="At test time there may be a single image, so the layer uses averages collected during training instead of batch statistics." />
+</MathSteps>
+
+This follows the definition in the original paper and the PyTorch layer.<Cite id="ioffe2015" /><Cite id="pt-bn2d" /> Because the layer behaves differently in training and evaluation, forgetting `model.eval()` before measuring gives wrong, batch-dependent results, the same trap as with dropout.<Cite id="d2l-dropout" />
+
+## The controlled comparison
+
+Each run below changes one thing relative to the baseline (dropout 0.5, no batch normalization, no augmentation) and keeps the rest identical: same data, same seed, five epochs, Adam at 0.001. The decision metric is validation accuracy; test accuracy is shown once per model for completeness.
+
+Measured on the course's test machine (laptop CPU, PyTorch 2.15, seed 0), after the fifth epoch:
+
+| Run | Change from baseline | Train acc. | Validation acc. | Gap | Test acc. | Time |
+|---|---|---|---|---|---|---|
+| `train.py` | none (baseline) | 94.95% | 95.75% | −0.80 | 95.67% | 4.0 min |
+| `--dropout 0` | dropout off | 96.90% | 95.89% | **+1.01** | 95.67% | 3.9 min |
+| `--batch-norm` | batch normalization on | 94.78% | **95.91%** | −1.13 | 95.72% | 5.1 min |
+| `--augment` | augmentation on | 92.23% | 95.66% | −3.43 | 95.44% | 7.9 min |
+| `--augment --batch-norm` | both | 90.88% | 95.48% | −4.60 | 95.27% | 8.7 min |
+
+"Gap" is training minus validation accuracy, in percentage points. Three things stand out:
+
+- **The differences are tiny.** All five validation scores lie within 0.45 points of each other. With 10,000 validation doodles, the sampling error of an accuracy near 96% is about $\sqrt{0.96 \times 0.04 / 10{,}000} \approx 0.2$ points, so differences of a few tenths are within noise.
+- **Only the run without dropout overfits**, and only slightly: its training accuracy passes validation from epoch 3 and the gap reaches one point.
+- **Augmentation costs time and has not paid off yet after five epochs.** Transforming every image doubles the epoch time on a CPU, and its training accuracy is lower because it is measured on the harder, transformed images. With 90,000 varied doodles and only five epochs there is little overfitting for it to cure.
+
+### Longer training
+
+Heavily regularised models usually learn more slowly, so five epochs may be unfair to them. Both the baseline and the combination were therefore trained for 15 epochs as well (12 and 27 minutes on the test machine):
+
+| Run, 15 epochs | Train acc. | Best validation acc. | Gap at epoch 15 | Test acc. | Confident mistakes |
+|---|---|---|---|---|---|
+| baseline | 97.46% | 96.48% | **+0.98** | 96.36% | 187 |
+| `--augment --batch-norm` | 93.36% | **96.78%** | −3.42 | 96.39% | **107** |
+
+"Confident mistakes" counts wrong test answers given with more than 90% probability. The baseline's validation accuracy stops improving around epoch 8 while its training accuracy keeps rising, so its gap grows: the start of overfitting. The regularised model is still improving at epoch 15 and never overfits. On the test set the two end level (96.4%), but the regularised model is wrong with high confidence 43% less often, which matters in the drawing app. It is the model `draw_app.py` prefers when it finds it.
+
+<Exercise id="aug-one-variable" />
+
+## A small training set makes the effect visible
+
+To see overfitting clearly, the same comparison was repeated with only 1,200 drawings per class (900 for training, 100 for validation and 200 for test), for 15 epochs:
+
+| Run (one change per row) | Train acc. | Validation acc. | Gap | Test acc. | Time |
+|---|---|---|---|---|---|
+| no dropout, no augmentation | **98.97%** | 92.80% | **+6.17** | 91.55% | 67 s |
+| + dropout 0.5 | 94.99% | 93.80% | +1.19 | 91.75% | 68 s |
+| + augmentation | 89.52% | **94.80%** | −5.28 | 92.90% | 134 s |
+| + batch normalization | 87.99% | 93.90% | −5.91 | **93.05%** | 158 s |
+
+Now the picture is clear. Without any regulariser the network nearly memorises its 9,000 training doodles (99% training accuracy) while validation accuracy stalls around 93% from epoch 5 on: a gap of six points, which is overfitting. Dropout shrinks the gap to about one point. Augmentation adds two more points of validation accuracy and 1.2 points on the test set, the largest gain of any single change. Batch normalization on top makes no clear difference here. The validation and test sets are small in this experiment (1,000 and 2,000 doodles), so differences under about one point are within noise.
+
+<Figure src="/figures/doodles/curves-small-data.png" alt="Two line charts side by side, accuracy against 15 epochs. Left, without regularisation: the training line climbs to almost 1.0 while the validation line flattens at about 0.93, opening a widening gap. Right, with dropout and augmentation: the validation line rises to about 0.95 and stays above the training line, which ends near 0.90." caption="Training and validation accuracy with 900 training doodles per class. Left: no regularisation, a typical overfitting picture. Right: dropout plus augmentation, higher validation accuracy and no memorisation." credit="Own work, from the train.py histories" license="CC BY 4.0" />
+
+<Exercise id="aug-explain-small" />
+
+## Try it
+
+From `code/projects/project-doodles/`:
+
+```bash
+python augment.py                                    # outputs/augment-examples.png
+python train.py --dropout 0 --tag no-dropout         # one change at a time ...
+python train.py --batch-norm --tag bn
+python train.py --augment --tag aug
+python train.py --augment --batch-norm --tag aug-bn  # ... then the combination
+python train.py --augment --batch-norm --epochs 15 --tag aug-bn-e15   # about 27 minutes
+python train.py --per-class 1200 --epochs 15 --dropout 0 --tag small-plain
+python train.py --per-class 1200 --epochs 15 --augment --batch-norm --tag small-aug-bn
+```
+
+Each run writes `outputs/history-<name>.json` and a curves plot, so you can lay the validation curves side by side. Keep notes of every run, including the ones that did not help.
+
+## Summary
+
+- Augmentation trains on randomly shifted, tilted and rescaled copies; only changes that real inputs also show are safe, and only the training set is augmented.
+- Batch normalization standardises each channel per batch, then applies a learned scale and shift; in evaluation mode it uses running averages.
+- Change one variable at a time, compare on the validation set, and keep the test set for the end.
+- Regularisers help in proportion to the overfitting: hardly at all with 90,000 doodles and five epochs, clearly with 9,000 doodles (test 91.55% → 93.05%), and over 15 epochs they stop the gap from growing and cut the confident mistakes by 43%.

@@ -1,0 +1,199 @@
+---
+title: "Reading the confusion matrix: which doodles get mixed up"
+slug: doodle-errors
+track: project-doodles
+level: intermediate
+order: 40
+minutes: 15
+module: Errors and the app
+summary: Plot the 10×10 confusion matrix of the doodle CNN, find the pairs it confuses most (star → cat, cloud → fish), look at its most confident mistakes to judge whether the label or the model is wrong, and measure what one look-alike class (pear next to apple) does to accuracy.
+hatnote: The confusion matrix itself is introduced in "Evaluating the digit model"; this lesson applies it to messier data.
+prerequisites: [doodle-augmentation]
+tools: [Python 3, PyTorch, matplotlib]
+outcomes:
+  - Plot the 10×10 confusion matrix and find the most confused pairs
+  - Inspect misclassified drawings and judge whether the label or the model is wrong
+  - Predict how accuracy changes with more or more similar classes
+build: evaluate.py, which prints per-class accuracy, the confusion matrix and the top confusions, and plots the worst mistakes
+reviewed: 2026-11-25
+seeAlso: [doodle-augmentation, doodle-app, mnist-evaluate]
+sources:
+  - id: sklearn-metrics
+    title: "Metrics and scoring: quantifying the quality of predictions"
+    publisher: scikit-learn
+    url: https://scikit-learn.org/stable/modules/model_evaluation.html
+    accessed: 2026-11-25
+    type: docs
+  - id: quickdraw-repo
+    title: "The Quick, Draw! Dataset"
+    publisher: Google Creative Lab (GitHub)
+    url: https://github.com/googlecreativelab/quickdraw-dataset
+    accessed: 2026-11-25
+    type: dataset
+  - id: mlcc-metrics
+    title: "Classification: Accuracy, recall, precision, and related metrics"
+    publisher: Google Machine Learning Crash Course
+    url: https://developers.google.com/machine-learning/crash-course/classification/accuracy-precision-recall
+    accessed: 2026-11-25
+    type: course
+  - id: wiki-confusion
+    title: Confusion matrix
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Confusion_matrix
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: northcutt2021
+    title: "Pervasive Label Errors in Test Sets Destabilize Machine Learning Benchmarks"
+    author: Curtis G. Northcutt, Anish Athalye, Jonas Mueller
+    publisher: NeurIPS 2021 Datasets and Benchmarks Track
+    year: 2021
+    url: https://arxiv.org/abs/2103.14749
+    accessed: 2026-11-25
+    type: paper
+  - id: qd-categories
+    title: "Quick, Draw! categories.txt (345 categories)"
+    publisher: Google Creative Lab (GitHub)
+    url: https://raw.githubusercontent.com/googlecreativelab/quickdraw-dataset/master/categories.txt
+    accessed: 2026-11-25
+    type: dataset
+furtherReading:
+  - title: "labelerrors.com: browse label errors found in popular datasets"
+    url: https://labelerrors.com/
+  - title: "scikit-learn: ConfusionMatrixDisplay"
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.ConfusionMatrixDisplay.html
+exercises:
+  - id: doodle-cat-precision
+    type: numeric
+    difficulty: easy
+    title: Precision of "cat"
+    prompt: "In the baseline matrix, the cat column holds 1,908 correct cat predictions and 261 doodles of other classes that the model also called cat. What is the **precision** for cat, in percent (one decimal)?"
+    answer: 88.0
+    tolerance: 0.1
+    hint: "Precision = correct predictions of the class ÷ all predictions of the class (the whole column)."
+    explanation: "$1{,}908 / (1{,}908 + 261) = 1{,}908 / 2{,}169 \\approx 88.0\\%$. Its **recall** (the row) is much higher: $1{,}908 / 2{,}000 = 95.4\\%$. Low precision with good recall is the signature of a class the model uses as a fallback for drawings it is unsure about."
+  - id: doodle-more-classes
+    type: mcq
+    difficulty: medium
+    title: "Predict: 345 classes"
+    prompt: "The same CNN gets 95.7% on these 10 visually distinct classes. What do you expect if you train it on all 345 Quick, Draw! categories, with the same number of drawings per class?"
+    options:
+      - "About the same, because each class still has 12,000 drawings"
+      - "Clearly lower, because many more look-alike pairs appear (for example several animals, fruits and vehicles) and the chance level drops to 0.3%"
+      - "Higher, because more data always helps"
+      - "Exactly 95.7% divided by 34.5"
+    answer: 1
+    explanation: "Per-class data is not the bottleneck; similarity between classes is. With 345 categories there are many near-duplicates in outline (cup and mug, many four-legged animals, several round objects), and a small 28×28 CNN cannot separate all of them. The pear experiment in this lesson shows the effect with just one extra class. Accuracy does not scale by a simple formula; you have to measure it."
+  - id: doodle-label-or-model
+    type: reveal
+    difficulty: medium
+    title: Who is wrong?
+    prompt: "Among the model's most confident mistakes is a drawing labelled **clock** that shows a round fruit with a stem; the model said **apple, 100%**. Is this a model error? How should such cases be counted, and what could you do about them?"
+    answer: "It is a label error, not a model error: the player was asked for a clock but drew something that looks like an apple, and the model's answer matches the picture. It still counts as a mistake in the measured accuracy, so a few tenths of a percent of 'errors' cannot be fixed by any model. You could inspect and relabel or remove such drawings (keeping a record), or keep only drawings the game recognised (the 'recognized' field of the stroke files), but then you must apply the same rule to the test set and say so."
+    explanation: "Label noise is common even in famous benchmarks: Northcutt and colleagues estimated an average of 3.3% label errors across the test sets of ten popular datasets. Before trying to fix the last few percent with a bigger model, look at the mistakes. Some are the model's fault, and some are the data's."
+---
+
+A **confusion matrix** is a table that counts, for every true class, how often the model predicted each class: rows are the true labels, columns the predictions, and the diagonal holds the correct answers.<Cite id="wiki-confusion" /> One accuracy figure says how often the doodle CNN is wrong; the matrix says *how* it is wrong. The digits project introduced it in [Evaluating the digit model](/course/project-digits-letters/mnist-evaluate/); doodles make it more interesting, because their errors are less tidy. This lesson reads the matrix of the baseline model (95.67% test accuracy), looks at its worst mistakes, and measures what happens when a look-alike class joins the set.
+
+## The 10×10 matrix
+
+`evaluate.py` runs the 20,000 test doodles through the model, turns the scores into probabilities with <Term slug="softmax" />, counts every (true, predicted) pair, and prints and plots the result. Counting is a single indexed addition in PyTorch: each pair adds 1 to cell $[t, p]$.
+
+<CodeFile path="code/projects/project-doodles/evaluate.py" lines="28-40" highlight="31,37,38" title="evaluate.py: counting the matrix and ranking the mistakes" />
+
+<Figure src="/figures/doodles/confusion-doodles.png" alt="A 10 by 10 grid of counts with dark blue cells on the diagonal, each between 1,863 and 1,957, and light cells elsewhere. The cat column is noticeably darker than other off-diagonal columns, with values up to 59 in the star row." caption="Confusion matrix of the baseline doodle CNN on 20,000 test doodles (2,000 per class). Rows are true classes, columns predictions; colour is the square root of the row share so small error rates remain visible." credit="Own work, from evaluate.py" license="CC BY 4.0" />
+
+### What the matrix shows
+
+Per-class accuracy, the diagonal divided by the row total, ranges from 93.2% for cloud to 97.9% for house. The most frequent confusions on the test machine were:
+
+| True → predicted | Count | A plausible reason |
+|---|---|---|
+| star → cat | 59 | scribbled stars with crossing lines look like whiskers and ears |
+| cloud → fish | 50 | both are wavy closed outlines, often wider than tall |
+| fish → cat | 40 | a fish with fins and an eye has many small strokes |
+| banana → cat | 34 | short curved strokes |
+| cloud → cat | 32 | |
+| fish → cloud | 28 | the reverse of cloud → fish |
+
+The pattern behind most of these is the **cat column**: 261 doodles of other classes were called cat, far more than for any other class. Cat drawings are the most varied and detailed in the set, so the model has learned that "many strokes in odd places" usually means cat, and it uses cat as a fallback for messy drawings. Precision and recall make this precise: precision asks how many of the model's "cat" answers were right, recall how many real cats it found.<Cite id="mlcc-metrics" />
+
+<MathSteps
+  title="Precision and recall for one class"
+  legend={[
+    { symbol: 'TP', meaning: 'true positives: cats called cat (the diagonal cell)' },
+    { symbol: 'FP', meaning: 'false positives: other doodles called cat (rest of the column)' },
+    { symbol: 'FN', meaning: 'false negatives: cats called something else (rest of the row)' },
+  ]}
+>
+  <Step tex="\text{recall} = \frac{TP}{TP + FN} = \frac{1908}{2000} = \hl{95.4\%}" words="Read along the row: of all real cats, how many did the model find?" />
+  <Step tex="\text{precision} = \frac{TP}{TP + FP} = \frac{1908}{1908 + 261}" words="Read down the column: of everything the model called cat, how much really was a cat?" />
+  <Step tex="\text{precision} \approx \hl{88.0\%}" words="Cat has the lowest precision of the ten classes. That is a fallback class: high recall, low precision." />
+</MathSteps>
+
+scikit-learn computes the same quantities per class with `classification_report`, if you prefer a library to the hand-written version.<Cite id="sklearn-metrics" />
+
+<Exercise id="doodle-cat-precision" />
+
+## Looking at the mistakes themselves
+
+Numbers alone can mislead, so `evaluate.py` also plots the 24 wrong answers the model was most sure about.
+
+<Figure src="/figures/doodles/mistakes-doodles.png" alt="Three rows of eight small doodles with captions. Examples: a drawing labelled clock that looks like an apple with a stem, predicted apple 100%; a drawing labelled umbrella that looks like a tree, predicted tree 100%; a drawing labelled cloud that looks like a house, predicted house 100%; a star drawn inside a circle, labelled star and predicted clock 100%." caption="The baseline model's 24 most confident mistakes on the test set, with the true label and the prediction. Many of them are drawings that do not match their label." credit="Quick, Draw! dataset by Google; grid made with evaluate.py" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://github.com/googlecreativelab/quickdraw-dataset" />
+
+Judge each one yourself, but on this run most fall into three groups:
+
+- **Wrong or loose labels** (see [the dataset lesson](/course/project-doodles/quickdraw-dataset/)). A "clock" that is clearly an apple, a "cloud" that is a house, an "umbrella" that is a tree. The model's answer fits the picture better than the label does. The dataset keeps drawings the game did not recognise, and these are among them.<Cite id="quickdraw-repo" />
+- **Genuinely ambiguous drawings.** A star drawn inside a circle is reasonably called a clock; a round outline with a small mark could be an apple or a clock.
+- **Real model errors.** A few drawings are clear to a person and still misread, usually because an unusual style resembles another class.
+
+Label errors are not special to doodles. A 2021 study estimated that the test sets of ten widely used datasets contain on average 3.3% wrong labels, enough to change which model looks best.<Cite id="northcutt2021" /> This is why a model can be "wrong" 865 times and still be closer to the truth than the score suggests, and why the last percent of accuracy is often not worth chasing.
+
+<Analogy breaks="A teacher can ask the student what they meant; the model only sees the drawing, and the dataset only stores the word the player was given.">
+Reviewing the most confident mistakes is like a teacher re-marking the answers a student was surest about: sometimes the student was wrong, and sometimes the answer key was.
+</Analogy>
+
+<Exercise id="doodle-label-or-model" />
+
+## Experiment: add a look-alike class
+
+The ten classes were chosen to look different from one another. To see what similarity does, add **pear**, which shares its outline and stem with apple, and train an 11-class model with the same settings:<Cite id="qd-categories" />
+
+```bash
+python download.py --classes pear
+python train.py --classes apple banana cat clock cloud fish house star tree umbrella pear --tag pear
+python evaluate.py --ckpt checkpoints/doodles-pear.pt
+```
+
+On the test machine, the 11-class model reached 94.96% test accuracy, against 95.67% for ten classes: 1,108 mistakes on 22,000 doodles instead of 865 on 20,000. Almost all of the extra errors involve the new pair:
+
+| Measurement | 10 classes | 11 classes (with pear) |
+|---|---|---|
+| Test accuracy | 95.67% | 94.96% |
+| Apple accuracy (recall) | 95.6% | 94.3% |
+| Pear accuracy (recall) | n/a | **90.8%**, the weakest class |
+| Pear → apple | n/a | **114**, the largest cell off the diagonal |
+| Apple → pear | n/a | 48 |
+
+The confusion is lopsided: pears are called apples more than twice as often as the reverse. A round pear is a plausible apple, while a typical apple is rarely pear-shaped. The rest of the matrix barely moved (cloud → fish 48, star → cat 43). One extra class with a look-alike cost 0.7 percentage points overall and 9 points on the new class itself. With all 345 categories there are many such pairs, so expect accuracy well below these figures from a model this small.
+
+These are single runs. The splits of some classes changed because a class was added, and a different seed moves results by a few tenths of a percent, so read small differences (under about 0.3 points) as noise and large ones such as pear → apple as real.
+
+<Exercise id="doodle-more-classes" />
+
+## Try it
+
+From `code/projects/project-doodles/`, after training:
+
+```bash
+python evaluate.py                                     # baseline: matrix, top confusions, plots in outputs/
+python evaluate.py --ckpt checkpoints/doodles-aug-bn-e15.pt   # the 15-epoch regularised model
+```
+
+Compare the two matrices. On the test machine the regularised model made 722 mistakes instead of 865; star → cat fell from 59 to 26 and cloud → fish from 50 to 21, while umbrella → tree (39) became the top confusion. Do the same pairs remain on top on your run? Which mistakes did augmentation fix, and which look like label problems that no model will fix?
+
+## Summary
+
+- Rows of the confusion matrix are true classes, columns are predictions; the diagonal divided by the row total gives per-class accuracy (recall).
+- The baseline's top confusions were star → cat (59) and cloud → fish (50); cat acts as a fallback class with 95.4% recall but only 88.0% precision.
+- Many of the most confident "mistakes" are drawings that do not match their label; part of the measured error cannot be fixed by any model.
+- Adding one look-alike class (pear) cut test accuracy from 95.67% to 94.96%; pear reached only 90.8%, losing 114 drawings to apple.

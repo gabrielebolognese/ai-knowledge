@@ -1,0 +1,217 @@
+---
+title: "The Quick, Draw! dataset: streaming 10 classes of doodles"
+slug: quickdraw-dataset
+track: project-doodles
+level: intermediate
+order: 10
+minutes: 20
+module: Data and model
+summary: Meet Google's Quick, Draw! dataset (50 million doodles in 345 categories, CC BY 4.0), download only the first 12,000 drawings of 10 classes with HTTP Range requests (about 94 MB instead of over a gigabyte), and build a balanced train, validation and test split.
+hatnote: This is the first lesson of the doodle recognition project. For the same pipeline on handwritten digits, see "Meet MNIST".
+prerequisites: []
+tools: [Python 3, NumPy, PyTorch, matplotlib]
+outcomes:
+  - Explain the dataset (50M drawings, 345 classes) and its CC BY 4.0 attribution rule
+  - Download only the first N drawings per class with an HTTP Range request
+  - Load .npy bitmaps with mmap_mode and build a balanced train/test split
+build: download.py and data.py, the data layer of the doodle project
+reviewed: 2026-11-25
+seeAlso: [doodle-cnn, mnist-dataset]
+sources:
+  - id: quickdraw-repo
+    title: "The Quick, Draw! Dataset"
+    publisher: Google Creative Lab (GitHub)
+    url: https://github.com/googlecreativelab/quickdraw-dataset
+    accessed: 2026-11-25
+    type: dataset
+  - id: quickdraw-data
+    title: "Quick, Draw! The Data"
+    publisher: Google
+    url: https://quickdraw.withgoogle.com/data
+    accessed: 2026-11-25
+    type: dataset
+  - id: ha2017
+    title: "A Neural Representation of Sketch Drawings"
+    author: David Ha, Douglas Eck
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1704.03477
+    accessed: 2026-11-25
+    type: paper
+  - id: cc-by-4
+    title: "Creative Commons Attribution 4.0 International (CC BY 4.0)"
+    publisher: Creative Commons
+    url: https://creativecommons.org/licenses/by/4.0/
+    accessed: 2026-11-25
+    type: docs
+  - id: wiki-quickdraw
+    title: "Quick, Draw!"
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Quick,_Draw!
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: mdn-range
+    title: "HTTP range requests"
+    publisher: MDN Web Docs
+    url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Range_requests
+    accessed: 2026-11-25
+    type: docs
+  - id: npy-format
+    title: "numpy.lib.format: the .npy file format"
+    publisher: NumPy
+    url: https://numpy.org/doc/stable/reference/generated/numpy.lib.format.html
+    accessed: 2026-11-25
+    type: docs
+  - id: np-load
+    title: numpy.load
+    publisher: NumPy
+    url: https://numpy.org/doc/stable/reference/generated/numpy.load.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "Quick, Draw! — play the game"
+    url: https://quickdraw.withgoogle.com/
+  - title: "The full list of 345 categories (categories.txt)"
+    url: https://raw.githubusercontent.com/googlecreativelab/quickdraw-dataset/master/categories.txt
+  - title: "Hugging Face mirror of the dataset (google/quickdraw)"
+    url: https://huggingface.co/datasets/google/quickdraw
+exercises:
+  - id: qd-range-bytes
+    type: numeric
+    difficulty: easy
+    title: How many bytes to ask for
+    prompt: "A class file has a 128-byte header followed by rows of $28 \\times 28$ unsigned bytes. You want the first **5,000** drawings. What is the last byte index (inclusive, counting from 0) in your `Range: bytes=0-…` request?"
+    answer: 3920127
+    tolerance: 0
+    hint: "Bytes needed = header + rows × 784. The last index is that total minus one."
+    explanation: "$128 + 5{,}000 \\times 784 = 3{,}920{,}128$ bytes, so the request is `bytes=0-3920127`. `download.py` does the same in two steps: one small request for the header, then `bytes=128-…` for the rows. That is 3.9 MB instead of about 113 MB for the whole apple file."
+  - id: qd-attribution
+    type: mcq
+    difficulty: easy
+    title: Using the data in your own project
+    prompt: "You publish a web app with a model trained on Quick, Draw! doodles. What does the CC BY 4.0 licence require?"
+    options:
+      - "Nothing: data used for training is not covered by the licence"
+      - "Credit the dataset (for example \"Quick, Draw! dataset by Google, CC BY 4.0\" with a link to the licence) and say if you changed it"
+      - "You must publish your app under CC BY 4.0 as well"
+      - "You may use it only for non-commercial purposes"
+    answer: 1
+    explanation: "CC BY 4.0 allows copying, adapting and commercial use on one main condition: **attribution**, meaning credit, a link to the licence, and a note of any changes. It has no share-alike or non-commercial clause; those belong to other Creative Commons licences (BY-SA, BY-NC). The app in this project shows its credit line in the window."
+  - id: qd-split-why
+    type: short
+    difficulty: medium
+    title: Why shuffle inside each class?
+    prompt: "`data.py` shuffles the 12,000 rows of each class before cutting them into train, validation and test. Why not simply take rows 0-8,999 for training and the last 2,000 for testing?"
+    answer: "Because the order of the rows may not be random (for example by date or country), so a cut without shuffling could give a test set that differs systematically from the training set. Shuffling inside each class, with a fixed seed, keeps the split random, reproducible and balanced (the same number per class)."
+    explanation: "You cannot check how the rows were ordered, so you should not rely on it. The first few rows of `apple.ndjson` all date from March 2017, which hints that the files may be grouped by collection date. Shuffling within each class also keeps every split balanced at 9,000 / 1,000 / 2,000 per class, so accuracy is not skewed towards a larger class."
+---
+
+The **Quick, Draw! dataset** is a collection of about 50 million doodles in 345 categories, drawn by players of an online game in which a neural network tries to guess what you draw.<Cite id="quickdraw-repo" /> Google released it openly under a Creative Commons licence, which makes it one of the few large image datasets you may freely copy, adapt and even redistribute.<Cite id="quickdraw-data" /> In this lesson you download a small, balanced slice of it and turn it into tensors for training.
+
+## Where the doodles come from
+
+*Quick, Draw!* is a browser game released by Google in November 2016. A player gets a word such as "umbrella" and has 20 seconds to draw it while the computer guesses.<Cite id="wiki-quickdraw" /> Every drawing was saved as a list of pen strokes, together with the word, the player's country and whether the game recognised it.<Cite id="quickdraw-repo" />
+
+David Ha and Douglas Eck introduced the data to research in 2017 in their *sketch-rnn* paper, a recurrent network that learns to draw. Their version used 75 classes, each with 70,000 training, 2,500 validation and 2,500 test sketches, and they made it public "to encourage further development" of models for vector drawings.<Cite id="ha2017" />
+
+<Analogy breaks="A real party game has a human guesser; here the guesser is your CNN, and it only ever sees the finished, shrunken picture, not the drawing as it happens.">
+The dataset is like the stack of paper left over after millions of rounds of a party drawing game: quick, rough sketches, each labelled with the word the player had to draw.
+</Analogy>
+
+### Formats, and the one this project uses
+
+The repository offers the same drawings in several formats: raw strokes with timing, simplified strokes, a binary version, sketch-rnn files and **NumPy bitmaps**. The bitmaps are 28×28 grayscale images, rendered from the simplified strokes and centred on each drawing's bounding box.<Cite id="quickdraw-repo" /> That is the same size as <Term slug="mnist">MNIST</Term>, so the CNN from the digits project fits without changes.
+
+<Figure src="/figures/doodles/samples.png" alt="A grid of 40 small white-on-black doodles, four per class: apples, bananas, cats, clocks, clouds, fish, houses, stars, trees and umbrellas. Most are clearly recognisable; one cloud is a single vertical line." caption="Four training doodles per class, as the model receives them (28×28, white strokes on black). Note the variety, and the occasional drawing that matches its label only loosely, such as the cloud drawn as one line." credit="Quick, Draw! dataset by Google; grid made with evaluate.py --samples" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://github.com/googlecreativelab/quickdraw-dataset" />
+
+<Infobox title="Quick, Draw! at a glance" rows={[
+  { label: 'Drawings', value: 'about 50 million' },
+  { label: 'Categories', value: '345' },
+  { label: 'Bitmaps', value: '28 × 28 grayscale, uint8' },
+  { label: 'One class file', value: '80-270 MB (100k-340k drawings)' },
+  { label: 'This project', value: '10 classes × 12,000 = 94 MB' },
+  { label: 'Licence', value: 'CC BY 4.0' },
+]} />
+
+## The licence and the content warning
+
+The data is released under the **Creative Commons Attribution 4.0** licence.<Cite id="quickdraw-repo" /> You may share and adapt it for any purpose, including commercial ones, as long as you give appropriate credit, link to the licence and indicate changes.<Cite id="cc-by-4" /> This course credits it as "Quick, Draw! dataset by Google, CC BY 4.0" in the code, the README, the figures and the drawing app.
+
+The repository also warns that the drawings were individually moderated but may still contain inappropriate content.<Cite id="quickdraw-repo" /> In 12,000 drawings per class you are likely to meet a few that are rude, off-topic or simply unrecognisable.
+
+## Downloading only what you need
+
+Each class file in the official bucket holds every drawing of that class: `apple.npy` has 144,722 of them and weighs about 113 MB. The project needs only 12,000 per class. Instead of downloading 1-1.5 GB, `download.py` asks the server for the first bytes of each file only, with an **HTTP Range request**: the client sends a `Range` header, and a server that supports it answers with status 206 Partial Content and just those bytes.<Cite id="mdn-range" />
+
+This works because a `.npy` file is simple. It starts with the magic string `\x93NUMPY`, two version bytes and the length of a text header; the header is a Python dictionary with three keys, `descr` (the data type), `fortran_order` and `shape`. The raw array follows straight after.<Cite id="npy-format" /> For these files the header says `'|u1'` (one unsigned byte per value) and a shape such as `(144722, 784)`, so drawing $i$ occupies bytes $128 + 784i$ to $128 + 784(i+1) - 1$.
+
+<MathSteps
+  title="How many bytes 12,000 doodles take"
+  legend={[
+    { symbol: 'H', meaning: 'header length in bytes (128 here)' },
+    { symbol: 'N', meaning: 'number of drawings wanted' },
+    { symbol: '784', meaning: 'bytes per drawing (28 × 28, one byte each)' },
+  ]}
+>
+  <Step tex="\text{bytes} = H + N \cdot 784" words="The header, then one row of 784 bytes per drawing." />
+  <Step tex="128 + 12{,}000 \cdot 784 = \hl{9{,}408{,}128}" words="About 9.4 MB per class, instead of 80-270 MB for the full file." />
+  <Step tex="10 \cdot 9.4\ \text{MB} \approx \hl{94\ \text{MB}}" words="The default download for ten classes. The smoke test needs 2 classes × 500 drawings, under 1 MB." />
+</MathSteps>
+
+<CodeFile path="code/projects/project-doodles/download.py" lines="41-80" highlight="43,46,57,58,75" title="download.py: Range requests and the .npy header" />
+
+The script reads the header with one small request, checks that the data type and row length are what it expects, then fetches exactly $N \times 784$ bytes and saves them as an ordinary `.npy` file of shape `(N, 28, 28)`. It also writes an `ATTRIBUTION.txt` next to the data.
+
+<Exercise id="qd-range-bytes" />
+
+## From files to a balanced split
+
+`data.py` turns the ten files into PyTorch tensors. It opens each file with `np.load(..., mmap_mode="r")`, which memory-maps the file: the array stays on disk and only the rows you index are read into memory.<Cite id="np-load" /> That matters little for 9.4 MB, but the same code works unchanged on a full 270 MB file.
+
+<CodeFile path="code/projects/project-doodles/data.py" lines="49-62" highlight="50,52,54,60" title="data.py: shuffle within each class, then cut" />
+
+Each class is shuffled with a fixed seed and cut into three parts:
+
+| Split | Per class | Total (10 classes) | Used for |
+|---|---|---|---|
+| Train | 9,000 | 90,000 | updating the weights |
+| Validation | 1,000 | 10,000 | choosing settings and watching overfitting |
+| Test | 2,000 | 20,000 | one final measurement |
+
+Pixels are divided by 255, so they lie between 0 and 1, and a channel dimension is added, giving tensors of shape `(N, 1, 28, 28)`. Because every class has the same number of drawings, a model that always guesses one class gets exactly 10%, which is the chance level to beat.
+
+<Callout type="note">
+The bitmaps are centred on the drawing's **bounding box**, not on its centre of mass as in MNIST, and they fill most of the frame: `python data.py` measures a median longest side of 26 of the 28 pixels. The drawing app must reproduce this framing; the capstone lesson shows how.
+</Callout>
+
+<Exercise id="qd-attribution" />
+
+## Try it
+
+From `code/projects/project-doodles/`:
+
+```bash
+python download.py --smoke   # 2 classes x 500 doodles, under 1 MB
+python download.py           # 10 classes x 12,000 doodles, about 94 MB
+python data.py               # sizes, class balance and pixel statistics
+```
+
+On the course's test machine the full download took 18 seconds, and `data.py` printed:
+
+```text
+10 classes: apple, banana, cat, clock, cloud, fish, house, star, tree, umbrella
+  train (90000, 1, 28, 28)  per class: 9,000
+  val   (10000, 1, 28, 28)  per class: 1,000
+  test  (20000, 1, 28, 28)  per class: 2,000
+pixel mean 0.160, share of pixels with ink 23.8%
+longest side of the ink box: mean 26.0 px, median 26 px
+```
+
+To try other objects, pass any names from the official category list, for example `python download.py --classes pear "hot air balloon"`; the script encodes the space for the URL.<Cite id="quickdraw-repo" /> `--per-class 5000` shrinks the download further.
+
+## Summary
+
+- Quick, Draw! has about 50 million doodles in 345 categories, collected from a 20-second drawing game and released under CC BY 4.0, which requires attribution.
+- The 28×28 NumPy bitmaps match MNIST's size and polarity but are centred on the bounding box and fill most of the frame.
+- HTTP Range requests download only the header and the first $N$ rows: 9.4 MB per class instead of up to 270 MB.
+- `np.load(mmap_mode="r")` reads rows lazily; each class is shuffled and split 9,000 / 1,000 / 2,000.
