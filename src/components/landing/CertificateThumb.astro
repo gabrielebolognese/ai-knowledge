@@ -1,0 +1,126 @@
+---
+// Static thumbnail of the certificate (brief §6): navy/oxblood left panel with a guilloche
+// rosette, parchment field, chamfered gold frame, wax seal on the boundary. Own artwork.
+import '@fontsource/cormorant-garamond/600.css';
+import '@fontsource/cormorant-garamond/600-italic.css';
+
+// One epitrochoid-like curve (brief §6.4), repeated by rotation to form the rosette.
+const R = 150, r = 50, d = 62;
+const k = (R - r) / r;
+const steps = 360;
+let path = '';
+for (let i = 0; i <= steps; i++) {
+  const t = (i / steps) * 2 * Math.PI;
+  const x = (R - r) * Math.cos(t) + d * Math.cos(k * t);
+  const y = (R - r) * Math.sin(t) - d * Math.sin(k * t);
+  path += `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`;
+}
+const copies = 14;
+// Wax-seal edge: r(θ) = R(1 + 0.04 sin 7θ + 0.025 sin 13θ + 0.015 sin 23θ)
+let seal = '';
+for (let i = 0; i <= 120; i++) {
+  const th = (i / 120) * 2 * Math.PI;
+  const rr = 62 * (1 + 0.04 * Math.sin(7 * th) + 0.025 * Math.sin(13 * th) + 0.015 * Math.sin(23 * th));
+  seal += `${i ? 'L' : 'M'}${(rr * Math.cos(th)).toFixed(1)} ${(rr * Math.sin(th)).toFixed(1)}`;
+}
+// Bottom guilloche band on the parchment.
+const band = Array.from({ length: 5 }, (_, s) => {
+  let p = '';
+  for (let x = 0; x <= 640; x += 8) {
+    const y = 10 * Math.sin(x / 26 + s * 0.9) + 4 * Math.sin((3 * x) / 26 + s);
+    p += `${x ? 'L' : 'M'}${x} ${y.toFixed(1)}`;
+  }
+  return p;
+});
+---
+<svg class="cert-thumb" viewBox="0 0 1100 850" role="img" aria-labelledby="cert-thumb-title">
+  <title id="cert-thumb-title">Preview of the AI Knowledge certificate of completion: a horizontal, asymmetric design with a navy and oxblood panel on the left, a gold guilloche rosette, a wax seal and your name in italic serif on parchment.</title>
+  <defs>
+    <linearGradient id="ct-foil" x1="0" y1="0" x2="1" y2="0.45">
+      <stop offset="0" stop-color="#7A5A12" /><stop offset="0.18" stop-color="#D8B45A" /><stop offset="0.34" stop-color="#F3E2A9" />
+      <stop offset="0.5" stop-color="#B8892F" /><stop offset="0.68" stop-color="#F3E2A9" /><stop offset="0.84" stop-color="#D8B45A" /><stop offset="1" stop-color="#7A5A12" />
+    </linearGradient>
+    <linearGradient id="ct-navy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B1B3A" /><stop offset="1" stop-color="#10265A" /></linearGradient>
+    <linearGradient id="ct-ox" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4A0F1B" /><stop offset="1" stop-color="#6E1A2B" /></linearGradient>
+    <radialGradient id="ct-wax" cx="45%" cy="40%" r="60%"><stop offset="0" stop-color="#8E2A3E" /><stop offset="1" stop-color="#4A0F1B" /></radialGradient>
+    <clipPath id="ct-panel"><rect width="417" height="850" /></clipPath>
+    <clipPath id="ct-field"><rect x="417" width="683" height="850" /></clipPath>
+  </defs>
+
+  <!-- parchment field -->
+  <rect width="1100" height="850" fill="#F6EFD9" />
+  <g clip-path="url(#ct-field)" opacity="0.5" stroke="url(#ct-foil)" stroke-width="1.2" fill="none">
+    {band.map((p) => <path d={p} transform="translate(440 770)" />)}
+  </g>
+  <path d="M480 37 H1040 L1063 60 V790 L1040 813 H480" fill="none" stroke="url(#ct-foil)" stroke-width="3" />
+  <path d="M488 47 H1036 L1053 64 V786 L1036 803 H488" fill="none" stroke="#B8892F" stroke-width="1" opacity="0.7" />
+  <path d="M1018 74 l8 -14 l8 14 l-8 14 z" fill="url(#ct-foil)" />
+
+  <!-- left panel -->
+  <g clip-path="url(#ct-panel)">
+    <rect width="417" height="850" fill="url(#ct-navy)" />
+    <path d="M0 640 L417 470 L417 590 L0 760 Z" fill="url(#ct-ox)" opacity="0.92" />
+    <g transform="translate(150 410)" fill="none" stroke="url(#ct-foil)" stroke-width="1.1" opacity="0.6">
+      {Array.from({ length: copies }, (_, i) => <path d={path} transform={`rotate(${(i * 360) / copies})`} />)}
+    </g>
+    <g transform="translate(40 58)">
+      <circle cx="14" cy="6" r="6" fill="#D8B45A" />
+      <circle cx="4" cy="24" r="5" fill="none" stroke="#F6EFD9" stroke-width="1.6" />
+      <circle cx="24" cy="24" r="5" fill="none" stroke="#F6EFD9" stroke-width="1.6" />
+      <path d="M11 11 6 19M17 11l5 8" stroke="#F6EFD9" stroke-width="1.6" />
+      <text x="40" y="22" class="ct-wm">AI Knowledge</text>
+    </g>
+    <text x="40" y="800" class="ct-ribbon">BEGINNER · INTERMEDIATE · ADVANCED</text>
+  </g>
+  <line x1="417" y1="0" x2="417" y2="850" stroke="url(#ct-foil)" stroke-width="3" />
+  <line x1="425" y1="0" x2="425" y2="850" stroke="#B8892F" stroke-width="1" />
+
+  <!-- text block, left-aligned on a start line -->
+  <text x="520" y="160" class="ct-title">CERTIFICATE OF COMPLETION</text>
+  <path d="M520 186 H700" stroke="url(#ct-foil)" stroke-width="2" />
+  <path d="M708 186 l6 -6 l6 6 l-6 6 z" fill="#B8892F" />
+  <text x="520" y="250" class="ct-lede">This certifies that</text>
+  <text x="520" y="360" class="ct-name">Your Name</text>
+  <path d="M520 386 H930 q14 0 22 -10" fill="none" stroke="url(#ct-foil)" stroke-width="3" />
+  <text x="520" y="448" class="ct-lede">has completed the free open course</text>
+  <text x="520" y="500" class="ct-course">DEEP LEARNING FROM ZERO</text>
+  <text x="520" y="538" class="ct-course">TO A NEURAL CHESS ENGINE</text>
+  <g class="ct-meta">
+    <text x="520" y="662">DATE</text>
+    <line x1="520" y1="680" x2="700" y2="680" stroke="#B8892F" />
+    <text x="760" y="662">CERTIFICATE ID</text>
+    <line x1="760" y1="680" x2="960" y2="680" stroke="#B8892F" />
+  </g>
+
+  <!-- wax seal on the boundary -->
+  <g transform="translate(417 600)">
+    <path d="M-16 50 L-40 128 L-22 118 L-12 136 L4 56 Z" fill="#10265A" stroke="#B8892F" stroke-width="1" />
+    <path d="M14 52 L30 132 L40 116 L58 124 L34 48 Z" fill="#10265A" stroke="#B8892F" stroke-width="1" />
+    <path d={seal} fill="url(#ct-wax)" />
+    <circle r="44" fill="none" stroke="url(#ct-foil)" stroke-width="3" />
+    <circle r="38" fill="none" stroke="#D8B45A" stroke-width="0.8" opacity="0.7" />
+    <g stroke="url(#ct-foil)" stroke-width="2" fill="none">
+      <path d="M-8 -12 L0 4 L8 -12" /><path d="M-8 -12 H8" />
+    </g>
+    <circle cx="0" cy="4" r="5" fill="#D8B45A" />
+    <circle cx="-8" cy="-12" r="4" fill="none" stroke="#F3E2A9" stroke-width="1.6" />
+    <circle cx="8" cy="-12" r="4" fill="none" stroke="#F3E2A9" stroke-width="1.6" />
+    <ellipse cx="-28" cy="4" rx="5" ry="2.2" transform="rotate(-60 -28 4)" fill="#D8B45A" opacity="0.85" />
+    <ellipse cx="-24" cy="16" rx="5" ry="2.2" transform="rotate(-35 -24 16)" fill="#D8B45A" opacity="0.85" />
+    <ellipse cx="-14" cy="25" rx="5" ry="2.2" transform="rotate(-10 -14 25)" fill="#D8B45A" opacity="0.85" />
+    <ellipse cx="28" cy="4" rx="5" ry="2.2" transform="rotate(60 28 4)" fill="#D8B45A" opacity="0.85" />
+    <ellipse cx="24" cy="16" rx="5" ry="2.2" transform="rotate(35 24 16)" fill="#D8B45A" opacity="0.85" />
+    <ellipse cx="14" cy="25" rx="5" ry="2.2" transform="rotate(10 14 25)" fill="#D8B45A" opacity="0.85" />
+  </g>
+</svg>
+
+<style>
+  .cert-thumb { display: block; width: 100%; height: auto; }
+  .ct-wm { font: 500 22px var(--font-serif); fill: #F6EFD9; }
+  .ct-ribbon { font: 600 13px var(--font-sans); letter-spacing: 0.18em; fill: #D8B45A; }
+  .ct-title { font: 600 25px var(--font-cert); letter-spacing: 0.22em; fill: url(#ct-foil); }
+  .ct-lede { font: italic 600 28px var(--font-cert); fill: #4A463F; }
+  .ct-name { font: italic 600 92px var(--font-cert); fill: #0B1B3A; }
+  .ct-course { font: 500 30px var(--font-serif); letter-spacing: 0.08em; fill: #0B1B3A; }
+  .ct-meta text { font: 600 14px var(--font-sans); letter-spacing: 0.14em; fill: #7A5A12; }
+</style>

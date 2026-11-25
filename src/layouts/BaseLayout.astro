@@ -48,12 +48,14 @@ const fullTitle = title === 'AI Knowledge' ? title : `${title} · AI Knowledge`;
     <div class="page" data-page>
       <TopBar active={active} />
       <slot />
+      <slot name="footer">
       <footer class="site-footer">
         <div class="container site-footer__inner">
           <p>AI Knowledge is a free, read-only course. Every claim links to its source. Progress is stored only in this browser (<code>localStorage</code>).</p>
           <p class="muted">Content and code: <a href="https://github.com/gabrielebolognese/ai-knowledge">github.com/gabrielebolognese/ai-knowledge</a></p>
         </div>
       </footer>
+      </slot>
     </div>
     <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
     <div id="progress-live" class="sr-only" aria-live="polite"></div>
