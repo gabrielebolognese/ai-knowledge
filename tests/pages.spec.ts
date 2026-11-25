@@ -55,7 +55,22 @@ test.describe('navigation pages', () => {
 
   test('a planned lesson renders a coming-soon page that can still be marked complete', async ({ page }) => {
     await page.goto('/course/');
-    const planned = page.locator('li[data-node][data-written="false"] a.node__link').first();
+    const plannedNodes = page.locator('li[data-node][data-written="false"] a.node__link');
+    if ((await plannedNodes.count()) === 0) {
+      // Every curriculum lesson is written: the fallback has nothing to render. Check instead that
+      // every node on the map links to a real, written lesson page (no "coming soon" left anywhere).
+      const hrefs = await page.locator('li[data-node] a.node__link').evaluateAll((as) => [...new Set(as.map((a) => a.getAttribute('href')!))]);
+      expect(hrefs.length).toBeGreaterThan(50);
+      for (const href of hrefs) {
+        const res = await page.request.get(href);
+        expect(res.status(), href).toBe(200);
+        const html = await res.text();
+        expect(html, href).not.toContain('planned__badge');
+        expect(html, href).toContain('data-pagefind-body');
+      }
+      return;
+    }
+    const planned = plannedNodes.first();
     const href = (await planned.getAttribute('href'))!;
     await page.goto(href);
     await expect(page.locator('.planned__badge')).toContainText('Coming soon');

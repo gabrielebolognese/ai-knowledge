@@ -119,7 +119,7 @@ const firstBeginner = cat.trackById.get('beginner')!.lessons[0];
       </div>
 
       <h2 class="group-title">The path</h2>
-      <p class="group-note muted">Setup is optional. Beginner, Intermediate and Advanced build on each other; {written} of {cat.all.length} lessons are written so far, the rest show what they will cover.</p>
+      <p class="group-note muted">Setup is optional. Beginner, Intermediate and Advanced build on each other; {written >= cat.all.length ? `all ${cat.all.length} lessons are written.` : `${written} of ${cat.all.length} lessons are written so far, the rest show what they will cover.`}</p>
       {core.map((t) => <PathMap track={t} header headingLevel={3} />)}
 
       <h2 class="group-title">Project tracks</h2>
