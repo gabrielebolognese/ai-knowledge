@@ -202,7 +202,7 @@ After step 1,500 the training loss keeps falling while the dev loss rises: the n
 
 ## Results on Shakespeare
 
-`python char_rnn.py --data shakespeare` trains a 2-layer LSTM with 256 units per layer (876,929 parameters) for 2,000 steps, about 10 minutes on the test machine. To see what happens after that point, the test machine also ran 3,000 steps (13 minutes, with other jobs sharing the CPU):
+`python char_rnn.py --data shakespeare` trains a 2-layer LSTM with 256 units per layer (876,929 parameters) for 2,000 steps: about 10 minutes on the test machine, and 19 minutes in a rerun while other training jobs shared the CPU. The rerun reproduced the validation loss (1.4979) and the sample below exactly, because the seed is fixed. To see what happens after that point, the test machine also ran 3,000 steps (13 minutes, with other jobs sharing the CPU):
 
 | Step | Train loss | Validation loss | Time |
 |---|---|---|---|
@@ -252,6 +252,17 @@ A left more shall be the
 ```
 
 The model has clearly learned the format: speaker names in capitals followed by a colon, line breaks, archaic words and mostly correct spelling. It has not learned meaning. Sentences start plausibly and wander, and characters speak to nobody in particular. Karpathy's samples from much larger LSTMs show the same pattern at a higher level of polish.<Cite id="karpathy2015-rnn" />
+
+With `--temperature 0` (greedy decoding, always the most likely character) the same model gets stuck at once:
+
+```text
+ROMEO:
+The sea the seat of the state,
+And the sea the seat of the state,
+And the sea the seat of the state,
+```
+
+Each character is the single most likely one, and the most likely continuation of this line leads back into the same line. Sampling at a temperature around 0.8, optionally with top-k, avoids such loops while keeping most characters on the likely side.
 
 <Exercise id="lstm-temperature-reading" />
 

@@ -90,7 +90,7 @@ expect yours to differ by a factor of two either way.
 | Bigram counts, add-1 smoothing | `bigram.py` | 729 probabilities | 2.4533 | 11.6 | seconds |
 | Bengio-style MLP, context 3 | `mlp_lm.py` | 11,897 | 2.1418 (test 2.1397) | 8.5 | 1 min 45 s |
 | GRU, 1 layer, 128 units | `char_rnn.py --data names` | 66,555 | 2.0222 (best, step 1,500 of 3,000) | 7.6 | 1.5 min |
-| LSTM, 2 layers, 256 units, TinyShakespeare | `char_rnn.py --data shakespeare` | 876,929 | 1.4979 at step 2,000 (2.16 bits/char) | 4.47 | about 10 min |
+| LSTM, 2 layers, 256 units, TinyShakespeare | `char_rnn.py --data shakespeare` | 876,929 | 1.4979 at step 2,000 (2.16 bits/char) | 4.47 | about 10 min (19 min on a busy CPU; same loss and sample) |
 
 The names GRU overfits after about 1,500 steps (dev loss 2.022 at step 1,500, 2.071 at
 step 3,000, while the training loss keeps falling); `char_rnn.py` keeps and saves the
@@ -119,7 +119,7 @@ Samples (temperature 1.0 unless noted):
 - bigram: `dexze, momakurailezitynn, konimittain, llayn, ka, da, staiyaubrtthrigotai, moliellavo`
 - MLP: `anueden, kis, marian, dan, shan, silaylen, kemarco, man, emiah, aden`
 - MLP, `--prefix ma --temperature 0.8 --top-k 10`: `maritha, marienne, maya, mader, mariel`
-- GRU (T = 0.8): `juno, jaelia, ryeen, jackoe, aleah, reyley, jaceng, zenin, videa, taquan`
+- GRU (T = 0.8, best weights from step 1,500): `ounika, eliyann, perren, keleyah, marissa, zaleria, marnely, kartien, drue, shareeva`
 
 **Sentiment classifiers** (SST-2; "test" = the 872 GLUE validation sentences)
 
