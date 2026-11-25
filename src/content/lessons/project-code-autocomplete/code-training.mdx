@@ -92,7 +92,7 @@ exercises:
     type: mcq
     difficulty: medium
     title: A loss that is too good
-    prompt: "A learner's character model reaches a training loss of 0.05 nats per character after a few thousand steps, while the same model with the course's settings reaches about 1. Generated text is gibberish. What is the most likely cause?"
+    prompt: "A learner's character model reaches a training loss of 0.05 nats per character after a few hundred steps, while the same model with the course's settings is still above 1.5. Generated text is gibberish. What is the most likely cause?"
     options:
       - The learning rate is too low
       - The model attends to future positions, so it can read the character it is supposed to predict
@@ -109,7 +109,7 @@ exercises:
     explanation: "PyTorch's guide on saving models recommends saving the optimizer state_dict alongside the model for exactly this reason. The checkpoint also stores the config and the tokenizer, so complete.py can rebuild the model without any other files."
 ---
 
-**Training** the code model means showing it millions of short windows of Python and nudging its 1.8 million parameters, after every batch, towards predicting each next character better. On a laptop CPU the full run takes under an hour, and a smoke run checks the whole pipeline in a few minutes. The script, `train.py`, follows the structure of nanoGPT's training loop, with the GPU-specific parts removed.<Cite id="nanogpt" />
+**Training** the code model means showing it millions of short windows of Python and nudging its 1.8 million parameters, after every batch, towards predicting each next character better. On a laptop CPU the full run takes about an hour (90 minutes on the busy test machine), and a smoke run checks the whole pipeline in a few minutes. The script, `train.py`, follows the structure of nanoGPT's training loop, with the GPU-specific parts removed.<Cite id="nanogpt" />
 
 ## Random windows of code
 
@@ -182,7 +182,18 @@ The loss is cross-entropy in **nats** per token, using natural logarithms. For a
   <Step tex="\frac{4.57}{\ln 2} = \hl{6.60}\ \text{bits} = \log_2 97" words="The starting point in bits is exactly the information in a uniform guess among 97 characters." />
 </MathSteps>
 
-@@CHAR_TABLE@@
+The full run on the test machine (`python train.py`, CPython 3.13 standard library, PyTorch 2.15 CPU build) printed:
+
+| Step | Train loss | Validation loss | Validation bits/char | Elapsed |
+|---|---|---|---|---|
+| 0 | 4.48 | 4.48 | 6.46 | 0 min |
+| 500 | 1.61 | 1.77 | 2.56 | 12 min |
+| 1,000 | 1.31 | 1.50 | 2.17 | 23 min |
+| 2,000 | 1.09 | 1.31 | 1.88 | 51 min |
+| 3,000 | 0.94 | 1.18 | 1.70 | 71 min |
+| 4,000 | 0.87 | **1.15** | **1.65** | 90 min |
+
+The run took 90 minutes rather than the estimated 50 because the processor was shared with other heavy jobs throughout; on an idle machine the same steps measured 0.73 seconds each. Most of the improvement happens early: about 80% of the total drop in validation loss happens in the first 500 steps. The gap between training loss (0.87) and validation loss (1.15) shows the model fitting details of the training files that do not carry over to unseen modules, a mild form of [overfitting](https://en.wikipedia.org/wiki/Overfitting). More data, dropout or a smaller model would narrow it; with a fixed corpus, the validation curve was still falling at the end, so stopping at 4,000 steps was a compute choice rather than a necessity.
 
 ## Checkpoints and resuming
 
@@ -194,18 +205,28 @@ Press Ctrl+C at any time: `train.py` catches the interrupt, saves, and `python t
 
 ## The smoke test
 
-`python train.py --smoke` uses about 200 KB of code, a narrower model (0.8M parameters, 64-token windows) and 300 steps. On the test machine it finished in 1.4 minutes, with the training loss falling from 4.47 to 2.16 and the validation loss to 2.19 (3.16 bits per character). The script fails with an error if the loss does not fall by at least 0.5. If the smoke test passes, your installation, the corpus and the model code all work.
+`python train.py --smoke` uses about 200 KB of code, a narrower model (0.8M parameters, 64-token windows) and 300 steps. On the test machine it finished in 44 seconds when the processor was otherwise quiet (1.4 minutes while other jobs were running), with the training loss falling from 4.47 to 2.16 and the validation loss to 2.19 (3.16 bits per character). The script fails with an error if the loss does not fall by at least 0.5. If the smoke test passes, your installation, the corpus and the model code all work.
 
 ## Debugging exercise: forget the causal mask
 
 `--no-causal-mask` switches the mask off, which recreates a classic mistake. Without the mask, position $t$ can attend to position $t+1$, which holds the very character it must predict.
 
-@@NOMASK@@
+Measured with the smoke settings and 1,500 steps (`python train.py --smoke --no-causal-mask --max-iters 1500`):
+
+| Step | Validation loss, mask on | Validation loss, mask off |
+|---|---|---|
+| 250 | 2.13 | 2.02 |
+| 500 | 1.90 | **0.05** |
+| 1,250 | 1.64 | **0.03** |
+
+For the first few hundred steps nothing looks wrong. Then, within 250 steps, the unmasked model discovers that it can copy the next character from one position ahead, and its loss collapses to 0.05 nats (0.07 bits) per character, a level no honest model of Python could reach. Asked to complete `def close(self):`, it produces `l():]`, `le):]]]` and long runs of colons: at generation time there is no future to copy, so the trick it learned is useless.
+
+The lesson generalises. A loss that is much better than comparable models reach is a reason to look for a leak, such as a missing mask, a wrong target shift or validation data inside the training set, not a reason to celebrate.<Cite id="lets-build-gpt" />
 
 ## Summary
 
 - Training draws random windows; targets are the inputs shifted by one, so each window gives T predictions.
 - AdamW with decoupled weight decay, a 100-step warm-up and cosine decay from 0.001 to 0.0001 trains the model stably.
-- $C \approx 6ND$ predicts the cost: about $1.8 \times 10^{14}$ FLOPs, under an hour on a laptop CPU.
+- $C \approx 6ND$ predicts the cost: about $1.8 \times 10^{14}$ FLOPs, roughly an hour on a laptop CPU.
 - Loss starts near $\ln 97 \approx 4.57$ nats; divide by $\ln 2$ (and by characters per token) for bits per character.
 - Checkpoints store model, optimizer, step, config and tokenizer; a loss that looks too good usually means the model can see the future.

@@ -126,13 +126,58 @@ The tool loads a checkpoint (by default `checkpoints/char.pt`, then `bpe.pt`), r
 - `--samples 3` shows three alternative suggestions, like an editor's suggestion list, and `--temperature` and `--top-k` change how adventurous they are.
 - `--watch my_script.py` checks the file twice a second and, whenever it is saved, prints a suggestion for the rest of its last line.
 
-<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="186-198" highlight="193" title="complete.py: streaming a completion" />
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="197-209" highlight="204" title="complete.py: streaming a completion" />
 
-@@CLI_DEMO@@
+A real session with the character model after the full 4,000-step run (unedited apart from omitting the timing lines):
+
+```text
+$ python complete.py --samples 3 --seed 0 --prompt "class Stack:
+    def __init__(self):
+"
+
+--- suggestion 1 ---
+class Stack:
+    def __init__(self):
+        if self._stack:
+            self._stack.set_acquire(self._stack)
+        self._stack_after = self._stack
+        self._stack = self._stack_after
+        self._stack_after = stack
+
+--- suggestion 2 ---
+class Stack:
+    def __init__(self):
+        if self._allow_args.extend(args):
+            return self._args[args]
+        else:
+            return self._args[0] == args[0]
+        else:
+            return self._args[0]
+
+--- suggestion 3 ---
+class Stack:
+    def __init__(self):
+        self.__class__ = []
+        self.__class__.__name__ = '__main__'
+        self.__class__ = []
+        self.__class__ = []
+        self.__class__ = []
+```
+
+The output shows both sides of a small model. The indentation is right, every line is idiomatic-looking Python, the model picked up the class name and invented a `self._stack` attribute, and suggestions 1 and 2 stop cleanly where the method ends (suggestion 3 runs into the 200-token limit). But the logic is nonsense: suggestion 1 reads `self._stack` before it exists, suggestion 2 has two `else` branches, which is a syntax error, and suggestion 3 falls into the repetition loop that low-temperature sampling is prone to. Prompted with a top-level `def is_even(n):`, the same model wrote an eight-space-indented body about `node.nodeName`, borrowed from the standard library's XML modules: it continues text in the style of its corpus and does not reason about what the name means.
 
 The watch mode is the simplest possible editor integration: no plugin, just a file and a terminal side by side. The loop is the one every autocompleter runs: read the code before the cursor, sample, show the suggestion.
 
-<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="134-150" highlight="147" title="complete.py: watch a file and complete its last line" />
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="145-161" highlight="158" title="complete.py: watch a file and complete its last line" />
+
+Saving a file whose last line is `        self.` (inside an `__init__(self, name)` method), and then the same file ending in `    if not os.path.`, printed these suggestions from the BPE model, with the suggestion after the bar:
+
+```text
+line 3:         self.|_file.filename = name
+line 4:     if not os.path.|isdir():
+```
+
+Both look like Python. The first even uses the `name` argument; the second calls `isdir()` without the path it should check, a typical small-model slip.
 
 ## Making inference fast
 
@@ -161,11 +206,26 @@ Quantization maps each real-valued weight to one of 255 integer levels with a sh
 
 PyTorch's *dynamic* quantization converts the weights of every `nn.Linear` layer ahead of time and quantizes each layer's input on the fly. `complete.py --quantize` applies it with one call. The current PyTorch documentation says quantization development has moved to the separate **torchao** library and asks users of the eager-mode API to migrate to it; the call still works in PyTorch 2.15, and `complete.py` reports clearly if a future version removes it.<Cite id="pt-quantization" /><Cite id="torchao" />
 
-<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="97-105" title="complete.py: dynamic int8 quantization" />
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="108-116" title="complete.py: dynamic int8 quantization" />
 
 `python complete.py --bench` measures milliseconds per generated token for 1 thread, 4 threads and PyTorch's default thread count, and for the quantized model, each time with the same random seed so the outputs can be compared.
 
-@@BENCH@@
+Measured on the test machine (a laptop CPU with 8 PyTorch threads by default, while other programs kept it about three-quarters busy), generating 150 tokens after `def __init__(self, `:
+
+| Model | Setting | ms per token | Weights on disk |
+|---|---|---|---|
+| Character | float32, 1 thread | 11.1 | 7.31 MB |
+| Character | float32, 4 threads | 7.2 | 7.31 MB |
+| Character | float32, 8 threads | **6.3** | 7.31 MB |
+| Character | int8 dynamic, 8 threads | 13.4 | **2.03 MB** |
+| BPE (512 merges) | float32, 8 threads | 6.1 | 7.70 MB |
+| BPE (512 merges) | int8 dynamic, 8 threads | 12.0 | 2.52 MB |
+
+Three results are worth noticing:
+
+- **Threads help, with diminishing returns.** Going from 1 to 4 threads saves a third of the time; doubling again to 8 saves much less, because the matrices are small.
+- **Quantization made the model 3.6 times smaller but twice as slow.** For 192-channel layers the arithmetic is cheap, and the extra work of quantizing activations on every call dominates. Int8 pays off for larger models and on hardware with fast integer instructions; always measure. The int8 model's text also diverged from the float model's after about 30 characters with the same seed, because rounding shifts the probabilities slightly.
+- **BPE is faster per character.** A BPE token costs about the same time as a character token but carries 2.3 characters on average, so the BPE model writes code about 2.4 times faster: roughly 2.7 ms per character instead of 6.3. A 60-character line arrives in well under half a second either way.
 
 <Callout type="tip">
 The biggest speed-up in production systems is one this project leaves out: a **key-value cache**. `generate` recomputes attention over the whole context for every new token; caching each layer's keys and values means only the newest position needs computing. With a 128-token context the gain is modest, which is why the course keeps the simpler code.
@@ -183,8 +243,8 @@ Codex is the best-documented example; according to its paper, a distinct product
 | Training code | 8.7 MB, one codebase | 159 GB from 54 million repositories (about 18,000 times more) |
 | Context | 128 tokens (128-290 characters) | thousands of tokens (GPT-3 family) |
 | Sees code after the cursor | no | yes, in later fill-in-the-middle models |
-| Evaluated by | parse rate (syntax) | unit tests (correctness) |
-| Hardware | a laptop CPU, under an hour | a GPU cluster |
+| Evaluated by | parse rate (syntax): 38-81% of bodies parse | unit tests (correctness): 28.8% solved with one sample |
+| Hardware | a laptop CPU, 1-1.5 hours | a GPU cluster |
 
 Production assistants add techniques this project leaves out. **Fill-in-the-middle** training moves a span from the middle of each document to its end, so a left-to-right model learns to complete code *between* a prefix and a suffix, which is what happens when the cursor sits inside a function.<Cite id="bavarian2022" /> Their training data is also filtered, for example removing files that look auto-generated or have very long lines, as Codex's was.<Cite id="chen2021" />
 

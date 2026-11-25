@@ -18,7 +18,7 @@ from pathlib import Path
 import torch
 
 from model import GPT, GPTConfig
-from tokenizer import load_tokenizer
+from tokenizer import BPETokenizer, load_tokenizer
 
 HERE = Path(__file__).parent
 FILE_MARK = "# <|file|>"
@@ -53,11 +53,19 @@ class Completer:
     def stream(self, prompt, max_new=200, temperature=0.4, top_k=20, stop="block"):
         """Yield pieces of text. stop: 'line' (end of line), 'block' (dedent or blank line) or 'none'."""
         ids = self.tok.encode(prompt) or self.tok.encode("\n")
+        heal, allowed = "", None
+        if isinstance(self.tok, BPETokenizer) and len(ids) > 1:
+            # Token healing: a prompt ending in "\n" stops at a boundary the model rarely saw
+            # (in training, "\n" was merged with the next line's indentation). Drop the last
+            # token and let the model regenerate it, choosing among tokens that start with it.
+            heal = self.tok.itos[ids.pop()]
+            allowed = torch.tensor([s.startswith(heal) for s in self.tok.itos])
         idx = torch.tensor([ids], dtype=torch.long)
         base = block_indent(prompt)
-        text, sent = "", 0                                 # generated text, chars already yielded
-        for next_id in self.model.generate(idx, max_new, temperature, top_k):
-            text += self.tok.decode([next_id.item()])
+        raw, text, sent = "", "", 0                        # model output, completion, chars yielded
+        for next_id in self.model.generate(idx, max_new, temperature, top_k, allowed):
+            raw += self.tok.decode([next_id.item()])
+            text = raw[len(heal):]                         # the healed prefix is already in the prompt
             cut = find_stop(text, stop, base, at_line_start=prompt.endswith("\n") or not prompt)
             if cut is not None:
                 if cut > sent:
@@ -83,6 +91,9 @@ def find_stop(text, stop, base, at_line_start):
         return text.index("\n") if "\n" in text else None
     if stop == "none":
         return None
+    line_start = text.rfind("\n") + 1
+    if len(text) - line_start > 60 and not text[line_start:].strip():
+        return line_start                                  # runaway spaces: a typical small-model loop
     if "\n\n\n" in text:                                   # two blank lines: the block is over
         return text.index("\n\n\n")
     start = 0 if at_line_start else 1                      # piece 0 may just finish the prompt's last line
@@ -133,7 +144,7 @@ def bench(path, prompt, n_tokens=150, repeats=3):
 
 def watch(c, path, args):
     path = Path(path)
-    print(f"watching {path} - save the file to get a suggestion for its last line (Ctrl+C to stop)")
+    print(f"watching {path} - save the file to get a suggestion for its last line (Ctrl+C to stop)", flush=True)
     last = None
     while True:
         try:
@@ -146,7 +157,7 @@ def watch(c, path, args):
             line = text.split("\n")[-1]
             suggestion = c.complete(text, max_new=80, temperature=args.temperature, top_k=args.top_k, stop="line")
             n = text.count("\n") + 1
-            print(f"line {n}: {line}\033[2m{suggestion}\033[0m" if sys.stdout.isatty() else f"line {n}: {line}|{suggestion}")
+            print(f"line {n}: {line}\033[2m{suggestion}\033[0m" if sys.stdout.isatty() else f"line {n}: {line}|{suggestion}", flush=True)
         time.sleep(0.5)
 
 

@@ -113,12 +113,14 @@ class GPT(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=0.8, top_k=20):
+    def generate(self, idx, max_new_tokens, temperature=0.8, top_k=20, first_allowed=None):
         """Yield new token ids one at a time (so callers can stream them)."""
-        for _ in range(max_new_tokens):
+        for step in range(max_new_tokens):
             idx_cond = idx[:, -self.cfg.block_size:]           # crop to the last block_size tokens
             logits, _ = self(idx_cond)
             logits = logits[:, -1, :] / max(temperature, 1e-6)  # last position only
+            if step == 0 and first_allowed is not None:        # token healing (see complete.py)
+                logits[:, ~first_allowed] = float("-inf")
             if top_k:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                 logits[logits < v[:, [-1]]] = float("-inf")     # keep the k most likely tokens

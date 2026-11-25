@@ -59,6 +59,13 @@ sources:
     url: https://huggingface.co/learn/llm-course/chapter6/5
     accessed: 2026-11-24
     type: course
+  - id: guidance-healing
+    title: "The Art of Prompt Design: Prompt Boundaries and Token Healing"
+    author: guidance contributors, with Marco Tulio Ribeiro
+    publisher: guidance-ai (GitHub)
+    url: https://github.com/guidance-ai/guidance/blob/main/notebooks/art_of_prompt_design/prompt_boundaries_and_token_healing.ipynb
+    accessed: 2026-11-25
+    type: code
   - id: lets-build-tokenizer
     title: "Let's build the GPT Tokenizer"
     author: Andrej Karpathy
@@ -181,11 +188,38 @@ Train the tokenizer on the training files only. `train.py` calls `BPETokenizer.t
 
 Loss per token cannot be compared directly, because a BPE token is harder to guess than a single character. Both scripts therefore report **bits per character**: the loss per token divided by the characters per token and by $\ln 2$.<Cite id="hf-bpe" />
 
-@@BPE_TABLE@@
+Measured on the test machine, both runs with 4 layers, 192 channels, 32 windows of 128 tokens and 4,000 steps:
 
-<Callout type="note">
-A BPE model has one practical quirk at prompt boundaries. If your prompt ends with a newline, the tokenizer encodes it as a bare newline token, while in training a newline was almost always merged with the indentation that follows. The model must then continue from a token boundary it rarely saw. Character models do not have this problem.
-</Callout>
+| Step | Character model, validation bits/char | BPE model, validation bits/char |
+|---|---|---|
+| 500 | 2.56 | 2.18 |
+| 1,000 | 2.17 | 1.88 |
+| 2,000 | 1.88 | 1.61 |
+| 3,000 | 1.70 | 1.49 |
+| 4,000 | 1.65 | **1.48** |
+
+The BPE model, with 1,921,344 parameters (98,304 more, all in the larger embedding table), is the better predictor of unseen code at every step: about 10% fewer bits per character at the end. Part of the gain is simply more data per step: 16.4 million BPE tokens cover about 37 million characters, against 16.4 million for the character model. That also shows its cost: the BPE model went through the 8.7-million-character training set more than four times, its validation loss stopped improving after step 3,500, and its gap between training and validation loss is larger. With this corpus, more BPE training would mostly mean more overfitting.
+
+The difference is much larger when the models write code. With `python evaluate.py` on the same 100 validation functions:
+
+| Model | Token budget per body | Bodies that parse |
+|---|---|---|
+| Character | 300 tokens = 300 characters | 38 / 100 |
+| Character | 684 tokens = 684 characters | 46 / 100 |
+| BPE | 132 tokens ≈ 300 characters | 69 / 100 |
+| BPE | 300 tokens ≈ 684 characters | **81 / 100** |
+
+Compared at the same number of characters, the BPE model's bodies parse almost twice as often. A bigger budget is not what the character model is missing: with 684 characters it still reaches only 46 / 100, and 30 of its failures are docstrings that never close. Its longer context lets it still see the function signature and the opening of a docstring when it needs to close it, and its tokens for whole keywords and indentation steps leave fewer chances to misspell structure. Its bodies are also longer, averaging 10 lines within 300 tokens. This is the trade-off that makes sub-word tokenizers the standard for language models, measured at a scale you can reproduce on a laptop.<Cite id="sennrich2016" />
+
+## Prompt boundaries and token healing
+
+The first test of the trained BPE model failed in an instructive way. Given `class Stack:` and `def __init__(self):` followed by a newline, all three suggestions were empty. The cause is the tokenizer, not the model. A prompt that ends with a newline is encoded with a bare newline token, but during training a newline was almost always merged with the indentation of the next line (newline plus eight spaces is one token). The model had rarely seen a bare newline followed by anything other than another blank line, so it ended the block at once.
+
+The fix is called **token healing**: remove the prompt's last token, and constrain the first generated token to one whose text *starts with* the removed text. The model can then choose newline-plus-eight-spaces, the boundary it knows. The guidance library calls this token healing and turns it on by default for Transformer models.<Cite id="guidance-healing" /> `complete.py` does the same for BPE checkpoints; character models never need it, because every boundary between characters was seen in training.
+
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="55-68" highlight="61-62" title="complete.py: token healing for BPE prompts" />
+
+With healing switched on, the same prompt produced ordinary suggestions such as `self._loop = loop`. Production systems handle the same problem in their own ways, but it shows a general lesson: the tokenizer is part of the model, and text boundaries the model never saw in training behave unpredictably.
 
 ## Summary
 
@@ -194,3 +228,4 @@ A BPE model has one practical quirk at prompt boundaries. If your prompt ends wi
 - 512 merges give 2.28 characters per token on unseen code, so the same context covers more than twice as much text.
 - Every token costs an embedding row, so small models need small vocabularies.
 - Compare models in bits per character, and train the tokenizer on training data only.
+- Prompts that end at an unusual token boundary need token healing: back up one token and constrain the first new token to start with it.

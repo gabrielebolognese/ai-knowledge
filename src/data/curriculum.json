@@ -3795,7 +3795,7 @@
                 "hyperparameter-tuning",
                 "saving-loading-models"
               ],
-              "covers": "30-60 min CPU run (4,000 steps), --smoke mode, eval every N steps, loss in nats per token and bits per character, --resume and the --no-causal-mask demo.",
+              "covers": "About 1 hour CPU run (4,000 steps), --smoke mode, eval every N steps, loss in nats per token and bits per character, --resume and the --no-causal-mask demo.",
               "sources": [
                 {
                   "id": "nanogpt",

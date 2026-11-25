@@ -117,7 +117,7 @@ exercises:
 
 `GPT.generate` in `model.py` runs the loop used by nanoGPT.<Cite id="nanogpt" /> It crops the context to the last `block_size` tokens, because the position table has only 128 entries; runs the model; keeps only the logits of the *last* position; reshapes them with temperature and top-k; and draws one token with `torch.multinomial`, which samples an index in proportion to the given probabilities.<Cite id="pt-multinomial" /> It yields each token as soon as it is drawn, so a caller can print the completion while it is being written.
 
-<CodeFile path="code/projects/project-code-autocomplete/model.py" lines="115-128" highlight="119,121,124" title="model.py: one token at a time" />
+<CodeFile path="code/projects/project-code-autocomplete/model.py" lines="115-130" highlight="119,121,126" title="model.py: one token at a time" />
 
 <Callout type="pitfall">
 Forgetting to crop the context is a common bug: once the prompt plus completion exceeds `block_size`, the position lookup fails. Cropping also means the model simply forgets everything older than 128 characters, about three lines of code.
@@ -156,11 +156,12 @@ An editor suggestion should end where the code block ends, not run on into a new
 - **Dedent.** If the prompt ends with a block header such as `def f(x):`, the completion stops at the first non-blank line indented no deeper than that header, because the body is over.
 - **Two blank lines.** PEP 8 separates top-level definitions with two blank lines, so three newlines in a row end the completion.
 - **File marker.** The corpus separator `# <|file|>` means the model thinks a new file starts.
+- **Runaway spaces.** A line of more than 60 spaces with nothing else on it is cut off. Small models sometimes get stuck emitting spaces, because long runs of spaces are common in the corpus (indentation, aligned comments), and each extra space makes another one likely.
 - **Token limit**, 200 by default.
 
 While streaming, a line that so far contains only spaces is held back, because it may still turn out to be a dedent that should not be shown.
 
-<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="78-94" title="complete.py: stop rules" />
+<CodeFile path="code/projects/project-code-autocomplete/complete.py" lines="86-105" highlight="94-96,102" title="complete.py: stop rules" />
 
 ## Measuring the parse rate
 
@@ -168,9 +169,17 @@ Reading a few samples is essential, but it is subjective. A cheap automatic chec
 
 `evaluate.py` finds every function in the **validation** files, which the model never trained on. For each one it gives the model the file's code up to and including the `def` line, lets it write the body with the stop rules above, drops an unfinished last line, and tries to parse header plus body.
 
-<CodeFile path="code/projects/project-code-autocomplete/evaluate.py" lines="23-51" highlight="48" title="evaluate.py: prompts from unseen files, checked by ast.parse" />
+<CodeFile path="code/projects/project-code-autocomplete/evaluate.py" lines="25-54" highlight="51" title="evaluate.py: prompts from unseen files, checked by ast.parse" />
 
-@@PARSE@@
+Measured with `python evaluate.py --n 100` (100 randomly chosen validation functions, temperature 0.4, top-k 20, at most 300 tokens per body):
+
+| Checkpoint | Bodies that parse | Average body length |
+|---|---|---|
+| Smoke run (300 steps, 0.8M parameters) | 0 / 100 | 0 lines (only spaces) |
+| Full run after 500 steps | 7 / 100 | 1.0 lines |
+| Full run after 4,000 steps | **38 / 100** | 5.1 lines |
+
+The script also counts why the other bodies fail. For the final character model, 37 of the 62 failures were an *unterminated triple-quoted string*: the model opened a docstring, wrote fluent-sounding but meaningless English ("Close the current close in the exception for exception."), and was still writing when the 300-character budget ran out. The rest were unterminated ordinary strings (5), unexpected indentation (4), a missing body (4) and unclosed brackets (3). So the model has largely learned Python's block structure; what it lacks is the stamina to finish what it starts within a short budget. With 100 samples, treat the percentages as rough: a rerun with another seed can easily move them by several points.
 
 ## Why longer completions drift
 

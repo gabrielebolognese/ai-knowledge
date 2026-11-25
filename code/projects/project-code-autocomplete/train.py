@@ -1,7 +1,7 @@
 """Train the tiny GPT on the Python standard library, on a CPU.
 
     python train.py --smoke                 # ~200 KB, 300 steps, a few minutes at most: checks your setup
-    python train.py                         # full run: char-level, ~1.8M params, 4,000 steps (30-60 min)
+    python train.py                         # full run: char-level, ~1.8M params, 4,000 steps (about 1 hour)
     python train.py --tokenizer bpe         # stage 2: BPE tokens (train the char model first)
     python train.py --resume                # continue from the last checkpoint
     python train.py --smoke --no-causal-mask   # the classic bug: watch the loss collapse

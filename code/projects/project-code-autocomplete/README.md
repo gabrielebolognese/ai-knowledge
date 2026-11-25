@@ -28,7 +28,7 @@ Run every command from this folder.
 ## Quick start
 
 ```bash
-python train.py --smoke        # ~200 KB, 300 steps: checks everything works (1-6 min)
+python train.py --smoke        # ~200 KB, 300 steps: checks everything works (a few minutes)
 python train.py                # full char-level run: 4,000 steps, ~1.8M params (about 1 hour on a laptop CPU)
 python complete.py --prompt "def is_even(n):"
 python complete.py --samples 3 --prompt "class Stack:\n    def push(self, item):"
@@ -52,7 +52,20 @@ shows what happens when the model can see the future.
 
 ## Measured results
 
-@@README_RESULTS@@
+Measured on the course's test machine: Windows 11 laptop CPU (8 PyTorch threads),
+CPython 3.13.3 standard library, PyTorch 2.15.0 CPU build. The CPU was shared
+with other heavy jobs during the full runs, so an idle machine should be faster.
+
+| What | Result |
+|---|---|
+| Corpus | 568 files: 511 train (8,664,390 chars), 57 val (989,019 chars); 97-character alphabet, 208 placeholder chars |
+| BPE tokenizer | 512 merges in 17 s, vocabulary 609, 2.28 chars/token on val (2,048 merges: 58 s, 2.90 chars/token) |
+| Smoke run | 300 steps in 44 s (1.4 min on a busy CPU); train loss 4.47 -> 2.16, val 2.19 (3.16 bits/char) |
+| Full char run | 1,823,040 params, 4,000 steps x 4,096 tokens in 90 min; val loss 1.147 nats = **1.65 bits/char** |
+| Full BPE run | 1,921,344 params, same steps and batch, 62 min; val **1.48 bits/char** |
+| Parse rate (100 val functions, T=0.4, top-k 20) | smoke 0%, char after 500 steps 7%, char 38% (300 chars), char 46% (684 chars), BPE 69% (132 tokens ~ 300 chars), BPE 81% (300 tokens) |
+| No-mask bug demo | `--smoke --no-causal-mask --max-iters 1500`: val loss 0.05 at step 500 (masked: 1.90), gibberish samples |
+| Latency (`--bench`, 8 threads) | char 6.3 ms/token, BPE 6.1 ms/token (~2.7 ms/char); int8: 3.6x smaller weights but ~2x slower at this size |
 
 Numbers vary with your Python version (different standard library), CPU and
 random seed. Treat them as the order of magnitude to expect.
