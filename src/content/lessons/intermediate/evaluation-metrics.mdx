@@ -1,0 +1,198 @@
+---
+title: "Evaluation: accuracy, precision, recall and the confusion matrix"
+slug: evaluation-metrics
+track: intermediate
+level: intermediate
+order: 60
+minutes: 20
+module: Training that generalizes
+summary: How to measure a classifier honestly. Read a confusion matrix, compute precision, recall and F1 by hand, see why 99% accuracy can be worthless, and keep the test set for one final score.
+hatnote: For the loss that training minimises, see "The PyTorch training loop". For what to do when validation scores fall behind training scores, see "Overfitting and regularization".
+prerequisites: [training-loop, data-features-labels]
+tools: [Python 3, NumPy]
+outcomes:
+  - Compute accuracy, precision, recall and F1 from a confusion matrix
+  - Explain why accuracy misleads on imbalanced data
+  - Use the validation set for decisions and the test set only once
+build: Precision, recall, F1 and macro/micro averages in plain NumPy
+reviewed: 2026-11-25
+seeAlso: [training-loop, overfitting-regularization, mnist-evaluate]
+sources:
+  - id: sklearn-metrics
+    title: "Metrics and scoring: quantifying the quality of predictions"
+    publisher: scikit-learn documentation
+    url: https://scikit-learn.org/stable/modules/model_evaluation.html
+    accessed: 2026-11-25
+    type: docs
+  - id: mlcc-metrics
+    title: "Classification: Accuracy, recall, precision, and related metrics"
+    publisher: Google Machine Learning Crash Course
+    url: https://developers.google.com/machine-learning/crash-course/classification/accuracy-precision-recall
+    accessed: 2026-11-25
+    type: course
+  - id: goodfellow2016-guidelines
+    title: "Deep Learning, chapter 11: Practical Methodology"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/guidelines.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-generalization
+    title: "Dive into Deep Learning, 3.6 Generalization"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_linear-regression/generalization.html
+    accessed: 2026-11-25
+    type: book
+  - id: wiki-pr
+    title: Precision and recall
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Precision_and_recall
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: wiki-sets
+    title: Training, validation, and test data sets
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Training,_validation,_and_test_data_sets
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: kapoor2023
+    title: "Leakage and the reproducibility crisis in machine-learning-based science"
+    author: Sayash Kapoor, Arvind Narayanan
+    publisher: Patterns 4(9)
+    year: 2023
+    url: https://doi.org/10.1016/j.patter.2023.100804
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "scikit-learn: classification_report"
+    url: https://scikit-learn.org/stable/modules/generated/sklearn.metrics.classification_report.html
+  - title: "Google MLCC: ROC and AUC"
+    url: https://developers.google.com/machine-learning/crash-course/classification/roc-and-auc
+exercises:
+  - id: em-recall
+    type: numeric
+    difficulty: easy
+    title: Recall of a fraud detector
+    prompt: "A fraud detector is tested on 1,000 transactions. It flags 10, of which 8 are really fraud (TP = 8, FP = 2). It misses 12 frauds (FN = 12), and TN = 978. What is its recall?"
+    answer: 0.4
+    tolerance: 0.001
+    hint: "Recall = TP / (TP + FN): of all real frauds, how many were caught?"
+    explanation: "There are 8 + 12 = 20 real frauds and 8 were caught, so recall = 8 / 20 = 0.4. Its accuracy is (8 + 978) / 1000 = 98.6%, which hides the fact that it misses most fraud."
+  - id: em-f1
+    type: numeric
+    difficulty: medium
+    title: F1 of the same detector
+    prompt: "Same detector: precision = 8 / 10 = 0.8 and recall = 0.4. What is the F1 score? (Three decimals.)"
+    answer: 0.533
+    tolerance: 0.001
+    hint: "F1 = 2PR / (P + R)."
+    explanation: "F1 = 2 · 0.8 · 0.4 / (0.8 + 0.4) = 0.64 / 1.2 = 0.533. The harmonic mean is pulled towards the weaker of the two numbers; the plain average would have said 0.6."
+  - id: em-which-metric
+    type: mcq
+    difficulty: easy
+    title: Which metric for screening?
+    prompt: A model screens medical scans so that a doctor looks at every scan it flags. Missing a real tumour is far worse than an extra scan for the doctor. Which number should you push up first?
+    options:
+      - Precision
+      - Recall
+      - Accuracy
+      - Training loss
+    answer: Recall
+    explanation: "Recall counts how many of the real positives the model catches. A missed tumour is a false negative, which lowers recall. Some extra false positives (lower precision) cost only the doctor's time, and accuracy hides missed tumours when positives are rare."
+  - id: em-test-set
+    type: mcq
+    difficulty: medium
+    title: Choosing the best epoch
+    prompt: You trained for 20 epochs and saved a checkpoint after each. How should you pick the checkpoint to report?
+    options:
+      - The one with the highest test accuracy
+      - The one with the lowest training loss
+      - The one with the best validation score, then measure its test score once
+      - The last one, always
+    answer: 2
+    explanation: "Choosing by test accuracy turns the test set into a second validation set, and the reported number becomes optimistic. Training loss says nothing about new data. Pick with validation data, then touch the test set once for the honest final number."
+---
+
+**Model evaluation** is the measurement of how well a trained model performs on data it has never seen. For classifiers the starting point is the **confusion matrix**, a table that counts every kind of right and wrong answer, from which accuracy, precision, recall and F1 are computed.<Cite id="sklearn-metrics" /> Choosing the right number, and measuring it on the right data, decides whether a reported score can be trusted.<Cite id="goodfellow2016-guidelines" />
+
+## The confusion matrix
+
+For a yes/no problem such as spam filtering, every prediction falls into one of four cells:<Cite id="mlcc-metrics" />
+
+| | Predicted spam | Predicted not spam |
+|---|---|---|
+| **Really spam** | true positive (TP) | false negative (FN) |
+| **Really not spam** | false positive (FP) | true negative (TN) |
+
+A <Term slug="confusion-matrix" /> with more classes works the same way: row $i$, column $j$ counts the examples of true class $i$ predicted as class $j$. The diagonal holds the correct answers and every off-diagonal cell is a specific mistake, for example a handwritten 4 read as a 9.<Cite id="sklearn-metrics" /> Reading the off-diagonal cells is often more useful than any single score, because it shows *which* errors the model makes.
+
+## Precision, recall and F1, with numbers
+
+Take a spam filter tested on 100 emails, 60 of them spam. It catches 40 spam emails (TP = 40), lets 20 through (FN = 20), wrongly flags 10 good emails (FP = 10) and passes the other 30 (TN = 30).
+
+<MathSteps
+  title="Four metrics from one confusion matrix"
+  legend={[
+    { symbol: 'TP, FP', meaning: 'true and false positives' },
+    { symbol: 'TN, FN', meaning: 'true and false negatives' },
+    { symbol: 'P, R', meaning: 'precision and recall' },
+  ]}
+>
+  <Step tex="\text{accuracy} = \frac{TP + TN}{\text{all}} = \frac{40 + 30}{100} = \hl{0.70}" words="Accuracy: the share of all answers that are right." />
+  <Step tex="P = \frac{TP}{TP + \hl{FP}} = \frac{40}{40 + 10} = 0.80" words="Precision: when the filter says spam, how often is it right? Only the predicted-spam column matters." />
+  <Step tex="R = \frac{TP}{TP + \hl{FN}} = \frac{40}{40 + 20} = 0.667" words="Recall: of all the real spam, how much did it catch? Only the really-spam row matters." />
+  <Step tex="F_1 = \frac{2PR}{P + R} = \frac{2 \cdot 0.8 \cdot 0.667}{0.8 + 0.667} = \frac{1.067}{1.467} = \hl{0.727}" words="F1: the harmonic mean, which is high only when both precision and recall are high." example="plain average would give 0.733" />
+</MathSteps>
+
+<Term slug="precision-and-recall">Precision and recall</Term> answer different questions, and improving one usually costs the other. Lowering the threshold at which an email counts as spam catches more spam (recall rises) but flags more good mail (precision falls).<Cite id="wiki-pr" /> The <Term slug="f1-score" /> combines the two when a single number is needed; which of them matters more depends on what each kind of mistake costs.<Cite id="mlcc-metrics" />
+
+<Analogy breaks="A real net has no threshold you can turn smoothly; a classifier does, which is how you trade one metric for the other.">
+Think of fishing with a net. A wide, fine net catches every fish (high recall) but also boots and weeds (low precision); picking fish out by hand gets only fish (high precision) but misses many (low recall).
+</Analogy>
+
+## The accuracy trap
+
+Accuracy is easy to explain and fine when classes are roughly balanced. On **imbalanced** data it misleads. Suppose only 10 of 1,000 emails are spam and a "model" always answers *not spam*: it scores 99.0% accuracy while catching no spam at all, a recall of 0.<Cite id="mlcc-metrics" /> Fraud, rare diseases and defects all look like this.
+
+<Callout type="pitfall">
+"99% accuracy is great." Not if 99% of the examples belong to one class. Always compare with the score of the trivial "predict the most common class" baseline, and look at per-class recall.
+</Callout>
+
+## More than two classes: macro and micro averages
+
+With several classes, precision and recall are computed per class by treating that class as "positive" and all others as "negative". Two ways of combining them give different pictures:<Cite id="sklearn-metrics" />
+
+- **Macro average**: compute the metric for each class, then take the plain mean. Every class counts equally, so a rare class the model ignores drags the score down.
+- **Micro average**: add up the TP, FP and FN counts over all classes first, then compute the metric once. Every example counts equally; for single-label problems the micro-averaged recall equals accuracy.
+
+In the companion script, a three-class problem with 80, 15 and 5 examples has per-class recall 0.975, 0.667 and 0.2. The micro average is 0.890 (the accuracy), while the macro average is only 0.614, which exposes the fact that the smallest class is almost never recognised.
+
+## Which data to measure on
+
+A score is only meaningful on data the model did not learn from. The usual practice is three disjoint splits:<Cite id="wiki-sets" /><Cite id="goodfellow2016-guidelines" />
+
+- the **training set** fits the weights;
+- the <Term slug="validation-set">validation set</Term> is used for every decision: which epoch to keep, which learning rate, which architecture;
+- the **test set** is used **once**, at the end, for the number you report.
+
+Each decision made by looking at a data set fits the model a little to that set, so a test set that influenced choices gives an optimistic score.<Cite id="d2l-generalization" /> Typical splits are 80/10/10 or 70/15/15; MNIST ships with 60,000 training and 10,000 test images, so the validation set is carved out of the training images, as in [the training loop lesson](/course/intermediate/training-loop/).
+
+**Leakage** is the related failure where information from the evaluation data reaches training, for example the same chess position or near-duplicate photos in both splits, or normalising with statistics computed on all the data. A review of published machine-learning research found leakage behind inflated results in hundreds of papers across many fields.<Cite id="kapoor2023" /> Split first, then compute any statistics on the training split only.
+
+## Try it
+
+The companion script builds the confusion matrix and the per-class scores with a few lines of NumPy:
+
+<CodeFile path="code/core/intermediate/metrics.py" lines="10-26" highlight="19,20,21" title="confusion matrix and per-class scores" />
+
+Run `python code/core/intermediate/metrics.py`. It prints accuracy 0.700, precision 0.800, recall 0.667 and F1 0.727 for the spam example, 0.990 accuracy with 0.000 recall for the always-*not spam* model, and the macro (0.614) and micro (0.890) recall for three classes. If [scikit-learn](https://scikit-learn.org/stable/install.html) is installed it cross-checks the macro score with `precision_recall_fscore_support`.<Cite id="sklearn-metrics" /> The digits project applies the same tools to a real model in [Evaluating the digit model](/course/project-digits-letters/mnist-evaluate/).
+
+## Summary
+
+- The confusion matrix counts every kind of right and wrong answer; read its off-diagonal cells.
+- Precision = TP / (TP + FP), recall = TP / (TP + FN), and F1 is their harmonic mean.
+- Accuracy misleads on imbalanced data; compare with the trivial baseline and per-class recall.
+- Macro averages weight classes equally, micro averages weight examples equally.
+- Make decisions with the validation set and touch the test set once.

@@ -1,0 +1,240 @@
+---
+title: Debugging neural network training
+slug: debugging-training
+track: intermediate
+level: intermediate
+order: 110
+minutes: 25
+module: The practitioner's toolkit
+summary: Buggy training code usually runs without errors and just trains badly. This lesson gives a debugging checklist (look at the data, check the initial loss, overfit one batch), the classic PyTorch bugs and their symptoms, NaN hunting, gradient checks and gradient clipping.
+hatnote: For choosing settings once the code is correct, see "Hyperparameters and how to tune them".
+prerequisites: [hyperparameter-tuning, initialization-normalization]
+tools: [Python 3, PyTorch]
+outcomes:
+  - "Follow a debugging checklist: overfit one batch, check the initial loss, visualize inputs"
+  - "Spot common bugs: softmax before CrossEntropyLoss, missing zero_grad, wrong shapes, eval mode"
+  - Use gradient checks and gradient clipping
+build: Five sanity checks that catch most training bugs, in one script
+reviewed: 2026-11-25
+seeAlso: [training-loop, hyperparameter-tuning, initialization-normalization]
+sources:
+  - id: karpathy-recipe
+    title: A Recipe for Training Neural Networks
+    author: Andrej Karpathy
+    publisher: karpathy.github.io
+    year: 2019
+    url: https://karpathy.github.io/2019/04/25/recipe/
+    accessed: 2026-11-25
+    type: article
+  - id: goodfellow2016-guidelines
+    title: "Deep Learning, chapter 11: Practical Methodology"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/guidelines.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-nn3
+    title: "Neural Networks Part 3: Learning and Evaluation"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-3/
+    accessed: 2026-11-25
+    type: course
+  - id: pt-gradcheck
+    title: torch.autograd.gradcheck.gradcheck
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.autograd.gradcheck.gradcheck.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-clip-grad
+    title: torch.nn.utils.clip_grad_norm_
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-crossentropy
+    title: torch.nn.CrossEntropyLoss
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-anomaly
+    title: "Automatic differentiation package: anomaly detection"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/autograd.html#anomaly-detection
+    accessed: 2026-11-25
+    type: docs
+  - id: pascanu2013
+    title: On the difficulty of training recurrent neural networks
+    author: Razvan Pascanu, Tomas Mikolov, Yoshua Bengio
+    publisher: Proceedings of ICML 2013 (PMLR 28)
+    year: 2013
+    url: https://proceedings.mlr.press/v28/pascanu13.html
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Josh Tobin: Troubleshooting Deep Neural Networks (Full Stack Deep Learning)"
+    url: https://fullstackdeeplearning.com/spring2021/lecture-7/
+  - title: "PyTorch: Autograd mechanics"
+    url: https://docs.pytorch.org/docs/stable/notes/autograd.html
+exercises:
+  - id: dbg-initial-loss-letters
+    type: numeric
+    difficulty: easy
+    title: Expected initial loss
+    prompt: "A freshly initialized classifier for the 26 letters of the alphabet uses `nn.CrossEntropyLoss`. Roughly what should the loss on the first batch be? (Three decimals.)"
+    answer: 3.258
+    tolerance: 0.01
+    hint: "An untrained network should spread its probability evenly: $p = 1/26$ for the correct class."
+    explanation: "$L = -\\ln(1/26) = \\ln 26 \\approx 3.258$. A first-batch loss of, say, 40 would mean the logits start far too large (bad initialization or unscaled inputs)."
+  - id: dbg-symptom
+    type: mcq
+    difficulty: medium
+    title: Read the symptom
+    prompt: "A 10-class MNIST model's training loss drops quickly but never goes below about 1.46, even on a single batch that it should memorise. The model ends with `nn.Softmax(dim=1)` and the loss is `nn.CrossEntropyLoss()`. What is the most likely cause?"
+    options:
+      - The learning rate is too high
+      - The softmax layer, because CrossEntropyLoss applies log-softmax itself
+      - The batch is too small
+      - Missing data augmentation
+    answer: 1
+    explanation: "CrossEntropyLoss expects raw logits. Feeding it probabilities squashes the inputs into [0, 1], so even a perfect prediction gives a loss of $\\ln(1 + 9/e) \\approx 1.461$. Remove the softmax from the model and apply it only when you want to display probabilities."
+  - id: dbg-find-the-bug
+    type: short
+    difficulty: medium
+    title: Find the bugs
+    prompt: "This loop trains badly. Name two bugs: `for X, y in train_dl:` → `logits = model(X)` → `loss = loss_fn(torch.softmax(logits, dim=1), y)` → `loss.backward()` → `opt.step()`, where `loss_fn = nn.CrossEntropyLoss()`."
+    answer: "1) softmax applied before CrossEntropyLoss (pass the raw logits); 2) opt.zero_grad() is never called, so gradients accumulate across batches."
+    explanation: "Without `opt.zero_grad()` each `backward()` adds onto the previous gradients, so every step uses the sum of all past gradients and the updates grow erratically. The extra softmax puts a floor under the loss and weakens the gradients. The fixed loop is: forward, loss on logits, `opt.zero_grad()`, `loss.backward()`, `opt.step()`."
+  - id: dbg-eval-mode
+    type: mcq
+    difficulty: easy
+    title: Validation looks noisy
+    prompt: "Your model uses dropout. Validation accuracy jumps around by several points between runs of the same evaluation code on the same weights. What did you most likely forget?"
+    options:
+      - "`torch.manual_seed(0)` at the top of the file"
+      - "`model.eval()` before evaluating"
+      - "`optimizer.zero_grad()` before evaluating"
+      - "`loss.item()` when logging"
+    answer: 1
+    explanation: "In training mode, dropout zeroes random units on every forward pass, so the same input gives different outputs. `model.eval()` turns dropout off (and makes BatchNorm use its running statistics). Wrap evaluation in `torch.no_grad()` as well, to save memory."
+  - id: dbg-nan
+    type: reveal
+    difficulty: medium
+    title: NaN after 300 steps
+    prompt: Training is fine for 300 steps, then the loss becomes `nan` and stays there. List the first three things you would check, in order.
+    answer: "1) Lower the learning rate (and/or add gradient clipping); 2) look for log(0), division by zero or sqrt of a negative in custom loss or preprocessing code; 3) check the input batch for NaN/inf values. torch.autograd.set_detect_anomaly(True) can locate the operation."
+    explanation: "A NaN that appears after a while usually comes from an update that was too large (loss spikes, logits overflow) or from a numerically unsafe operation hit by an unusual batch. Logging the gradient norm each step shows whether it spiked just before the NaN; anomaly detection points to the backward operation that first produced it, at the cost of much slower training."
+---
+
+**Debugging neural network training** is the work of finding out why a model trains badly when the code runs without errors. Unlike most software, buggy training code rarely crashes: a wrong loss, a missing line or a shape mistake usually produces a model that is just a bit worse, so bugs must be hunted deliberately.<Cite id="karpathy-recipe" /> A short set of sanity checks, run in order, catches most of them.<Cite id="cs231n-nn3" />
+
+## A debugging checklist
+
+Andrej Karpathy's "recipe" and the CS231n notes recommend building up from checks that are cheap and certain to ones that are slow and noisy:<Cite id="karpathy-recipe" /><Cite id="cs231n-nn3" />
+
+1. **Look at the data.** Plot a few inputs with their labels after all preprocessing. Check the label counts, the value range (for example 0 to 1 after scaling) and that images are not transposed or mislabelled.
+2. **Check the initial loss.** Before training, the loss should match what a uniform guess would give.
+3. **Overfit one small batch.** A correct model and loop can drive the loss on 2 to 32 examples almost to zero.
+4. **Start simple.** A small model, no augmentation or regularization, a fixed seed. Add one thing at a time and confirm each one helps.
+5. **Watch the curves**, training and validation, and only then start tuning.
+
+Goodfellow and colleagues give similar advice: first decide what "working" means, build a simple end-to-end baseline, and then measure where it fails before making changes.<Cite id="goodfellow2016-guidelines" />
+
+<Analogy breaks="A doctor treats a patient who exists already; with a model you can also rebuild the patient from scratch, which is often faster than a long diagnosis.">
+Debugging training resembles a medical checkup. The vital signs come first (data samples, shapes, initial loss), then a stress test (overfit one batch), then the long-term chart (loss curves), and one treatment is tried at a time so you know which one worked.
+</Analogy>
+
+## Check the initial loss
+
+An untrained classifier should be unsure. If its probabilities are spread evenly over $C$ classes, the cross-entropy loss has a known value:<Cite id="cs231n-nn3" />
+
+<MathSteps
+  title="Expected loss before training"
+  legend={[
+    { symbol: 'C', meaning: 'number of classes' },
+    { symbol: 'p', meaning: 'probability given to the correct class' },
+    { symbol: 'L', meaning: 'cross-entropy loss' },
+  ]}
+>
+  <Step tex="p = \tfrac{1}{C}" words="An uninformed network gives every class the same probability." />
+  <Step tex="L = -\ln p = -\ln \tfrac{1}{C} = \hl{\ln C}" words="Cross-entropy is minus the log of the probability of the correct class." />
+  <Step tex="C = 10:\ L = \ln 10 \approx \hl{2.303}" words="For MNIST's ten digits the first loss should be close to 2.3." example="A first loss of 25 means the logits start far too large." />
+</MathSteps>
+
+A first loss much larger than $\ln C$ points to a bad initialization, unscaled inputs, or a wrong input to the loss.<Cite id="karpathy-recipe" /> See <Term slug="cross-entropy" /> for the loss itself.
+
+## Overfit a single batch
+
+Take one batch of, say, 16 examples and train on it alone for a few hundred steps. The loss should approach zero, because a network with thousands of weights can memorise 16 labels. If it cannot, there is a bug in the model, the loss or the loop, not a lack of data.<Cite id="karpathy-recipe" /> This test takes seconds and rules out a whole class of problems before any long run.
+
+## Classic PyTorch bugs
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Loss stops at a floor (about 1.46 for 10 classes), even on one batch | `softmax` before `nn.CrossEntropyLoss` | Return raw logits; the loss applies log-softmax itself |
+| Updates grow erratically, loss jumps | `optimizer.zero_grad()` missing, so gradients accumulate | Call it every iteration, before `backward()` |
+| Validation varies between identical runs, or is worse than expected | `model.eval()` forgotten: dropout still active, BatchNorm uses batch statistics | `model.eval()` and `torch.no_grad()` for evaluation; `model.train()` afterwards |
+| Shape error or nonsense loss | Labels are not integer class indices of shape `(N,)` | Use `dtype=torch.long` class indices for class targets |
+| Loss looks plausible but the model learns nothing useful | Broadcasting: `(N,)` minus `(N, 1)` silently becomes `(N, N)` | Print shapes on the first pass; `assert` the shapes you expect |
+| Memory grows every step | Logging the loss tensor itself keeps the graph alive | Log `loss.item()` |
+| Device error | Model and batch on different devices | Move both with `.to(device)` |
+
+The first row deserves a closer look. `nn.CrossEntropyLoss` combines log-softmax and negative log-likelihood, so it expects unnormalized logits.<Cite id="pt-crossentropy" /> Squeezing the inputs into probabilities first means that even a perfect prediction scores $\ln(1 + 9/e) \approx 1.461$ for 10 classes, and the gradients become weak.<Cite id="pt-crossentropy" /> Training still "works", which is why this bug survives.
+
+<Exercise id="dbg-find-the-bug" />
+
+## Reading the curves
+
+Once the code passes the checks, the training and validation curves say what to do next:<Cite id="cs231n-nn3" /><Cite id="karpathy-recipe" />
+
+- **Both losses high and flat**: underfitting, a learning rate that is too low, or dead units. Train longer, use a bigger model or raise the rate.
+- **Training loss low, validation loss rising**: overfitting. Regularize, as in [Overfitting and regularization](/course/intermediate/overfitting-regularization/).
+- **Loss jumps or explodes**: the learning rate is too high, or the gradients explode.
+- **Loss becomes `nan`**: see below.
+
+### Hunting NaNs
+
+A `nan` loss is an alarm, not a location. In order: lower the learning rate by a factor of 10 and add gradient clipping; look for `log(0)`, division by zero or the square root of a negative number in custom code; check the input batch with `torch.isfinite(X).all()`.<Cite id="karpathy-recipe" /> PyTorch's `torch.autograd.set_detect_anomaly(True)` makes the backward pass report the operation that first produced a NaN, at the cost of much slower training, so switch it on only while hunting.<Cite id="pt-anomaly" />
+
+## Gradient checking
+
+If you write a custom layer or loss with its own backward pass, compare its gradient with a finite-difference estimate. The centred difference is far more accurate than the one-sided one:<Cite id="cs231n-nn3" />
+
+<MathSteps
+  title="Numerical check of the derivative of w³ at w = 2"
+  legend={[
+    { symbol: 'h', meaning: 'small nudge' },
+    { symbol: 'L(w)', meaning: 'the function being checked, here w³' },
+  ]}
+>
+  <Step tex="L'(w) = 3w^2 = \hl{12}" words="The analytic gradient, which is what the backward pass should produce." />
+  <Step tex="L(2.001) = 8.012006001,\quad L(1.999) = 7.988005999" words="Evaluate the function a tiny step h = 0.001 on each side." />
+  <Step tex="\frac{L(w+h) - L(w-h)}{\hl{2h}} = \frac{0.024000002}{0.002} = 12.000001" words="The centred difference: the slope of the line through the two nearby points." />
+  <Step tex="\frac{|12.000001 - 12|}{12} \approx \hl{8 \times 10^{-8}}" words="Relative error. Below about 1e-7 is excellent; above about 1e-2 usually means a bug." />
+</MathSteps>
+
+PyTorch automates this with `torch.autograd.gradcheck`, which compares autograd against finite differences for every input element. Use float64 tensors: in float32 the rounding errors are larger than the differences being measured.<Cite id="pt-gradcheck" />
+
+## Gradient clipping
+
+Gradients can occasionally explode, especially in recurrent networks and Transformers, producing one huge update that undoes hours of training.<Cite id="pascanu2013" /> <Term slug="gradient-clipping">Gradient clipping</Term> rescales the whole gradient whenever its norm exceeds a limit. Call `torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)` between `loss.backward()` and `optimizer.step()`; it returns the norm *before* clipping, which is worth logging.<Cite id="pt-clip-grad" /> Clipping hides symptoms, so if it fires on every step, look for the cause (often the learning rate) as well.<Cite id="karpathy-recipe" />
+
+<Callout type="tip">
+Print `tuple(t.shape)` for every intermediate tensor on the first batch. It takes a minute and catches more bugs than anything else.
+</Callout>
+
+## Try it
+
+The script runs the checks on random data:
+
+<CodeFile path="code/core/intermediate/debug_checks.py" lines="24-48" highlight="28,35,41" title="initial loss, overfit one batch, the softmax bug" />
+
+It prints `initial loss 2.332 (expected about ln(10) = 2.303)`; a loss of `0.0003` on one batch of 16 after 200 steps; `1.4612` for the same batch with the extra softmax layer, exactly the floor computed above; `gradcheck passed: True` and a centred difference of `12.0000010`; a gradient norm of `727.3` before clipping and `1.000` after; and the broadcasting trap, where `pred - target` has shape `(4, 4)` instead of `(4,)`.
+
+## Summary
+
+- Training bugs usually fail silently, so check deliberately: data, initial loss ($\approx \ln C$), overfit one batch, then curves.
+- The classic PyTorch bugs are softmax before `CrossEntropyLoss`, a missing `zero_grad()`, a forgotten `model.eval()`, wrong label types and silent broadcasting.
+- For `nan`: lower the learning rate, look for unsafe maths, check the inputs, and use anomaly detection.
+- Verify custom gradients with a centred difference or `gradcheck` in float64; use `clip_grad_norm_` against exploding gradients.

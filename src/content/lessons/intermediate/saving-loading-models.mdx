@@ -1,0 +1,173 @@
+---
+title: Saving, loading and reusing models
+slug: saving-loading-models
+track: intermediate
+level: intermediate
+order: 120
+minutes: 15
+module: The practitioner's toolkit
+summary: How to store a trained PyTorch model and get it back. Save a state_dict for inference, save a full checkpoint (model, optimizer, epoch) to resume training, and load safely with weights_only and map_location.
+hatnote: For the training loop that produces the checkpoints, see "The PyTorch training loop".
+prerequisites: [training-loop]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Save and load a state_dict and a full training checkpoint (model, optimizer, epoch)
+  - Resume training from a checkpoint
+  - Load safely with weights_only and switch to eval mode for inference
+build: A save, resume and reload script that proves a resumed run matches an uninterrupted one
+reviewed: 2026-11-25
+seeAlso: [training-loop, debugging-training, handwriting-app]
+sources:
+  - id: pt-save-load
+    title: Saving and Loading Models
+    publisher: PyTorch Tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-serialization
+    title: Serialization semantics
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/notes/serialization.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-module
+    title: torch.nn.Module (state_dict, load_state_dict, eval)
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-load
+    title: torch.load
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.load.html
+    accessed: 2026-11-25
+    type: docs
+  - id: py-pickle
+    title: "pickle: Python object serialization"
+    publisher: Python documentation
+    url: https://docs.python.org/3/library/pickle.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-randomness
+    title: Reproducibility
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/notes/randomness.html
+    accessed: 2026-11-25
+    type: docs
+  - id: kingma2014
+    title: "Adam: A Method for Stochastic Optimization"
+    author: Diederik P. Kingma, Jimmy Ba
+    publisher: arXiv (ICLR 2015)
+    year: 2014
+    url: https://arxiv.org/abs/1412.6980
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Hugging Face: safetensors, a safe format for storing tensors"
+    url: https://huggingface.co/docs/safetensors/index
+  - title: "PyTorch recipe: Saving and loading a general checkpoint"
+    url: https://docs.pytorch.org/tutorials/recipes/recipes/saving_and_loading_a_general_checkpoint.html
+exercises:
+  - id: slm-what-to-save
+    type: mcq
+    difficulty: easy
+    title: What a resumable checkpoint needs
+    prompt: Training with Adam crashed after epoch 7. Which saved file lets you continue as if nothing had happened?
+    options:
+      - "`torch.save(model.state_dict(), path)` only"
+      - "A dict with the model's state_dict, the optimizer's state_dict and the epoch number"
+      - "The training script itself"
+      - "A list of the losses printed so far"
+    answer: 1
+    explanation: "The model weights alone are enough for inference, but Adam also keeps two running averages per parameter and a step counter. Without the optimizer's state_dict, a resumed run restarts those averages from zero and behaves differently for a while. The epoch number tells the loop where to continue."
+  - id: slm-checkpoint-size
+    type: numeric
+    difficulty: medium
+    title: How big is the checkpoint?
+    prompt: "A model has 1,000,000 parameters stored as float32 (4 bytes each), so its state_dict file is about 4 MB. It is trained with Adam, which keeps two extra numbers per parameter. Roughly how many MB does a full checkpoint (model + optimizer) take?"
+    answer: 12
+    tolerance: 0.5
+    hint: "Count the numbers stored per parameter: the weight itself, plus Adam's first and second moment estimates."
+    explanation: "Weights (4 MB) + first moments (4 MB) + second moments (4 MB) = about 12 MB, plus a little overhead for names and settings. This is why checkpoints are often three times larger than the exported weights."
+  - id: slm-unsafe-load
+    type: short
+    difficulty: medium
+    title: Why weights_only?
+    prompt: "Why should you keep `weights_only=True` (the default since PyTorch 2.6) when loading a file someone sent you, and what should you save instead of the whole model object?"
+    answer: "torch.load uses pickle, which can run arbitrary code while loading; weights_only=True only allows tensors and simple containers. Save and share the state_dict, not the pickled model."
+    explanation: "A pickled model file can contain instructions that execute when it is unpickled, so loading an untrusted full-model file is like running an unknown program. A state_dict is just names and tensors, which `weights_only=True` can load safely; you then rebuild the model from your own code and call `load_state_dict`."
+---
+
+**Saving a model** means writing its learned numbers to a file so that it can make predictions later, be shared, or continue training after an interruption. In <Term slug="pytorch" /> the recommended unit to save is the <Term slug="state-dict" />, a dictionary that maps every layer's parameter names to their tensors.<Cite id="pt-save-load" /> A full **checkpoint** adds the optimizer's state and the epoch so that training can resume exactly where it stopped.<Cite id="pt-serialization" />
+
+## The state_dict
+
+Every `nn.Module` has a `state_dict()` method that returns an ordered dictionary of its parameters and buffers.<Cite id="pt-module" /> For `nn.Sequential(nn.Linear(4, 16), nn.ReLU(), nn.Linear(16, 1))` the keys are `0.weight`, `0.bias`, `2.weight` and `2.bias`; the ReLU at position 1 has no parameters, so it has no entry. Buffers that are not trained but still matter, such as the running statistics of <Term slug="batch-normalization" />, are included too.<Cite id="pt-save-load" />
+
+Saving and loading take one line each:
+
+```python
+torch.save(model.state_dict(), "weights.pt")           # save
+model = MyModel()                                       # rebuild the same architecture in code
+model.load_state_dict(torch.load("weights.pt", weights_only=True))
+model.eval()                                            # inference mode for dropout/BatchNorm
+```
+
+The file stores only numbers, not the model's code. You recreate the architecture from your own class and pour the numbers into it, so the class must match: a missing or renamed layer raises an error listing the missing and unexpected keys.<Cite id="pt-module" /> Read that list carefully: it usually points straight at the layer that changed. When you deliberately reuse only part of a network, for example a trained body under a new output layer, `load_state_dict(..., strict=False)` loads the matching keys and returns the ones it skipped.<Cite id="pt-module" /> PyTorch files conventionally end in `.pt` or `.pth`; the extension is only a convention.<Cite id="pt-save-load" />
+
+<Analogy breaks="A recipe card is useful without its cake; a state_dict is useless without the exact model code it was made from.">
+A state_dict is like the settings sheet for a mixing desk: it lists every knob's position, but you still need the same desk to set them on.
+</Analogy>
+
+### Why not save the whole model?
+
+`torch.save(model, path)` also works, but it pickles the model object, which records the module path of its class. Renaming a file or moving the class later can make the saved model impossible to load.<Cite id="pt-save-load" /> Saving the state_dict keeps the file independent of how your code is organized, which is why the PyTorch tutorials recommend it.
+
+## Full checkpoints for resuming
+
+To continue training later, the weights are not enough. The optimizer has its own state: for Adam, two running averages per parameter and a step count, which shape every future update.<Cite id="kingma2014" /> A checkpoint is therefore an ordinary dictionary holding everything the loop needs:<Cite id="pt-serialization" />
+
+```python
+torch.save({
+    "epoch": epoch,
+    "model_state_dict": model.state_dict(),
+    "optimizer_state_dict": optimizer.state_dict(),
+    "loss": loss,
+}, "checkpoint.pt")
+```
+
+To resume, rebuild the model and the optimizer exactly as before, load each state into its object, and start the loop at the saved epoch.<Cite id="pt-save-load" /> If you use a learning-rate scheduler, save its `state_dict()` as well. Common practice is to save a checkpoint every epoch (or every few minutes on long runs) and to keep a separate copy of the best one according to the validation score, which is how the companion script of [the training loop lesson](/course/intermediate/training-loop/) implements early stopping.
+
+<Callout type="tip">
+Because a checkpoint holds the optimizer's extra numbers, it is about three times larger than the weights when training with Adam. Share the small state_dict for inference; keep the checkpoint for yourself.
+</Callout>
+
+## Loading safely: weights_only and map_location
+
+`torch.load` is built on Python's `pickle`, and unpickling can execute arbitrary code embedded in the file.<Cite id="py-pickle" /> Since PyTorch 2.6 the default is `weights_only=True`, which restricts loading to tensors, numbers, strings and plain containers such as dicts and lists.<Cite id="pt-load" /> State dicts and checkpoint dicts like the one above load fine under this restriction. Never switch it off for a file from a source you do not trust.<Cite id="pt-serialization" />
+
+A tensor remembers the device it was saved from. A checkpoint written on a GPU machine fails to load on a CPU-only laptop unless you pass `map_location="cpu"`, which moves every tensor to the CPU while loading.<Cite id="pt-load" /> Writing `map_location="cpu"` always is harmless, and the course's companion code does so.
+
+<Callout type="pitfall">
+After loading weights for prediction, call `model.eval()` and wrap predictions in `torch.no_grad()`. Forgetting `eval()` leaves dropout active, so the same input gives different, worse answers each time.
+</Callout>
+
+## Reproducibility
+
+A resumed run only matches an uninterrupted one if the random numbers match too. Fixing the seed with `torch.manual_seed(0)` at the start makes weight initialization and shuffling repeatable on the same machine and PyTorch version; the PyTorch notes warn that results are not guaranteed to be identical across releases, platforms or CPU and GPU.<Cite id="pt-randomness" /> For long projects, save the random-generator state in the checkpoint too (`torch.get_rng_state()`), or accept that the data order after resuming will differ slightly.
+
+## Try it
+
+The companion script trains a tiny regression model for 50 epochs, saves a checkpoint and a weights file, resumes in fresh objects, and checks the result against 100 uninterrupted epochs:
+
+<CodeFile path="code/core/intermediate/checkpoint.py" lines="41-56" highlight="41,44,52,53,54" title="save a checkpoint, then resume from it" />
+
+Run `python code/core/intermediate/checkpoint.py`. It prints the state_dict keys `['0.weight', '0.bias', '2.weight', '2.bias']`, a loss of 0.3057 after 50 epochs, and then `resumed to 100 epochs: loss 0.0995 | uninterrupted 100 epochs: loss 0.0995`: the resumed run is indistinguishable from the uninterrupted one. The reloaded weights give identical predictions, and the full checkpoint (7,117 bytes) is about two and a half times the size of the weights file (2,885 bytes) because of Adam's state. The digits project uses the same pattern to load a trained model into [the handwriting app](/course/project-digits-letters/handwriting-app/).
+
+## Summary
+
+- Save the `state_dict()`, not the whole model; rebuild the class in code and call `load_state_dict`.
+- A resumable checkpoint is a dict with the model and optimizer state_dicts, the epoch and anything else the loop needs.
+- `torch.load` uses pickle: keep `weights_only=True` and never load untrusted full-model files.
+- Use `map_location="cpu"` to load GPU checkpoints on any machine.
+- Call `model.eval()` and `torch.no_grad()` before predicting with loaded weights.

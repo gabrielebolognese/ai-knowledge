@@ -1,0 +1,247 @@
+---
+title: Overfitting and regularization
+slug: overfitting-regularization
+track: intermediate
+level: intermediate
+order: 70
+minutes: 25
+module: Training that generalizes
+summary: Why a network can score 100% on its training data and still fail on new data, how to read it from the loss curves, and the standard fixes, from weight decay and dropout to early stopping and augmentation, with their maths worked through by hand.
+hatnote: For the metrics and data splits used here, see "Evaluation". For the optimizer side of weight decay (AdamW), see "Optimizers".
+prerequisites: [evaluation-metrics]
+tools: [Python 3, PyTorch, torchvision]
+outcomes:
+  - Diagnose underfitting and overfitting from training and validation curves
+  - Apply weight decay, dropout, early stopping and data augmentation
+  - Explain the bias-variance trade-off in plain words, with its modern caveats
+build: A 1,000-image MNIST experiment comparing no regularization, dropout and weight decay
+reviewed: 2026-11-25
+seeAlso: [evaluation-metrics, optimizers, hyperparameter-tuning, doodle-augmentation]
+sources:
+  - id: goodfellow2016-reg
+    title: "Deep Learning, chapter 7: Regularization for Deep Learning"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/regularization.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-weight-decay
+    title: "Dive into Deep Learning, 3.7 Weight Decay"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_linear-regression/weight-decay.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-dropout
+    title: "Dive into Deep Learning, 5.6 Dropout"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/dropout.html
+    accessed: 2026-11-25
+    type: book
+  - id: srivastava2014
+    title: "Dropout: A Simple Way to Prevent Neural Networks from Overfitting"
+    author: Nitish Srivastava, Geoffrey Hinton, Alex Krizhevsky, Ilya Sutskever, Ruslan Salakhutdinov
+    publisher: Journal of Machine Learning Research 15
+    year: 2014
+    url: https://jmlr.org/papers/v15/srivastava14a.html
+    accessed: 2026-11-25
+    type: paper
+  - id: zhang2017
+    title: Understanding deep learning requires rethinking generalization
+    author: Chiyuan Zhang, Samy Bengio, Moritz Hardt, Benjamin Recht, Oriol Vinyals
+    publisher: arXiv (ICLR 2017)
+    year: 2017
+    url: https://arxiv.org/abs/1611.03530
+    accessed: 2026-11-25
+    type: paper
+  - id: cs231n-nn2
+    title: "Neural Networks Part 2: Setting up the Data and the Loss"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-2/
+    accessed: 2026-11-25
+    type: course
+  - id: loshchilov2017
+    title: Decoupled Weight Decay Regularization
+    author: Ilya Loshchilov, Frank Hutter
+    publisher: arXiv (ICLR 2019)
+    year: 2017
+    url: https://arxiv.org/abs/1711.05101
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-dropout
+    title: torch.nn.Dropout
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Dropout.html
+    accessed: 2026-11-25
+    type: docs
+  - id: belkin2019
+    title: Reconciling modern machine-learning practice and the classical bias-variance trade-off
+    author: Mikhail Belkin, Daniel Hsu, Siyuan Ma, Soumik Mandal
+    publisher: PNAS 116(32)
+    year: 2019
+    url: https://doi.org/10.1073/pnas.1903070116
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Stanford CS229 lecture notes (bias-variance, regularization)"
+    url: https://cs229.stanford.edu/main_notes.pdf
+  - title: "Wikipedia: Bias-variance tradeoff"
+    url: https://en.wikipedia.org/wiki/Bias%E2%80%93variance_tradeoff
+exercises:
+  - id: ofr-diagnose
+    type: mcq
+    difficulty: easy
+    title: Read the curves
+    prompt: "Over 30 epochs the training loss falls from 1.2 to 0.02, while the validation loss falls to 0.40 at epoch 8 and then climbs to 0.65. What is happening?"
+    options:
+      - Underfitting; the model needs more capacity
+      - Overfitting after about epoch 8
+      - The learning rate is too small
+      - Nothing; a falling training loss is all that matters
+    answer: 1
+    explanation: "A training loss that keeps falling while the validation loss turns upward is the signature of overfitting: the model has started fitting noise in the training set. Keep the epoch-8 checkpoint (early stopping) and add regularization or data. Underfitting would show both losses staying high."
+  - id: ofr-decay-step
+    type: numeric
+    difficulty: medium
+    title: One step with weight decay
+    prompt: "A weight is $w = 1.0$, its data gradient is $g = 0.2$, the weight-decay strength is $\\lambda = 0.5$ and the learning rate is $\\eta = 0.1$. Using $w \\leftarrow w - \\eta(g + \\lambda w)$, what is the new $w$?"
+    answer: 0.93
+    tolerance: 0.0001
+    hint: "First add the decay term to the gradient: $g + \\lambda w = 0.2 + 0.5$."
+    explanation: "$w = 1.0 - 0.1 \\cdot (0.2 + 0.5 \\cdot 1.0) = 1.0 - 0.07 = 0.93$. Without weight decay the step would have been only $0.02$, giving $0.98$."
+  - id: ofr-dropout-scale
+    type: numeric
+    difficulty: medium
+    title: Inverted dropout scaling
+    prompt: "`nn.Dropout(p=0.2)` is in training mode. An activation of value 3.0 happens to survive the mask. What value does the layer output for it?"
+    answer: 3.75
+    tolerance: 0.0001
+    hint: "Survivors are multiplied by $1/(1-p)$."
+    explanation: "$3.0 / (1 - 0.2) = 3.0 / 0.8 = 3.75$. The scaling keeps the expected value of each unit equal to its input, so in evaluation mode the layer can simply pass 3.0 through unchanged."
+  - id: ofr-eval-dropout
+    type: mcq
+    difficulty: easy
+    title: Dropout at evaluation time
+    prompt: "What does `nn.Dropout(p=0.5)` do to its input after `model.eval()`?"
+    options:
+      - Zeroes half of the values, as in training
+      - Multiplies every value by 0.5
+      - Returns the input unchanged
+      - Raises an error unless gradients are off
+    answer: 2
+    explanation: "PyTorch uses inverted dropout: the 1/(1-p) scaling is done during training, so at evaluation time the layer is the identity. Forgetting `model.eval()` leaves the random zeroing on and makes predictions noisy and worse."
+  - id: ofr-random-labels
+    type: reveal
+    difficulty: hard
+    title: What random labels teach us
+    prompt: "Zhang et al. (2017) trained standard image networks on CIFAR-10 with the labels replaced by random ones and reached zero training error. What does that tell you about model size and about why networks generalize?"
+    answer: "Large networks have enough capacity to memorize any labelling, even pure noise, so low training error alone proves nothing, and classic capacity arguments alone cannot explain why the same networks generalize on real labels."
+    explanation: "With random labels there is no pattern to learn, so test accuracy stays at chance while training accuracy reaches 100%. The same architecture trained on real labels generalizes well, so what it learns depends on the data and the training process, not just on parameter count. This is why you always judge a model by validation performance."
+---
+
+**Overfitting** happens when a model fits its training data so closely, noise and quirks included, that it does worse on new data; **regularization** is the family of techniques that push a model towards solutions that generalize.<Cite id="goodfellow2016-reg" /> Modern networks have enough <Term slug="parameter">parameters</Term> to memorize entire training sets, so recognising overfitting and controlling it is part of every real training run.<Cite id="zhang2017" />
+
+## Underfitting and overfitting
+
+Training is judged on two curves: the loss on the training data and the loss on a held-out <Term slug="validation-set">validation set</Term>.<Cite id="cs231n-nn2" />
+
+| What the curves show | Diagnosis | First things to try |
+|---|---|---|
+| Both losses high and close together | **Underfitting**: too simple or too little training | Bigger model, train longer, higher learning rate |
+| Training loss low, validation loss stalls then rises | **Overfitting**: memorizing the training set | More data, augmentation, weight decay, dropout, early stopping |
+| Both low and close | Good fit | Stop, then measure on the test set once |
+
+The classic illustration fits polynomials to 15 noisy points of a sine curve. A straight line (degree 1) misses the shape, with training and validation errors of 0.316 and 0.351. Degree 3 follows the curve (training error 0.019). Degree 12 passes almost exactly through every training point (error 0.000) but swings wildly between them, and its validation error explodes to about 10.<Cite id="d2l-weight-decay" />
+
+<Analogy breaks="A student can be told to stop memorizing; a network has to be steered there by its training setup, data and regularization.">
+Overfitting is like memorizing last year's exam answers: perfect on that paper, lost on a new one. The validation set is the mock exam you check yourself on; the test set is the real exam, sat once.
+</Analogy>
+
+## The bias-variance trade-off, and its caveats
+
+The traditional explanation splits the error on new data into **bias** (systematic error from a model that is too simple) and **variance** (sensitivity to the particular training sample, typical of very flexible models). Increasing capacity lowers bias and raises variance, so test error traces a U-shape with a sweet spot in the middle.<Cite id="goodfellow2016-reg" />
+
+Deep learning complicates this picture. Zhang et al. showed that standard image networks can reach zero training error on CIFAR-10 even when every label is replaced by a random one, yet the same networks generalize well on the real labels; capacity alone does not predict generalization.<Cite id="zhang2017" /> Belkin et al. described **double descent**: as models grow past the point where they can fit the training data exactly, test error can fall again.<Cite id="belkin2019" /> The practical lesson stays the same: judge models by validation performance, not by parameter counts or training loss.
+
+## Weight decay (L2 regularization)
+
+<Term slug="weight-decay" /> adds a penalty on large weights to the loss. The penalty is $\frac{\lambda}{2}\|w\|^2$, half the sum of all squared weights times a strength $\lambda$, so the network only keeps a weight large if the data really needs it.<Cite id="d2l-weight-decay" />
+
+<MathSteps
+  title="Why an L2 penalty shrinks the weights"
+  legend={[
+    { symbol: 'L', meaning: 'loss on the data' },
+    { symbol: '\\lambda', meaning: 'weight-decay strength' },
+    { symbol: 'g', meaning: 'gradient of the data loss' },
+    { symbol: '\\eta', meaning: 'learning rate' },
+  ]}
+>
+  <Step tex="L_\text{total} = L + \hl{\tfrac{\lambda}{2}\textstyle\sum_i w_i^2}" words="Add the penalty to the loss. The one-half is there to cancel a 2 in the next step." />
+  <Step tex="\frac{\partial L_\text{total}}{\partial w} = g + \hl{\lambda w}" words="Differentiate: the penalty contributes λw to each weight's gradient." />
+  <Step tex="w \leftarrow w - \eta(g + \lambda w) = \hl{(1 - \eta\lambda)}\,w - \eta g" words="Plug into gradient descent. Before the usual step, every weight is multiplied by a number slightly below 1: it decays." />
+  <Step tex="w = 2,\ \lambda = 0.01,\ \eta = 0.1,\ g = 0:\quad w \leftarrow (1 - 0.001) \cdot 2 = \hl{1.998}" words="With numbers: a weight the data does not push on shrinks a little every step." example="2 → 1.998 → 1.996 …" />
+</MathSteps>
+
+In PyTorch the strength is the optimizer's `weight_decay` argument. For SGD the two formulations above are identical, but for adaptive optimizers such as Adam they are not: Loshchilov and Hutter showed that applying the decay directly to the weights, as `torch.optim.AdamW` does, works better than putting an L2 term into Adam's gradient.<Cite id="loshchilov2017" />
+
+<Analogy breaks="A released rubber band snaps straight back; a weight only shrinks by the small factor (1 − ηλ) per step, and the band's strength λ is a setting you choose.">
+Weight decay is a rubber band tied from every weight back to zero. The data has to keep pulling to hold a weight far out; weights it does not need drift back.
+</Analogy>
+
+## Dropout
+
+<Term slug="dropout" /> randomly sets each unit's output to zero with probability $p$ during training, a different random pattern for every batch. No unit can rely on one specific partner, and the network behaves somewhat like an average over many thinned sub-networks.<Cite id="srivastava2014" /> Srivastava et al. reported clear improvements from dropout on vision, speech and text benchmarks, typically with $p = 0.5$ for hidden units.<Cite id="srivastava2014" />
+
+PyTorch implements **inverted dropout**: the surviving values are scaled up during training so that nothing needs to change at test time.<Cite id="pt-dropout" />
+
+<MathSteps
+  title="Inverted dropout with p = 0.5"
+  legend={[
+    { symbol: 'a', meaning: 'activations entering the layer' },
+    { symbol: 'm', meaning: 'random keep mask (1 = keep)' },
+    { symbol: 'p', meaning: 'drop probability' },
+  ]}
+>
+  <Step tex="a = [1, 2, 3, 4],\quad m = [1, 0, 1, 0]" words="Draw a random mask: each unit is kept with probability 1 − p = 0.5." />
+  <Step tex="a \odot m = \hl{[1, 0, 3, 0]}" words="Multiply element by element: dropped units output 0." />
+  <Step tex="\frac{a \odot m}{1 - p} = \hl{[2, 0, 6, 0]}" words="Scale the survivors by 1/(1 − p) = 2." />
+  <Step tex="\mathbb{E}[\text{output}_i] = (1-p)\cdot\frac{a_i}{1-p} + p \cdot 0 = \hl{a_i}" words="On average each unit outputs its original value, so in evaluation mode the layer simply passes the input through." />
+</MathSteps>
+
+That is why `model.eval()` matters: it turns dropout into the identity. Leaving the model in training mode during validation gives noisy, pessimistic scores.<Cite id="d2l-dropout" />
+
+## Early stopping and data augmentation
+
+<Term slug="early-stopping" /> watches the validation loss and keeps the checkpoint from the best epoch, stopping once there has been no improvement for a few epochs (the *patience*). It costs nothing and is among the most widely used regularizers.<Cite id="goodfellow2016-reg" /> Use a patience of several epochs, because validation curves are noisy and a single bad epoch is not a trend.
+
+<Term slug="data-augmentation" /> creates new training examples by transforming existing ones in ways that keep the label, for example small shifts, rotations or crops of an image. More, and more varied, data is the most reliable fix for overfitting; augmentation is the cheapest way to get it.<Cite id="goodfellow2016-reg" /> The transforms must make sense for the task: flipping a "6" upside down gives a "9". The doodle project applies this in [Data augmentation and regularization for sketches](/course/project-doodles/doodle-augmentation/).
+
+<Callout type="tip">
+Regularize one thing at a time, starting from a model that can overfit. If the model cannot even fit the training data, regularization only makes things worse; fix underfitting first, as [Debugging neural network training](/course/intermediate/debugging-training/) explains.
+</Callout>
+
+## Try it
+
+The companion script first fits the polynomials, then trains a 784 → 512 → 512 → 10 network on only 1,000 <Term slug="mnist" /> images with three settings:
+
+<CodeFile path="code/core/intermediate/overfitting_demo.py" lines="45-63" highlight="47,48,50,52" title="the same network with optional dropout and weight decay" />
+
+Run `python code/core/intermediate/overfitting_demo.py` (about 20-30 seconds on a CPU). Without regularization the training accuracy reaches 1.000 by epoch 10, while the validation loss bottoms out at 0.392 around epoch 5 and then climbs to 0.532 by epoch 40: textbook overfitting, and the moment early stopping would act. After 40 epochs the three settings give:
+
+| Setting | Train accuracy | Val accuracy | Val loss |
+|---|---|---|---|
+| No regularization | 1.000 | 0.897 | 0.532 |
+| Dropout $p = 0.5$ | 1.000 | 0.903 | 0.477 |
+| Weight decay 1.0 (AdamW) | 1.000 | 0.905 | 0.387 |
+
+Both regularizers help, but modestly: with only 1,000 images the biggest gain would come from more data. Results on your machine may differ in the last digit.
+
+## Summary
+
+- Overfitting means low training loss with a validation loss that stalls or rises; underfitting means both stay high.
+- Weight decay adds $\frac{\lambda}{2}\|w\|^2$ to the loss, which multiplies every weight by $(1 - \eta\lambda)$ each step; use `AdamW` with Adam.
+- Dropout zeroes random units during training and scales the rest by $1/(1-p)$; `model.eval()` switches it off.
+- Early stopping keeps the best validation checkpoint; augmentation and more data are the strongest fixes.
+- Large networks can memorize even random labels, so trust validation performance, not training loss.

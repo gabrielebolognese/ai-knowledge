@@ -1,0 +1,235 @@
+---
+title: Backpropagation, step by step
+slug: backpropagation
+track: intermediate
+level: intermediate
+order: 20
+minutes: 30
+module: From neurons to networks
+summary: Backpropagation computes the gradient of the loss for every weight by applying the chain rule backwards through the network. This lesson runs a two-layer network forwards and backwards with numbers, checks the result numerically and builds a 60-line autograd engine.
+hatnote: This lesson assumes the forward pass from "Multilayer perceptrons and the forward pass". For how PyTorch automates it, see "PyTorch tensors and autograd".
+prerequisites: [multilayer-perceptron, chain-rule-gradients, loss-functions, gradient-descent]
+tools: [Python 3]
+outcomes:
+  - Draw a computational graph and run the forward pass with numbers
+  - Run the backward pass node by node with the chain rule
+  - Check a hand-computed gradient against a numerical estimate
+  - Build a tiny autograd engine (micrograd-style) that does it automatically
+build: A 60-line scalar autograd engine that trains the lesson's network
+reviewed: 2026-11-25
+seeAlso: [pytorch-tensors-autograd, multilayer-perceptron, gradient-descent]
+sources:
+  - id: rumelhart1986
+    title: Learning representations by back-propagating errors
+    author: David Rumelhart, Geoffrey Hinton, Ronald Williams
+    publisher: Nature 323
+    year: 1986
+    url: https://doi.org/10.1038/323533a0
+    accessed: 2026-11-25
+    type: paper
+  - id: d2l-backprop
+    title: "Dive into Deep Learning, 5.3 Forward Propagation, Backward Propagation, and Computational Graphs"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/backprop.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-backprop
+    title: "Backpropagation, Intuitions"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/optimization-2/
+    accessed: 2026-11-25
+    type: course
+  - id: micrograd
+    title: micrograd
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/micrograd
+    accessed: 2026-11-25
+    type: code
+  - id: baydin2018
+    title: "Automatic differentiation in machine learning: a survey"
+    author: Atilim Gunes Baydin, Barak Pearlmutter, Alexey Radul, Jeffrey Siskind
+    publisher: Journal of Machine Learning Research 18
+    year: 2018
+    url: https://arxiv.org/abs/1502.05767
+    accessed: 2026-11-25
+    type: paper
+  - id: wiki-backprop
+    title: Backpropagation
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Backpropagation
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: goodfellow2016-mlp
+    title: "Deep Learning, chapter 6: Deep Feedforward Networks (6.5 Back-Propagation)"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/mlp.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-nn3
+    title: "Neural Networks Part 3: Learning and Evaluation (gradient checks)"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-3/
+    accessed: 2026-11-25
+    type: course
+furtherReading:
+  - title: "Andrej Karpathy: The spelled-out intro to neural networks and backpropagation (video)"
+    url: https://karpathy.ai/zero-to-hero.html
+  - title: "Michael Nielsen: How the backpropagation algorithm works"
+    url: https://neuralnetworksanddeeplearning.com/chap2.html
+  - title: "3Blue1Brown: Backpropagation calculus"
+    url: https://www.3blue1brown.com/lessons/backpropagation-calculus
+exercises:
+  - id: bp-local-grad
+    type: numeric
+    difficulty: easy
+    title: One multiply gate
+    prompt: "In the graph $f = (a + b) \\cdot c$ with $a = 1$, $b = 2$, $c = -3$, what is $\\partial f / \\partial a$?"
+    answer: -3
+    tolerance: 0
+    hint: "Call $q = a + b$. The multiply gate gives $q$ the value of the other input, $c$; the add gate passes it on unchanged."
+    explanation: "$\\partial f/\\partial q = c = -3$ (multiply swaps), and $\\partial q/\\partial a = 1$ (add distributes), so $\\partial f/\\partial a = -3 \\cdot 1 = -3$. Raising $a$ by 0.01 lowers $f$ by about 0.03."
+  - id: bp-new-target
+    type: numeric
+    difficulty: medium
+    title: Same network, different target
+    prompt: "Repeat the lesson's backward pass with the target $y = 4$ instead of 2 (the forward pass still gives $\\hat y = 3$, and $L = \\tfrac12(\\hat y - y)^2$). What is $\\partial L / \\partial w_{11}$?"
+    answer: -2
+    tolerance: 0
+    hint: "Start with $\\partial L/\\partial \\hat y = \\hat y - y$, then follow the same path: times $v_1 = 2$, times the ReLU's local derivative, times $x_1 = 1$."
+    explanation: "$\\partial L/\\partial \\hat y = 3 - 4 = -1$. Then $\\partial L/\\partial h_1 = -1 \\cdot 2 = -2$, the ReLU passes it ($z_1 = 1.5 > 0$), and $\\partial L/\\partial w_{11} = -2 \\cdot x_1 = -2$. The sign flipped because the prediction is now too low, so gradient descent will *increase* $w_{11}$."
+  - id: bp-what-it-does
+    type: mcq
+    difficulty: medium
+    title: What backpropagation does
+    prompt: Which statement about backpropagation is correct?
+    options:
+      - It updates the weights so that the loss goes down
+      - It computes the gradient of the loss with respect to every parameter, reusing intermediate results
+      - It runs one forward pass per parameter to estimate each gradient
+      - It is only needed for networks with more than one hidden layer
+    answer: 1
+    explanation: "Backpropagation only computes gradients; the optimizer (SGD, Adam) uses them to update the weights. Its efficiency comes from sharing intermediate results, so one backward pass gives every gradient. Estimating each gradient with its own extra forward pass is the slow numerical method used only for checking."
+  - id: bp-dead-unit
+    type: reveal
+    difficulty: hard
+    title: The silent hidden unit
+    prompt: "In the worked example, every gradient of hidden unit 2 ($w_{21}$, $w_{22}$, $b_2$, and $v_2$) is exactly zero. Why? What would happen if that unit's input were negative for every training example?"
+    answer: "Its pre-activation $z_2 = -0.5$ is negative, so ReLU outputs 0 and its local derivative is 0: the gradient is blocked on the way back, and $v_2$ gets $h_2 = 0$ as its input. If $z_2 < 0$ for every example, the unit never receives a gradient and never changes. It is a 'dead ReLU'."
+    explanation: "The ReLU gate routes the gradient only to inputs that were positive in the forward pass. One blocked example is normal; a unit that is blocked for all data is stuck for good. Causes include a learning rate that is too high, which can push biases far negative. Leaky ReLU, which keeps a small slope for negative inputs, is one common remedy."
+---
+
+**Backpropagation** is the algorithm that computes how much the loss changes when each weight of a neural network changes slightly, that is, the <Term slug="gradient" /> of the loss with respect to every parameter.<Cite id="goodfellow2016-mlp" /> It applies the chain rule of calculus systematically, starting at the loss and working backwards through the network.<Cite id="d2l-backprop" /> Those gradients are exactly what <Term slug="gradient-descent" /> needs, so backpropagation is the engine behind training every network in this course.
+
+## The idea in one picture
+
+Any calculation can be drawn as a <Term slug="computational-graph" />: each node is one simple operation (add, multiply, ReLU) and each arrow carries a number to the next node.<Cite id="cs231n-backprop" /> The forward pass computes the values from left to right. The backward pass then sends gradients from right to left, and each node needs to know only one thing: its own *local derivative*, how its output changes when its input changes.<Cite id="cs231n-backprop" />
+
+The rule at every node is the chain rule: the gradient arriving from above (the **upstream gradient**) times the local derivative gives the gradient to pass further back.<Cite id="cs231n-backprop" /> Three node types cover most of what follows:
+
+- an **add** node passes the upstream gradient to both inputs unchanged
+- a **multiply** node gives each input the upstream gradient times the *other* input
+- a **ReLU** node passes the gradient if its input was positive and blocks it otherwise.
+
+<Analogy breaks="Blame in a real group project is negotiated; here it is exact arithmetic, and it only says what a tiny change would do, not a big one.">
+Backpropagation is like assigning blame after a group project. The final grade is known; going backwards, each member passes blame to the people whose input they used, in proportion to how much that input affected their part.
+</Analogy>
+
+## A two-layer network with numbers
+
+Use the 2-2-1 network from the [multilayer perceptron lesson](/course/intermediate/multilayer-perceptron/): input $x = [1, 2]$, two ReLU hidden units, one linear output, target $y = 2$ and loss $L = \tfrac12(\hat y - y)^2$. Hidden unit 1 has weights $w_{11} = 0.5$, $w_{12} = 0.5$ and bias $b_1 = 0$. Hidden unit 2 has $w_{21} = 1$, $w_{22} = -1$, $b_2 = 0.5$. The output has weights $v_1 = 2$, $v_2 = 1$ and bias $c = 0$.
+
+<MathSteps
+  title="Forward pass: store every intermediate value"
+  legend={[
+    { symbol: 'z_j', meaning: 'weighted sum of hidden unit j' },
+    { symbol: 'h_j', meaning: 'ReLU output of hidden unit j' },
+    { symbol: '\\hat y', meaning: 'prediction' },
+    { symbol: 'L', meaning: 'loss' },
+  ]}
+>
+  <Step tex="z_1 = 0.5 \cdot 1 + 0.5 \cdot 2 + 0 = \hl{1.5}, \quad h_1 = \mathrm{ReLU}(1.5) = 1.5" words="Hidden unit 1: weighted sum, then ReLU. Positive, so it passes through." />
+  <Step tex="z_2 = 1 \cdot 1 + (-1) \cdot 2 + 0.5 = \hl{-0.5}, \quad h_2 = 0" words="Hidden unit 2 gets a negative sum, so ReLU outputs 0." />
+  <Step tex="\hat y = v_1 h_1 + v_2 h_2 + c = 2 \cdot 1.5 + 1 \cdot 0 + 0 = \hl{3}" words="The output is a weighted sum of the hidden values." />
+  <Step tex="L = \tfrac12(\hat y - y)^2 = \tfrac12(3 - 2)^2 = \hl{0.5}" words="The loss measures how far 3 is from the target 2." />
+</MathSteps>
+
+Now walk backwards, multiplying the upstream gradient by each node's local derivative.<Cite id="d2l-backprop" />
+
+<MathSteps
+  title="Backward pass: upstream gradient × local derivative"
+  legend={[
+    { symbol: '\\partial L / \\partial u', meaning: 'how much L changes per unit change of u' },
+    { symbol: '\\mathbb{1}[z > 0]', meaning: 'ReLU\'s local derivative: 1 if z > 0, else 0' },
+  ]}
+>
+  <Step tex="\frac{\partial L}{\partial \hat y} = \hat y - y = \hl{1}" words="Start at the loss. The derivative of one half of a square is the difference itself." />
+  <Step tex="\frac{\partial L}{\partial v_1} = 1 \cdot \hl{h_1} = 1.5, \quad \frac{\partial L}{\partial v_2} = 1 \cdot h_2 = 0, \quad \frac{\partial L}{\partial c} = 1" words="Output weights: a multiply node, so each weight gets the upstream gradient times its input. The bias is an add node and gets the gradient unchanged." />
+  <Step tex="\frac{\partial L}{\partial h_1} = 1 \cdot \hl{v_1} = 2, \quad \frac{\partial L}{\partial h_2} = 1 \cdot v_2 = 1" words="The hidden values get the upstream gradient times the weight they were multiplied by." />
+  <Step tex="\frac{\partial L}{\partial z_1} = 2 \cdot \hl{\mathbb{1}[1.5 > 0]} = 2, \quad \frac{\partial L}{\partial z_2} = 1 \cdot \mathbb{1}[-0.5 > 0] = \hl{0}" words="Through ReLU: unit 1 was active, so the gradient passes; unit 2 was not, so it is blocked." />
+  <Step tex="\frac{\partial L}{\partial w_{11}} = 2 \cdot x_1 = \hl{2}, \quad \frac{\partial L}{\partial w_{12}} = 2 \cdot x_2 = \hl{4}, \quad \frac{\partial L}{\partial b_1} = 2" words="First-layer weights: upstream gradient times their input. Unit 2's weights and bias all get 0." example="w12 multiplies the larger input, x2 = 2, so it gets twice the blame." />
+</MathSteps>
+
+With a <Term slug="learning-rate" /> of $\eta = 0.05$, one gradient-descent step gives $v_1 = 2 - 0.05 \cdot 1.5 = 1.925$, $c = -0.05$, $w_{11} = 0.4$, $w_{12} = 0.3$ and $b_1 = -0.1$. A new forward pass gives $z_1 = 0.9$ and $\hat y = 1.925 \cdot 0.9 - 0.05 = 1.6825$, so the loss falls from 0.5 to about 0.050. Unit 2 did not change at all, because no gradient reached it.
+
+<Exercise id="bp-new-target" />
+
+## The same thing with matrices
+
+Real networks do these steps for whole layers at once. For a dense layer $z = Wx + b$ with upstream gradient $\delta = \partial L / \partial z$, the three gradients are $\partial L/\partial W = \delta x^\top$, $\partial L/\partial b = \delta$ and $\partial L/\partial x = W^\top \delta$.<Cite id="cs231n-backprop" /> In the example, $\delta = [2, 0]$ and $x = [1, 2]$, so $\delta x^\top$ has rows $[2, 4]$ and $[0, 0]$: the same four weight gradients as above.
+
+The input $x$ feeds *both* hidden units, so its gradient is the **sum** of what arrives along each path: $W^\top \delta = [0.5 \cdot 2 + 1 \cdot 0, \; 0.5 \cdot 2 + (-1) \cdot 0] = [1, 1]$. Gradients always add up where a value is used more than once.<Cite id="cs231n-backprop" /> Forgetting this, by overwriting instead of adding, is the classic bug in hand-written autograd code.<Cite id="micrograd" />
+
+## Why it is efficient
+
+Backpropagation reuses the values stored during the forward pass and the gradients already computed for later layers. As a result, one backward pass yields every gradient at a cost that is a small constant multiple of the forward pass, whether the network has nine parameters or a billion.<Cite id="baydin2018" /> The naive alternative, nudging each parameter separately and re-running the network, would need one extra forward pass per parameter.<Cite id="goodfellow2016-mlp" />
+
+In computer-science terms, backpropagation is a special case of <Term slug="automatic-differentiation" /> in *reverse mode*.<Cite id="baydin2018" /> The method has a long history: Seppo Linnainmaa described reverse-mode differentiation in 1970 and Paul Werbos proposed applying it to neural networks in 1974.<Cite id="wiki-backprop" /> It became widely used after Rumelhart, Hinton and Williams showed in 1986 that it could train networks to learn useful internal representations.<Cite id="rumelhart1986" />
+
+<Callout type="pitfall">
+Backpropagation is not the learning algorithm by itself. It only computes gradients; an optimizer such as SGD or Adam decides how to use them.
+</Callout>
+
+## Checking a gradient numerically
+
+A hand-derived gradient can be wrong, so it is worth checking it against a **numerical estimate**: nudge one parameter up and down by a small $h$ and measure the change in the loss.<Cite id="cs231n-nn3" />
+
+<MathSteps
+  title="Centred-difference check for w11"
+  legend={[
+    { symbol: 'h', meaning: 'a small nudge, here 0.001' },
+  ]}
+>
+  <Step tex="L(w_{11} + h) = \tfrac12(3.002 - 2)^2 = \hl{0.502002}" words="With w11 = 0.501, z1 becomes 1.501 and the prediction 3.002." />
+  <Step tex="L(w_{11} - h) = \tfrac12(2.998 - 2)^2 = \hl{0.498002}" words="With w11 = 0.499, the prediction is 2.998." />
+  <Step tex="\frac{L(w + h) - L(w - h)}{2h} = \frac{0.004}{0.002} = \hl{2}" words="The slope between the two points matches the backpropagated value of 2." />
+</MathSteps>
+
+CS231n recommends the centred form shown here, which is more accurate than a one-sided difference, and comparing the two values by their relative error.<Cite id="cs231n-nn3" /> Numerical checks are slow, one or two extra forward passes per parameter, so they are a debugging tool, not a training method.
+
+## Building a tiny autograd engine
+
+Andrej Karpathy's [micrograd](https://github.com/karpathy/micrograd) shows that a working reverse-mode engine fits in about a hundred lines.<Cite id="micrograd" /> The companion file follows the same design. Each `Value` stores a number, its gradient, the values it was computed from, and a small function that pushes its gradient to them:
+
+<CodeFile path="code/core/intermediate/micrograd_mini.py" lines="29-45" highlight="34,35,43" title="local rules for multiply and ReLU" />
+
+`backward()` sorts the graph so that every node comes after its inputs, sets the output's gradient to 1, and calls each node's rule in reverse order:<Cite id="micrograd" />
+
+<CodeFile path="code/core/intermediate/micrograd_mini.py" lines="52-64" highlight="62,63,64" title="the backward pass" />
+
+Every rule uses `+=`, never `=`, which is how gradients add up at forks.
+
+## Try it
+
+Run `python code/core/intermediate/micrograd_mini.py`. It prints `dL/da = -3.0 dL/db = 2.0` for the graph $L = ab + c$ with $a = 2$, $b = -3$, $c = 10$, then the network's gradients `w11: 2.0, w12: 4.0, b1: 2.0, v1: 1.5, c: 1.0` (unit 2 all zero), passes a numerical check on all nine parameters, and ends with `new loss = 0.0504`, matching the numbers above.
+
+## Summary
+
+- Backpropagation computes every gradient by applying the chain rule backwards through the computational graph.
+- At each node: downstream gradient = upstream gradient × local derivative. Add passes, multiply swaps, ReLU routes or blocks.
+- Gradients add up where a value is used more than once.
+- One backward pass costs about as much as a forward pass; it is reverse-mode automatic differentiation.
+- Check hand-derived gradients with a centred difference before trusting them.

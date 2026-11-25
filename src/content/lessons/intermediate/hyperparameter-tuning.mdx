@@ -1,0 +1,195 @@
+---
+title: Hyperparameters and how to tune them
+slug: hyperparameter-tuning
+track: intermediate
+level: intermediate
+order: 100
+minutes: 20
+module: The practitioner's toolkit
+summary: Hyperparameters are the settings you choose rather than learn. This lesson separates them from parameters, runs a learning-rate range test and a small random search, and gives a budget-aware order for tuning on the validation set.
+hatnote: 'For what each optimizer setting means, see "Optimizers: SGD, momentum, RMSProp and Adam".'
+prerequisites: [overfitting-regularization, optimizers]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Tell parameters from hyperparameters
+  - Run a learning-rate range test and a small random search
+  - Tune in the right order with a fixed budget, using the validation set
+build: An LR range test and an 8-trial random search on a spiral dataset
+reviewed: 2026-11-25
+seeAlso: [optimizers, overfitting-regularization, debugging-training]
+sources:
+  - id: tuning-playbook
+    title: Deep Learning Tuning Playbook
+    author: Varun Godbole, George E. Dahl, Justin Gilmer, Christopher J. Shallue, Zachary Nado
+    publisher: Google Research (GitHub)
+    year: 2023
+    url: https://github.com/google-research/tuning_playbook
+    accessed: 2026-11-25
+    type: article
+  - id: smith2015
+    title: Cyclical Learning Rates for Training Neural Networks
+    author: Leslie N. Smith
+    publisher: arXiv (WACV 2017)
+    year: 2015
+    url: https://arxiv.org/abs/1506.01186
+    accessed: 2026-11-25
+    type: paper
+  - id: goodfellow2016-guidelines
+    title: "Deep Learning, chapter 11: Practical Methodology"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/guidelines.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-nn3
+    title: "Neural Networks Part 3: Learning and Evaluation"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-3/
+    accessed: 2026-11-25
+    type: course
+  - id: bergstra2012
+    title: Random Search for Hyper-Parameter Optimization
+    author: James Bergstra, Yoshua Bengio
+    publisher: Journal of Machine Learning Research 13
+    year: 2012
+    url: https://jmlr.org/papers/v13/bergstra12a.html
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-tensorboard
+    title: torch.utils.tensorboard
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/tensorboard.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "Optuna: an open-source hyperparameter optimization framework"
+    url: https://optuna.org/
+  - title: "Andrej Karpathy: A Recipe for Training Neural Networks (tuning section)"
+    url: https://karpathy.github.io/2019/04/25/recipe/
+exercises:
+  - id: hpt-not-hyper
+    type: mcq
+    difficulty: easy
+    title: Parameter or hyperparameter?
+    prompt: Which of these is a **parameter** (learned by the optimizer) rather than a hyperparameter?
+    options:
+      - The learning rate
+      - The dropout probability
+      - The bias of the first unit in the second layer
+      - The number of hidden units
+    answer: 2
+    explanation: "Weights and biases are parameters: `loss.backward()` computes their gradients and `optimizer.step()` changes them. The learning rate, dropout probability and layer width are chosen by you before or around training, so they are hyperparameters."
+  - id: hpt-log-fraction
+    type: numeric
+    difficulty: easy
+    title: Sampling on a log scale
+    prompt: "You sample $u$ uniformly between $-4$ and $-1$ and set the learning rate to $10^u$. What fraction of trials will have a learning rate between $10^{-4}$ and $10^{-3}$? Give a decimal."
+    answer: 0.3333
+    tolerance: 0.002
+    explanation: "The interval $[-4, -3]$ is one third of $[-4, -1]$, so one third of the trials land between $10^{-4}$ and $10^{-3}$, one third between $10^{-3}$ and $10^{-2}$, and one third between $10^{-2}$ and $10^{-1}$. Sampling the rate itself uniformly between 0.0001 and 0.1 would put only about 0.9% of trials below 0.001."
+  - id: hpt-random-vs-grid
+    type: mcq
+    difficulty: medium
+    title: Why random search?
+    prompt: You can afford 9 trials to tune the learning rate and the dropout rate, and only the learning rate really matters. Why does random search usually beat a 3 × 3 grid here?
+    options:
+      - Random search uses the test set, the grid does not
+      - The grid tries only 3 distinct learning rates, random search tries 9
+      - Random search trains each model for longer
+      - Grids cannot use a logarithmic scale
+    answer: 1
+    explanation: "A 3 × 3 grid repeats each learning rate three times with different dropout values, which wastes trials when dropout hardly matters. Nine random points give nine different learning rates. This is the argument of Bergstra and Bengio (2012)."
+  - id: hpt-test-leak
+    type: reveal
+    difficulty: medium
+    title: The optimistic report
+    prompt: A team runs 50 configurations, picks the one with the best **test** accuracy (91.2%) and reports 91.2% as the model's expected accuracy on new data. What is wrong, and how should they have done it?
+    answer: Choosing among 50 runs by test accuracy makes the test set part of the tuning, so 91.2% is optimistically biased. They should have selected on a validation set and evaluated the single chosen model on the test set once.
+    explanation: "With 50 tries, some configurations score high partly by luck on that particular test set. Picking the maximum keeps that luck, so the number overstates real performance. The validation set absorbs this selection bias; the untouched test set then gives an honest estimate."
+---
+
+A **hyperparameter** is a setting that you choose rather than one the training algorithm learns: the learning rate, batch size, number of layers, dropout rate and weight decay are all examples.<Cite id="goodfellow2016-guidelines" /> The weights and biases, by contrast, are **parameters**, set by the optimizer. Good hyperparameters often decide whether a model trains at all, so tuning them systematically is one of the main skills of practical deep learning.<Cite id="tuning-playbook" />
+
+## Parameters and hyperparameters
+
+| | Parameters | Hyperparameters (see <Term slug="hyperparameter" />) |
+|---|---|---|
+| Examples | Weights, biases, BatchNorm's $\gamma$ and $\beta$ | Learning rate, batch size, epochs, width, depth, dropout, weight decay, schedule |
+| Set by | `optimizer.step()`, from gradients | You, before or around training |
+| Chosen using | The training set | The **validation** set |
+
+Hyperparameters must be chosen on a validation set, never on the test set. Every decision made by looking at a dataset fits the model a little to that dataset, so a test set used for decisions no longer gives an honest score.<Cite id="goodfellow2016-guidelines" /><Cite id="cs231n-nn3" />
+
+<Analogy breaks="An oven's dials have a known effect; a network's hyperparameters interact in ways you only discover by running experiments.">
+Hyperparameters resemble an oven's temperature and timer dials, and parameters are the cake itself. You set the dials, the cake forms on its own, and you judge the dials by tasting a test slice (the validation set), not by eating the cake you will serve to guests (the test set).
+</Analogy>
+
+## What to tune first
+
+The <Term slug="learning-rate" /> is usually the most important hyperparameter. Goodfellow and colleagues advise tuning it first if you can tune only one, because it controls the effective capacity of the model in a complicated way.<Cite id="goodfellow2016-guidelines" /> A practical order is:<Cite id="tuning-playbook" /><Cite id="cs231n-nn3" />
+
+1. **Start from a known-good recipe**: an architecture and optimizer settings that worked for a similar problem, such as Adam at $10^{-3}$.
+2. **Tune the learning rate** on a log scale (and the schedule, if any).
+3. **Fix overfitting or underfitting** with regularization (weight decay, dropout, augmentation) or model size, as described in [Overfitting and regularization](/course/intermediate/overfitting-regularization/).
+4. **Fine-tune the rest** (Adam's betas, warmup length) only if budget remains.
+
+Google's *Deep Learning Tuning Playbook* frames this as an incremental strategy. Each round of experiments has one goal, and the hyperparameters are sorted into *scientific* ones (whose effect you want to measure), *nuisance* ones (which must be re-tuned for a fair comparison, such as the learning rate), and *fixed* ones.<Cite id="tuning-playbook" /> A change is adopted only when the evidence is clear.
+
+### Batch size
+
+The playbook recommends choosing the batch size for training *speed* and hardware fit, not as a knob for validation accuracy. With the other hyperparameters re-tuned, roughly the same final performance is reachable across a wide range of batch sizes.<Cite id="tuning-playbook" /> The catch is "re-tuned": changing the batch size changes the best learning rate, so search the learning rate again after changing it.
+
+## The learning-rate range test
+
+Leslie Smith proposed a cheap way to find a sensible range for the learning rate: train briefly while increasing the rate step by step, and watch where the loss starts to fall and where it becomes unstable.<Cite id="smith2015" /> A common variant raises the rate exponentially, by the same factor at every mini-batch, from a tiny value to a huge one.
+
+<MathSteps
+  title="An exponential learning-rate sweep"
+  legend={[
+    { symbol: '\\eta_\\text{min}, \\eta_\\text{max}', meaning: 'start and end of the sweep' },
+    { symbol: 'N', meaning: 'number of mini-batches in the sweep' },
+    { symbol: 'k', meaning: 'factor applied at every step' },
+  ]}
+>
+  <Step tex="k = \left(\tfrac{\eta_\text{max}}{\eta_\text{min}}\right)^{1/(N-1)} = (10^{5})^{1/99} \approx \hl{1.123}" words="From 0.0001 to 10 in 100 steps, the rate grows by about 12% per mini-batch." />
+  <Step tex="\eta_i = \eta_\text{min}\, k^{\hl{i}}" words="The rate at step i. Every 20 steps it multiplies by about 10." example="i = 10: 0.0001 × 1.123¹⁰ ≈ 0.00032" />
+  <Step tex="\bar L_i = 0.9\, \bar L_{i-1} + 0.1\, \hl{L_i}" words="Smooth the noisy mini-batch losses with a running average before reading the curve." />
+  <Step tex="\eta_\text{start} \approx \tfrac{1}{10}\,\eta_{\arg\min \bar L}" words="A common rule of thumb: start about ten times below the rate where the smoothed loss was lowest, safely before it blows up." />
+</MathSteps>
+
+The result is a starting point, not an answer: confirm it with a few short training runs.<Cite id="smith2015" />
+
+## Random search
+
+When several hyperparameters matter, try combinations. Two rules from the CS231n notes and the literature apply:<Cite id="cs231n-nn3" />
+
+- **Sample on a log scale.** Learning rates and weight decay matter by factors of ten, so draw $u$ uniformly and use $10^u$.
+- **Prefer random search to grid search.** Bergstra and Bengio showed that when only a few hyperparameters matter, random points test many more distinct values of each important one than a grid with the same number of trials.<Cite id="bergstra2012" /> The playbook prefers quasi-random sequences for the same reason.<Cite id="tuning-playbook" />
+
+Search coarse to fine: a wide range with short runs first, then a narrower range around the best region with longer runs. If the best value sits at the edge of your range, extend the range.<Cite id="cs231n-nn3" />
+
+<Exercise id="hpt-log-fraction" />
+
+### Budget and bookkeeping
+
+Decide the budget before starting, for example "20 runs of 5 minutes", and keep every run comparable: same data split, same number of steps, fixed seeds.<Cite id="tuning-playbook" /> Record each run's hyperparameters, seed, code version and validation curve. A CSV file is enough; [TensorBoard](https://docs.pytorch.org/docs/stable/tensorboard.html), which PyTorch supports through `torch.utils.tensorboard`, adds plots.<Cite id="pt-tensorboard" /> Without records it is impossible to tell later which change actually helped.
+
+<Callout type="pitfall">
+Changing several hyperparameters at once "to save time" makes it impossible to know which change mattered. Change one thing per comparison, or use a proper random search.
+</Callout>
+
+## Try it
+
+The script trains a small MLP on three noisy, interleaved spirals (2-D points, 3 classes). It first runs the range test with SGD and momentum 0.9:
+
+<CodeFile path="code/core/intermediate/lr_range_test.py" lines="47-66" highlight="50,53,61,64" title="the learning-rate range test" />
+
+The smoothed loss stays near `1.10` (the value for random guessing, $\ln 3$) up to about `0.01`, falls to its lowest point at `lr = 0.385`, and climbs to `1.845` by `lr = 3.5`. The suggested starting rate is `0.0385`. The script then runs 8 random trials of AdamW with log-uniform learning rate and weight decay, 300 steps each. The best has `lr = 0.00716` and `weight_decay = 0.00010`, with validation accuracy `0.929`; the smallest rate, `0.00070`, reaches only `0.633` in the same budget. These numbers come from one seed, so expect yours to differ slightly.
+
+## Summary
+
+- Parameters are learned by the optimizer; hyperparameters are chosen by you, using the validation set only.
+- Tune the learning rate first, on a log scale; then regularization and model size; then the rest.
+- An LR range test finds a sensible starting rate in one short run; random search beats grid search when few settings matter.
+- Fix a budget, keep runs comparable, record everything, and change one thing at a time.

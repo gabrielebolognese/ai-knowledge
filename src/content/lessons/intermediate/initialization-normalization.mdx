@@ -1,0 +1,233 @@
+---
+title: Initialization and normalization
+slug: initialization-normalization
+track: intermediate
+level: intermediate
+order: 90
+minutes: 25
+module: Training that generalizes
+summary: Why random starting weights must be scaled to the layer size, how Xavier/Glorot and He/Kaiming initialization keep signals alive through deep stacks, and what batch normalization and layer normalization compute in training and evaluation mode.
+hatnote: 'For the optimizer that uses these gradients, see "Optimizers: SGD, momentum, RMSProp and Adam".'
+prerequisites: [optimizers, multilayer-perceptron]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Explain vanishing and exploding activations with a numeric example
+  - Use Xavier/Glorot and Kaiming/He initialization and say when
+  - Explain what batch normalization and layer normalization do, and their train/eval difference
+build: A 10-layer signal test for four initializations, plus BatchNorm and LayerNorm by hand
+reviewed: 2026-11-25
+seeAlso: [optimizers, debugging-training, multilayer-perceptron]
+sources:
+  - id: glorot2010
+    title: Understanding the difficulty of training deep feedforward neural networks
+    author: Xavier Glorot, Yoshua Bengio
+    publisher: Proceedings of AISTATS 2010 (PMLR 9)
+    year: 2010
+    url: https://proceedings.mlr.press/v9/glorot10a.html
+    accessed: 2026-11-25
+    type: paper
+  - id: he2015-init
+    title: "Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification"
+    author: Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+    publisher: arXiv (ICCV 2015)
+    year: 2015
+    url: https://arxiv.org/abs/1502.01852
+    accessed: 2026-11-25
+    type: paper
+  - id: ioffe2015
+    title: "Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift"
+    author: Sergey Ioffe, Christian Szegedy
+    publisher: arXiv (ICML 2015)
+    year: 2015
+    url: https://arxiv.org/abs/1502.03167
+    accessed: 2026-11-25
+    type: paper
+  - id: ba2016
+    title: Layer Normalization
+    author: Jimmy Lei Ba, Jamie Ryan Kiros, Geoffrey E. Hinton
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1607.06450
+    accessed: 2026-11-25
+    type: paper
+  - id: santurkar2018
+    title: How Does Batch Normalization Help Optimization?
+    author: Shibani Santurkar, Dimitris Tsipras, Andrew Ilyas, Aleksander Madry
+    publisher: arXiv (NeurIPS 2018)
+    year: 2018
+    url: https://arxiv.org/abs/1805.11604
+    accessed: 2026-11-25
+    type: paper
+  - id: d2l-init
+    title: "Dive into Deep Learning, 5.4 Numerical Stability and Initialization"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/numerical-stability-and-init.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-batchnorm
+    title: "Dive into Deep Learning, 8.5 Batch Normalization"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_convolutional-modern/batch-norm.html
+    accessed: 2026-11-25
+    type: book
+  - id: pt-init
+    title: torch.nn.init
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/nn.init.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-linear
+    title: torch.nn.Linear
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-batchnorm
+    title: torch.nn.BatchNorm1d
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.BatchNorm1d.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "deeplearning.ai: Initializing neural networks (interactive)"
+    url: https://www.deeplearning.ai/ai-notes/initialization/index.html
+exercises:
+  - id: inn-he-std
+    type: numeric
+    difficulty: easy
+    title: He initialization by hand
+    prompt: "A ReLU layer has $n_\\text{in} = 512$ inputs. What standard deviation does He (Kaiming) normal initialization use for its weights?"
+    answer: 0.0625
+    tolerance: 0.0005
+    hint: "The variance is $2 / n_\\text{in}$; the standard deviation is its square root."
+    explanation: "$\\text{Var} = 2/512 = 0.00390625$, so $\\text{std} = \\sqrt{0.00390625} = 0.0625$."
+  - id: inn-xavier-limit
+    type: numeric
+    difficulty: easy
+    title: Xavier uniform limit
+    prompt: "A tanh layer maps 100 inputs to 50 outputs. Xavier/Glorot uniform initialization samples from $U(-a, a)$ with $a = \\sqrt{6/(n_\\text{in} + n_\\text{out})}$. What is $a$?"
+    answer: 0.2
+    tolerance: 0.001
+    explanation: "$a = \\sqrt{6/150} = \\sqrt{0.04} = 0.2$, so every weight starts somewhere between −0.2 and 0.2."
+  - id: inn-eval-mode
+    type: mcq
+    difficulty: medium
+    title: BatchNorm at prediction time
+    prompt: You trained a network with `nn.BatchNorm1d` and now predict on single images, but you forgot to call `model.eval()`. What happens?
+    options:
+      - Nothing, BatchNorm behaves the same in both modes
+      - Each prediction is normalized with the statistics of its own tiny batch, so outputs are wrong and the running statistics keep changing
+      - PyTorch automatically switches to eval mode when gradients are not needed
+      - The learned scale and shift are reset to 1 and 0
+    answer: 1
+    explanation: "In training mode BatchNorm normalizes with the current batch's mean and variance and updates its running averages. With one example per batch those statistics are meaningless (and `BatchNorm1d` even refuses a batch of one value per channel). `model.eval()` switches to the stored running statistics; `torch.no_grad()` does not change this."
+  - id: inn-zero-init
+    type: reveal
+    difficulty: medium
+    title: Why not start every weight at zero?
+    prompt: A colleague initializes every weight of an MLP to 0 (or to the same constant) "to be safe". Training runs but the network behaves as if each layer had one unit. Why?
+    answer: All units in a layer compute the same output and receive the same gradient, so they stay identical forever (symmetry is never broken).
+    explanation: "Identical weights give identical activations and identical gradients, so every update keeps the units identical: 128 copies of one feature. Random initialization breaks the symmetry. Biases, however, can safely start at zero because the random weights already make the units differ."
+---
+
+**Initialization** is the choice of the random numbers a network's weights start from, and **normalization** layers rescale activations while the network runs. Both exist to keep the signal flowing through many layers at a sensible size: if activations or gradients shrink or grow at every layer, a deep network trains slowly or not at all.<Cite id="d2l-init" /> Good defaults, such as He initialization for ReLU networks and normalization layers, are a large part of why networks with dozens of layers became trainable.<Cite id="he2015-init" /><Cite id="ioffe2015" />
+
+## Why the starting point matters
+
+A layer multiplies its input by a weight matrix. Repeat that ten times and any consistent scaling compounds: a factor of 2 per layer becomes $2^{10} = 1024$, and a factor of 0.5 becomes about 0.001.<Cite id="d2l-init" /> Small activations lead to small gradients that barely move the early layers, and large ones overflow or saturate the activation functions. These are the [vanishing and exploding gradient problems](https://en.wikipedia.org/wiki/Vanishing_gradient_problem), described in detail by Glorot and Bengio for deep networks.<Cite id="glorot2010" /> See <Term slug="exploding-gradient" /> in the glossary.
+
+The weights must also be **random**. If every weight in a layer started with the same value, every unit would compute the same output and get the same gradient, and the units would stay identical forever.<Cite id="d2l-init" />
+
+<Analogy breaks="Guitar strings are tuned once by ear; a network's weights are then changed millions of times by training, and initialization only sets the first state.">
+Initialization is like tuning a guitar before playing. If every string has the same pitch, no chord is possible; if strings are far too tight or too loose, the sound is distorted or silent.
+</Analogy>
+
+## Keeping the variance constant
+
+The fix is to scale the random weights to the number of inputs. Here is the argument with numbers, for one unit $z = \sum_i w_i x_i$ whose inputs have variance 1.
+
+<MathSteps
+  title="Variance through one layer"
+  legend={[
+    { symbol: 'n_\\text{in}', meaning: 'number of inputs to the unit' },
+    { symbol: '\\text{Var}', meaning: 'variance, the square of the standard deviation' },
+    { symbol: 'w_i, x_i', meaning: 'independent, zero-mean weights and inputs' },
+  ]}
+>
+  <Step tex="\text{Var}(w_i x_i) = \text{Var}(w)\,\text{Var}(x)" words="For independent, zero-mean numbers, the variance of a product is the product of the variances." />
+  <Step tex="\text{Var}(z) = \hl{n_\text{in}}\,\text{Var}(w)\,\text{Var}(x)" words="Adding n_in independent terms adds their variances." example="n_in = 256 and weights with std 1: the variance grows 256 times, the std 16 times, per layer." />
+  <Step tex="\text{Var}(z) = \text{Var}(x) \iff \text{Var}(w) = \hl{\tfrac{1}{n_\text{in}}}" words="To keep the size of the signal constant, the weight variance must be one over the number of inputs." />
+  <Step tex="\text{He: } \text{Var}(w) = \hl{\tfrac{2}{n_\text{in}}}" words="ReLU zeroes about half of its inputs, halving the signal, so He et al. double the variance to compensate." example="n_in = 256: Var = 0.0078125, std ≈ 0.0884" />
+  <Step tex="\text{Xavier: } \text{Var}(w) = \hl{\tfrac{2}{n_\text{in} + n_\text{out}}},\quad a = \sqrt{\tfrac{6}{n_\text{in}+n_\text{out}}}" words="Glorot and Bengio average the forward (n_in) and backward (n_out) conditions. The uniform version samples from U(−a, a)." example="256 → 128: a = √(6/384) = 0.125" />
+</MathSteps>
+
+**Xavier (Glorot) initialization** (2010) was derived for tanh and sigmoid units.<Cite id="glorot2010" /> **He (Kaiming) initialization** (2015) is the version for <Term slug="relu">ReLU</Term>; He and colleagues used it to train a 30-layer ReLU network from scratch.<Cite id="he2015-init" /> Both are in [`torch.nn.init`](https://docs.pytorch.org/docs/stable/nn.init.html), which also offers `calculate_gain('tanh')` (5/3) and similar correction factors for other activations.<Cite id="pt-init" />
+
+### What PyTorch does by default
+
+`nn.Linear` already initializes its weights uniformly in $\pm 1/\sqrt{n_\text{in}}$, a scaled-down Kaiming-uniform variant, so small networks rarely need changes.<Cite id="pt-linear" /> For deeper ReLU networks, set He initialization explicitly and start biases at zero:<Cite id="pt-init" />
+
+```python
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
+        nn.init.zeros_(m.bias)
+
+model.apply(init_weights)      # calls init_weights on every submodule
+```
+
+<Exercise id="inn-he-std" />
+
+## Batch normalization
+
+**Batch normalization** (Ioffe and Szegedy, 2015) normalizes each feature over the current mini-batch to mean 0 and standard deviation 1, then applies a learned scale $\gamma$ and shift $\beta$, so the network can undo the normalization where that helps.<Cite id="ioffe2015" /> It lets networks train with higher learning rates and has a mild regularizing effect.<Cite id="d2l-batchnorm" /> In PyTorch it is `nn.BatchNorm1d` for vectors and `nn.BatchNorm2d` for images (see <Term slug="batch-normalization" />).<Cite id="pt-batchnorm" />
+
+<MathSteps
+  title="BatchNorm on one feature, batch [1, 2, 3, 6]"
+  legend={[
+    { symbol: '\\mu', meaning: 'batch mean' },
+    { symbol: '\\sigma^2', meaning: 'batch variance' },
+    { symbol: '\\gamma, \\beta', meaning: 'learned scale and shift' },
+    { symbol: '\\epsilon', meaning: 'small constant that avoids dividing by zero' },
+  ]}
+>
+  <Step tex="\mu = \tfrac{1 + 2 + 3 + 6}{4} = \hl{3}" words="Average the feature over the four examples in the batch." />
+  <Step tex="\sigma^2 = \tfrac{(-2)^2 + (-1)^2 + 0^2 + 3^2}{4} = \tfrac{14}{4} = \hl{3.5}" words="Average the squared distances from the mean. The standard deviation is √3.5 ≈ 1.871." />
+  <Step tex="\hat x = \tfrac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} = [\hl{-1.069, -0.535, 0, 1.604}]" words="Subtract the mean and divide by the standard deviation: mean 0, std 1." />
+  <Step tex="y = \hl{\gamma}\hat x + \hl{\beta} = [-1.138, -0.069, 1, 4.207]" words="With γ = 2 and β = 1, the learned scale and shift give the final output." />
+</MathSteps>
+
+### Training mode versus evaluation mode
+
+During training, BatchNorm uses the statistics of the current batch and also updates **running averages** of the mean and variance. In evaluation mode it uses those running averages instead, so a prediction does not depend on which other examples happen to share its batch.<Cite id="pt-batchnorm" /> This is why `model.eval()` matters. In the script below, after a single batch the running mean is only 0.3 (PyTorch moves it 10% of the way from 0 towards 3 per batch), so the same four inputs give quite different outputs in the two modes. After many batches the running values settle on the dataset's statistics.<Cite id="d2l-batchnorm" />
+
+Why BatchNorm helps is still debated. Ioffe and Szegedy explained it as reducing "internal covariate shift", changes in each layer's input distribution during training.<Cite id="ioffe2015" /> Santurkar and colleagues later found that BatchNorm helps even when that shift is not reduced, and argued that it mainly makes the loss surface smoother.<Cite id="santurkar2018" /> It is safest to say that it reliably helps in practice and that the reasons are still being researched.
+
+<Analogy breaks="A teacher curves grades once per exam; BatchNorm recomputes the curve for every mini-batch during training and switches to a fixed curve at evaluation time.">
+BatchNorm resembles grading on a curve: each batch's raw scores are re-centred and rescaled before they are passed on, so the next layer always sees numbers on a familiar scale.
+</Analogy>
+
+## Layer normalization
+
+**Layer normalization** (Ba, Kiros and Hinton, 2016) computes the same mean-and-variance normalization, but over the features of *each example* instead of over the batch.<Cite id="ba2016" /> It needs no batch statistics, so it behaves the same in training and evaluation, works with a batch of one, and handles sequences of different lengths. That is why Transformers use LayerNorm rather than BatchNorm (see <Term slug="layer-normalization" />).<Cite id="ba2016" /> Feeding the single example $[1, 2, 3, 6]$ (four features) to `nn.LayerNorm(4)` gives the same $[-1.069, -0.535, 0, 1.604]$ as above: the arithmetic is identical, but the averaging runs along the other axis.
+
+<Callout type="tip">
+A `Linear` layer followed directly by BatchNorm does not need its own bias, because BatchNorm subtracts the mean and adds $\beta$ anyway. Write `nn.Linear(784, 256, bias=False)`.
+</Callout>
+
+## Try it
+
+The script pushes 1,000 random inputs through ten 256-wide layers with four different initializations and prints the activation standard deviation after layers 1, 5 and 10:
+
+<CodeFile path="code/core/intermediate/init_norm.py" lines="16-37" highlight="21,30,31" title="signal size through 10 layers" />
+
+With ReLU, weights with std 0.01 shrink the signal to `2.172e-10` by layer 10, and weights with std 1.0 blow it up to `3.22e+10`. Xavier shrinks it to `0.03313`, and He keeps it in the same range (`0.8253`, `0.8127`, `0.574`). With tanh, std 1.0 gives `0.9745` at every layer: the units are saturated at ±1, so their gradients are close to zero. The script then prints the BatchNorm example: `[-1.138, -0.069, 1.0, 4.207]` in training mode and `[2.198, 3.908, 5.619, 10.752]` in evaluation mode after one batch.
+
+## Summary
+
+- Weights must start random (to break symmetry) and scaled to the layer size (to keep the signal size constant).
+- Use He initialization ($\text{Var} = 2/n_\text{in}$) for ReLU and Xavier ($2/(n_\text{in}+n_\text{out})$) for tanh or sigmoid; PyTorch's defaults are fine for small networks.
+- BatchNorm normalizes each feature over the batch and then applies a learned scale and shift; in `eval()` mode it uses running statistics.
+- LayerNorm normalizes each example over its features, so it needs no batch and is the standard choice in Transformers.

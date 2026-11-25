@@ -1,0 +1,197 @@
+---
+title: PyTorch tensors and autograd
+slug: pytorch-tensors-autograd
+track: intermediate
+level: intermediate
+order: 30
+minutes: 25
+module: PyTorch fundamentals
+summary: PyTorch tensors are NumPy-like arrays that can run on a GPU and record the operations applied to them. This lesson creates tensors, converts them to and from NumPy, and uses autograd to reproduce the backpropagation lesson's gradients automatically, including why gradients accumulate.
+hatnote: This lesson automates the hand calculation in "Backpropagation, step by step". For installing PyTorch, see the setup track or use Google Colab.
+prerequisites: [backpropagation, numpy-arrays]
+tools: [Python 3, PyTorch, NumPy]
+outcomes:
+  - Create tensors, move between NumPy and PyTorch, and read shape/dtype/device
+  - Use requires_grad and .backward() to get gradients automatically
+  - Explain why gradients accumulate and when to zero them
+  - Use torch.no_grad() for evaluation
+build: The backprop lesson's network in PyTorch, with gradients from autograd
+reviewed: 2026-11-25
+seeAlso: [backpropagation, pytorch-modules-data, training-loop]
+sources:
+  - id: pt-tensors
+    title: "Learn the Basics: Tensors"
+    publisher: PyTorch tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/basics/tensorqs_tutorial.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-autograd
+    title: "Learn the Basics: Automatic Differentiation with torch.autograd"
+    publisher: PyTorch tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/basics/autogradqs_tutorial.html
+    accessed: 2026-11-25
+    type: docs
+  - id: d2l-autograd
+    title: "Dive into Deep Learning, 2.5 Automatic Differentiation"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_preliminaries/autograd.html
+    accessed: 2026-11-25
+    type: book
+  - id: pt-intro
+    title: Learn the Basics
+    publisher: PyTorch tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/basics/intro.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-tensor-api
+    title: torch.Tensor
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/tensors.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-autograd-notes
+    title: Autograd mechanics
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/notes/autograd.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-no-grad
+    title: torch.no_grad
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.no_grad.html
+    accessed: 2026-11-25
+    type: docs
+  - id: paszke2019
+    title: "PyTorch: An Imperative Style, High-Performance Deep Learning Library"
+    author: Adam Paszke and others
+    publisher: NeurIPS 2019
+    year: 2019
+    url: https://arxiv.org/abs/1912.01703
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "PyTorch: A Gentle Introduction to torch.autograd"
+    url: https://docs.pytorch.org/tutorials/beginner/blitz/autograd_tutorial.html
+  - title: "NumPy: the absolute basics for beginners"
+    url: https://numpy.org/doc/stable/user/absolute_beginners.html
+exercises:
+  - id: pta-grad-value
+    type: numeric
+    difficulty: easy
+    title: Predict the gradient
+    prompt: "`x = torch.tensor(2.0, requires_grad=True)`, then `y = 3 * x**2 + x` and `y.backward()`. What is `x.grad`?"
+    answer: 13
+    tolerance: 0
+    hint: "The derivative of $3x^2 + x$ is $6x + 1$."
+    explanation: "Autograd computes the exact derivative at the current value: $6 \\cdot 2 + 1 = 13$, so `x.grad` is `tensor(13.)`."
+  - id: pta-accumulate
+    type: mcq
+    difficulty: medium
+    title: Two backward calls
+    prompt: "`w = torch.tensor(2.0, requires_grad=True)`. You run `(w**3).backward()` twice, building the expression again each time and never zeroing the gradient. What is `w.grad` now?"
+    options:
+      - "12"
+      - "24"
+      - "0"
+      - "An error, because a tensor can only have one gradient"
+    answer: "24"
+    explanation: "The derivative of $w^3$ is $3w^2 = 12$. PyTorch *adds* each new gradient to `.grad` instead of replacing it, so after two calls it holds $12 + 12 = 24$. That is why a training loop calls `optimizer.zero_grad()` every iteration."
+  - id: pta-no-grad-detach
+    type: short
+    difficulty: medium
+    title: no_grad versus detach
+    prompt: When would you use `with torch.no_grad():` and when `tensor.detach()`?
+    answer: "no_grad turns off graph recording for a whole block of code, for example an evaluation loop or a manual weight update. detach() returns one tensor that shares the data but is cut out of the graph, for example to log or plot a value, or to stop gradients flowing into part of a model."
+    explanation: "Both stop autograd from tracking, but at different scopes: `no_grad` is a context for a block of operations and saves memory and time, while `detach` acts on a single tensor that you want to keep using without its history."
+  - id: pta-int-tensor
+    type: reveal
+    difficulty: hard
+    title: The integer surprise
+    prompt: "`torch.tensor([1, 2, 3], requires_grad=True)` raises an error. Why, and what is the fix?"
+    answer: "Python integers become a tensor of dtype int64, and only floating-point (or complex) tensors can require gradients, because derivatives of integer-valued functions are not defined. Write the values as floats, `torch.tensor([1.0, 2.0, 3.0], requires_grad=True)`, or pass `dtype=torch.float32`."
+    explanation: "PyTorch infers the dtype from the data, just as NumPy does. Gradients are small real-valued changes, so autograd only works on floating-point tensors. Checking `t.dtype` is the quickest way to spot this kind of problem."
+---
+
+A **tensor** is PyTorch's basic data type: a multi-dimensional array of numbers with a shape, a data type and a device, much like a NumPy array.<Cite id="pt-tensors" /> PyTorch adds two things NumPy lacks: tensors can live on a GPU, and they can record the operations applied to them so that gradients are computed automatically, a feature called **autograd**.<Cite id="pt-autograd" /> Together they replace the hand-derived gradients of the [backpropagation lesson](/course/intermediate/backpropagation/) with one line of code.
+
+## Tensors
+
+A tensor can hold a single number (a scalar), a vector, a matrix or a higher-dimensional block, such as a batch of colour images with shape (batch, channels, height, width).<Cite id="pt-tensors" /> The word is used loosely in machine learning: it simply means an n-dimensional array, see <Term slug="tensor" />. Every tensor carries three attributes worth checking whenever something goes wrong:<Cite id="pt-tensor-api" />
+
+| Attribute | Example | Meaning |
+|---|---|---|
+| `t.shape` | `torch.Size([2, 3])` | number of entries along each dimension |
+| `t.dtype` | `torch.float32` | the number type; floats are the default for decimals |
+| `t.device` | `cpu` | where the data lives: `cpu`, `cuda` or `mps` |
+
+Tensors are created from Python lists with `torch.tensor(...)`, or filled with `torch.zeros`, `torch.ones`, `torch.rand` and `torch.arange`. Arithmetic works element by element with the same broadcasting rules as NumPy, `@` is matrix multiplication, and reductions such as `t.sum(dim=0)` collapse one dimension.<Cite id="pt-tensors" /> A tensor moves between devices with `t.to("cuda")`, and every tensor in one operation must be on the same device.<Cite id="pt-tensor-api" /> If you have no GPU, everything in this track runs on the CPU, or on a free [Google Colab](https://colab.research.google.com/) GPU (see <Term slug="google-colab" />).
+
+### NumPy and PyTorch
+
+`torch.from_numpy(a)` turns a NumPy array into a tensor **without copying**: the two share memory, so changing one changes the other. `t.numpy()` goes back the same way for CPU tensors.<Cite id="pt-tensors" /> By contrast, `torch.tensor(a)` always makes a copy.<Cite id="pt-tensor-api" />
+
+<Callout type="pitfall">
+NumPy's default float type is 64-bit, PyTorch's is 32-bit. A tensor created with `torch.from_numpy` keeps `float64`, and multiplying it with the `float32` weights of a model raises a dtype error. Convert with `.float()`.
+</Callout>
+
+## Autograd: gradients for free
+
+Setting `requires_grad=True` on a tensor tells PyTorch to record every operation that uses it. As your code runs, PyTorch builds a <Term slug="computational-graph" /> behind the scenes; each result remembers the function that created it in its `grad_fn` attribute.<Cite id="pt-autograd" /> Calling `.backward()` on a scalar result, usually the loss, walks that graph in reverse and stores $\partial L / \partial w$ in the `.grad` attribute of every *leaf* tensor that required gradients, that is, every tensor you created yourself rather than computed.<Cite id="pt-autograd-notes" />
+
+This is reverse-mode <Term slug="automatic-differentiation" />, the same algorithm as <Term slug="backpropagation" />. PyTorch builds the graph anew on every forward pass ("define-by-run"), which is why ordinary Python `if` statements and loops can change the network from one call to the next.<Cite id="paszke2019" />
+
+<Analogy breaks="A flight recorder is read only after something goes wrong; autograd's tape is read on every training step, and it is thrown away after each use.">
+Autograd works like a flight recorder. While the forward pass runs it notes every operation in order; `.backward()` plays the recording in reverse to work out how each input affected the result.
+</Analogy>
+
+### The backprop lesson, automatically
+
+The companion script rebuilds the 2-2-1 network from the previous lesson with tensors. Hidden weights go in a 2 × 2 matrix, one row per unit, and all parameters get `requires_grad=True`:
+
+<CodeFile path="code/core/intermediate/autograd_basics.py" lines="22-35" highlight="24,31,32" title="the backprop example, with autograd" />
+
+It prints `loss 0.5`, `dL/dW1 [[2.0, 4.0], [0.0, 0.0]]`, `dL/db1 [2.0, 0.0]`, `dL/dv [1.5, 0.0]` and `dL/dc 1.0`, exactly the values derived by hand, including the zero gradients of the inactive ReLU unit.<Cite id="d2l-autograd" />
+
+## Gradients accumulate
+
+PyTorch does not overwrite `.grad` when you call `.backward()` again; it **adds** the new gradient to the old one.<Cite id="pt-autograd" /> This is deliberate. It makes forks in the graph work (gradients from several paths must be summed), and it lets you accumulate gradients over several small batches before one update.<Cite id="pt-autograd-notes" />
+
+<MathSteps
+  title="Two backward calls on L = w² at w = 3"
+  legend={[
+    { symbol: 'w.grad', meaning: 'the gradient PyTorch has stored for w' },
+  ]}
+>
+  <Step tex="\frac{dL}{dw} = 2w = 2 \cdot 3 = \hl{6}" words="The first backward call stores 6 in w.grad." />
+  <Step tex="w.\mathrm{grad} = 6 + \hl{6} = 12" words="A second backward call adds another 6 instead of replacing it." />
+  <Step tex="w.\mathrm{grad} \leftarrow \hl{0}" words="Zeroing resets it. In a training loop, optimizer.zero_grad() does this for every parameter." />
+</MathSteps>
+
+In a training loop you almost always want the gradient of the *current* batch only, so you zero the gradients once per iteration, usually with `optimizer.zero_grad()`.<Cite id="pt-autograd" /> The [training loop lesson](/course/intermediate/training-loop/) puts this in its place.
+
+<Exercise id="pta-accumulate" />
+
+## Switching tracking off
+
+Recording costs memory and time, and many computations do not need gradients: evaluating a model, plotting predictions or applying a manual weight update. Wrap them in `with torch.no_grad():` and PyTorch records nothing inside the block; results then have `requires_grad=False`.<Cite id="pt-no-grad" /> The stricter `torch.inference_mode()` does the same with a little less overhead, for code that will never need gradients.<Cite id="pt-autograd-notes" />
+
+To cut a single tensor out of the graph, use `t.detach()`. It returns a tensor that shares the same data but has no history, which is useful for logging a value or for stopping gradients from flowing into part of a model.<Cite id="pt-autograd" /> Another everyday use is `loss.item()`, which turns a one-element tensor into a plain Python number for printing; keeping the tensor itself in a list would keep its whole graph alive.<Cite id="pt-tensor-api" />
+
+Two more rules explain common error messages. `.backward()` needs a scalar unless you pass a `gradient` argument, because "the gradient of a vector" is not one number per parameter.<Cite id="pt-autograd" /> And PyTorch frees the graph after `.backward()` to save memory, so calling it twice on the same result fails unless the first call used `retain_graph=True`.<Cite id="pt-autograd-notes" />
+
+## Try it
+
+Run `python code/core/intermediate/autograd_basics.py`; the official [Learn the Basics](https://docs.pytorch.org/tutorials/beginner/basics/intro.html) tutorial covers the same ground in more detail.<Cite id="pt-intro" /> The last part of the script shows accumulation and the two ways to stop tracking:
+
+<CodeFile path="code/core/intermediate/autograd_basics.py" lines="37-49" highlight="42,46" title="accumulation, zeroing and no_grad" />
+
+It prints `w.grad = 6.0`, then `12.0`, then `0.0` after zeroing, and `requires_grad = False` for results computed under `no_grad` or after `detach()`.
+
+## Summary
+
+- A tensor is an n-dimensional array with a shape, a dtype and a device; check all three when debugging.
+- `torch.from_numpy` shares memory with NumPy, while `torch.tensor` copies; watch for `float64` versus `float32`.
+- `requires_grad=True` plus `.backward()` fills `.grad` with exact gradients, the same numbers backpropagation gives by hand.
+- Gradients accumulate, so zero them once per training step.
+- Use `torch.no_grad()` for evaluation, `.detach()` for single tensors and `.item()` for logging.

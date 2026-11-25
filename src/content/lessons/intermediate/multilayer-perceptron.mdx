@@ -1,0 +1,220 @@
+---
+title: Multilayer perceptrons and the forward pass
+slug: multilayer-perceptron
+track: intermediate
+level: intermediate
+order: 10
+minutes: 20
+module: From neurons to networks
+summary: A multilayer perceptron stacks layers of neurons, each one a matrix multiplication, a bias and an activation. This lesson writes the forward pass as matrix operations, tracks shapes through a 784→128→10 network, counts its parameters and shows why one hidden layer solves XOR.
+hatnote: This lesson builds on single neurons. For how the weights of a whole network are trained, see "Backpropagation, step by step".
+prerequisites: [perceptron-activations, matrices-matmul, first-model-numpy, artificial-neuron]
+tools: [Python 3, NumPy]
+outcomes:
+  - Stack layers into an MLP and write its forward pass as matrix operations
+  - Track tensor shapes through every layer of a 784→128→10 network
+  - Count the parameters of an MLP
+  - Explain why a hidden layer solves XOR
+build: The forward pass of a 784→128→10 network in NumPy, plus a hand-wired XOR network
+reviewed: 2026-11-25
+seeAlso: [backpropagation, pytorch-modules-data]
+sources:
+  - id: goodfellow2016-mlp
+    title: "Deep Learning, chapter 6: Deep Feedforward Networks"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/mlp.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-mlp
+    title: "Dive into Deep Learning, 5.1 Multilayer Perceptrons"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/mlp.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-nn1
+    title: "Neural Networks Part 1: Setting up the Architecture"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-1/
+    accessed: 2026-11-25
+    type: course
+  - id: 3b1b-nn
+    title: "Neural networks (video series)"
+    author: Grant Sanderson
+    publisher: 3Blue1Brown
+    url: https://www.3blue1brown.com/topics/neural-networks
+    accessed: 2026-11-25
+    type: video
+  - id: cybenko1989
+    title: Approximation by superpositions of a sigmoidal function
+    author: George Cybenko
+    publisher: Mathematics of Control, Signals and Systems 2(4)
+    year: 1989
+    url: https://doi.org/10.1007/BF02551274
+    accessed: 2026-11-25
+    type: paper
+  - id: hornik1989
+    title: Multilayer feedforward networks are universal approximators
+    author: Kurt Hornik, Maxwell Stinchcombe, Halbert White
+    publisher: Neural Networks 2(5)
+    year: 1989
+    url: https://doi.org/10.1016/0893-6080(89)90020-8
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-linear
+    title: torch.nn.Linear
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "Michael Nielsen: A visual proof that neural nets can compute any function"
+    url: https://neuralnetworksanddeeplearning.com/chap4.html
+  - title: "Wikipedia: Multilayer perceptron"
+    url: https://en.wikipedia.org/wiki/Multilayer_perceptron
+exercises:
+  - id: mlpf-hidden-shape
+    type: numeric
+    difficulty: easy
+    title: How many numbers in the hidden layer?
+    prompt: "A batch of 32 images, each flattened to 784 pixels, goes through a 784→128 layer. How many numbers does the hidden activation matrix $H$ contain?"
+    answer: 4096
+    tolerance: 0
+    hint: "$H$ has one row per image and one column per hidden unit."
+    explanation: "$H$ has shape $(32, 128)$, so it holds $32 \\times 128 = 4096$ numbers. The batch size is the first dimension and passes through every layer unchanged."
+  - id: mlpf-param-count
+    type: numeric
+    difficulty: medium
+    title: Count the parameters
+    prompt: "How many parameters (weights plus biases) does a 784→64→32→10 MLP have?"
+    answer: 52650
+    tolerance: 0
+    hint: "Each dense layer has $n_{in} \\times n_{out}$ weights and $n_{out}$ biases. Add up three layers."
+    explanation: "Layer 1: $784 \\cdot 64 + 64 = 50{,}240$. Layer 2: $64 \\cdot 32 + 32 = 2{,}080$. Layer 3: $32 \\cdot 10 + 10 = 330$. Total $52{,}650$. Almost all of them sit in the first layer, which reads every pixel."
+  - id: mlpf-xor-forward
+    type: numeric
+    difficulty: medium
+    title: Run the XOR network on a new input
+    prompt: "Use the XOR network from this lesson: $W = \\begin{bmatrix}1 & 1\\\\ 1 & 1\\end{bmatrix}$, $c = [0, -1]$, ReLU, then output $= h_1 - 2h_2$. What does it output for the input $x = (2, 1)$?"
+    answer: -1
+    tolerance: 0
+    hint: "Both hidden units first compute $x_1 + x_2 = 3$; the second one then subtracts 1."
+    explanation: "$h = \\mathrm{ReLU}([3 + 0, 3 - 1]) = [3, 2]$, so the output is $3 - 2 \\cdot 2 = -1$. The network was only designed for 0/1 inputs, so outside them it gives values that have no XOR meaning."
+  - id: mlpf-why-nonlinear
+    type: mcq
+    difficulty: medium
+    title: Why the activation matters
+    prompt: You remove every ReLU from a 5-layer MLP, leaving only the linear layers. What can the network now represent?
+    options:
+      - Exactly the same functions as before, only faster
+      - Only linear (affine) functions, the same as a single layer
+      - Nothing at all, because the gradients become zero
+      - Only functions with outputs between 0 and 1
+    answer: 1
+    explanation: "A product of matrices is another matrix: $W_2(W_1 x + b_1) + b_2 = (W_2 W_1)x + (W_2 b_1 + b_2)$. However many linear layers you stack, the result is one affine map, so XOR and every other curved boundary are out of reach. The gradients do not vanish; the model is just too simple."
+---
+
+A **multilayer perceptron** (MLP) is a neural network made of layers of <Term slug="artificial-neuron">artificial neurons</Term>, where every neuron in one layer feeds every neuron in the next.<Cite id="goodfellow2016-mlp" /> The layers between the input and the output are called *hidden layers*, and the act of pushing an input through them to get a prediction is the **forward pass**.<Cite id="d2l-mlp" /> MLPs are the simplest deep networks, and the same pattern of matrix multiplication, bias and activation sits inside image, text and chess models later in this course.
+
+## From one neuron to a layer
+
+A single neuron computes a weighted sum of its inputs plus a <Term slug="bias" />, then applies an <Term slug="activation-function" />. A **layer** is many neurons reading the same inputs, each with its own <Term slug="weight">weights</Term>.<Cite id="cs231n-nn1" /> Writing every neuron's weights as one row of a matrix lets a computer evaluate the whole layer in a single matrix multiplication, which is both shorter to write and much faster to run.<Cite id="cs231n-nn1" />
+
+An MLP chains such layers. The output of layer 1 becomes the input of layer 2, and so on, until the last layer produces the network's answer: ten scores, called *logits*, for a ten-class problem, or a single number for a regression problem.<Cite id="goodfellow2016-mlp" /> Because information only flows forwards, with no loops, Goodfellow and colleagues call these models *feedforward networks*.<Cite id="goodfellow2016-mlp" />
+
+<Analogy breaks="Real assembly-line workers are told what to build; hidden units are never told what to detect and often learn features no human would name.">
+An MLP works like an assembly line. Early stations pick out simple things, such as pen strokes in a digit; later stations combine them into loops and lines, and the last station announces "this is a 9".
+</Analogy>
+
+That picture of layers building up from strokes to digits is the one used in 3Blue1Brown's visual introduction to neural networks, which is a good companion to this lesson.<Cite id="3b1b-nn" />
+
+## The forward pass, piece by piece
+
+Take a tiny network with 2 inputs, 2 hidden <Term slug="relu">ReLU</Term> units and 1 output, and feed it the input $x = [1, 2]$. Hidden unit 1 has weights $[0.5, 0.5]$ and bias 0; hidden unit 2 has weights $[1, -1]$ and bias 0.5; the output unit has weights $[2, 1]$ and bias 0. The [backpropagation lesson](/course/intermediate/backpropagation/) trains exactly this network, so it is worth following once by hand.
+
+<MathSteps
+  title="One forward pass through a 2-2-1 network"
+  legend={[
+    { symbol: 'x', meaning: 'input vector, here [1, 2]' },
+    { symbol: 'W^{(1)}', meaning: 'hidden-layer weights, one row per hidden unit' },
+    { symbol: 'b^{(1)}', meaning: 'hidden-layer biases' },
+    { symbol: 'h', meaning: 'hidden activations' },
+    { symbol: '\\hat y', meaning: 'the network\'s prediction' },
+  ]}
+>
+  <Step tex="z^{(1)} = \hl{W^{(1)} x} = \begin{bmatrix}0.5 & 0.5\\ 1 & -1\end{bmatrix}\begin{bmatrix}1\\ 2\end{bmatrix} = \begin{bmatrix}1.5\\ -1\end{bmatrix}" words="Multiply the weight matrix by the input. Each row is one hidden unit's weighted sum." />
+  <Step tex="z^{(1)} = W^{(1)} x + \hl{b^{(1)}} = \begin{bmatrix}1.5\\ -1\end{bmatrix} + \begin{bmatrix}0\\ 0.5\end{bmatrix} = \begin{bmatrix}1.5\\ -0.5\end{bmatrix}" words="Add each unit's bias." />
+  <Step tex="h = \hl{\mathrm{ReLU}}(z^{(1)}) = \begin{bmatrix}1.5\\ 0\end{bmatrix}" words="Apply the activation element by element. The second unit's input is negative, so it outputs 0." />
+  <Step tex="\hat y = \hl{w^{(2)} \cdot h + b^{(2)}} = 2 \cdot 1.5 + 1 \cdot 0 + 0 = 3" words="The output layer is another weighted sum, here with no activation, as usual for a regression output." />
+  <Step tex="h^{(l)} = \phi\left(W^{(l)} h^{(l-1)} + b^{(l)}\right)" words="The general rule for layer l: multiply, add the bias, apply the activation phi. The input x counts as h^(0)." example="Two layers give the network above." />
+</MathSteps>
+
+That is the whole forward pass: the same three-part recipe, repeated layer after layer.<Cite id="d2l-mlp" /> In real code, the inputs of a whole <Term slug="mini-batch" /> are processed at once by stacking them as the rows of a matrix $X$, so the layer becomes $H = \phi(XW + b)$ and the bias is added to every row.<Cite id="d2l-mlp" />
+
+## Shapes through a 784→128→10 network
+
+Digit recognition on <Term slug="mnist" /> uses 28 × 28 pixel images. Flattened, each image is a row of 784 numbers. A common first network has one hidden layer of 128 units and an output layer of 10 logits, one per digit.<Cite id="cs231n-nn1" /> Following the shapes for a batch of 64 images catches most beginner bugs before they happen:
+
+| Step | Operation | Shape |
+|---|---|---|
+| Input | 64 flattened images | (64, 784) |
+| Hidden pre-activation | $X W_1 + b_1$ with $W_1$ of shape (784, 128) | (64, 128) |
+| Hidden activation | ReLU, element by element | (64, 128) |
+| Output logits | $H W_2 + b_2$ with $W_2$ of shape (128, 10) | (64, 10) |
+
+The rule for a matrix product is that the inner sizes must match: (64, **784**) times (**784**, 128) gives (64, 128). The batch size stays in front, untouched, through every layer.<Cite id="d2l-mlp" /> PyTorch's `nn.Linear` stores its weight the other way round, as (out, in), and computes $xW^\top + b$; the shapes of the inputs and outputs are the same.<Cite id="pt-linear" />
+
+<Exercise id="mlpf-hidden-shape" />
+
+## Counting parameters
+
+A dense layer with $n_\text{in}$ inputs and $n_\text{out}$ outputs has $n_\text{in} \times n_\text{out}$ weights and $n_\text{out}$ biases.<Cite id="cs231n-nn1" /> For the network above:
+
+- layer 1: $784 \times 128 + 128 = 100{,}480$
+- layer 2: $128 \times 10 + 10 = 1{,}290$
+- total: $101{,}770$ trainable numbers.
+
+Almost all of them sit in the first layer, which connects every pixel to every hidden unit. That is one reason image models switch to convolutional layers later in the course: they reuse a small set of weights across the whole picture instead.<Cite id="goodfellow2016-mlp" />
+
+<Callout type="pitfall">
+More parameters do not automatically mean a better model. A larger network can memorise its training data and do worse on new examples, and it costs more memory and time. The lesson on [overfitting and regularization](/course/intermediate/overfitting-regularization/) covers how to tell.
+</Callout>
+
+## Why a hidden layer solves XOR
+
+A single <Term slug="perceptron" /> draws one straight boundary, so it cannot compute [XOR](https://en.wikipedia.org/wiki/Exclusive_or), which outputs 1 for $(0,1)$ and $(1,0)$ but 0 for $(0,0)$ and $(1,1)$: no single line separates those points.<Cite id="goodfellow2016-mlp" /> Goodfellow and colleagues give a two-unit ReLU network that solves it exactly. Both hidden units add the inputs, the second one subtracts 1, and the output computes $h_1 - 2h_2$:<Cite id="goodfellow2016-mlp" />
+
+| Input | $h_1 = \mathrm{ReLU}(x_1 + x_2)$ | $h_2 = \mathrm{ReLU}(x_1 + x_2 - 1)$ | Output $h_1 - 2h_2$ |
+|---|---|---|---|
+| (0, 0) | 0 | 0 | 0 |
+| (0, 1) | 1 | 0 | 1 |
+| (1, 0) | 1 | 0 | 1 |
+| (1, 1) | 2 | 1 | 0 |
+
+The hidden layer moves the four points to new positions, $(0,0)$, $(1,0)$, $(1,0)$ and $(2,1)$, where a straight line *can* separate them. Creating this new representation is what hidden layers are for.<Cite id="goodfellow2016-mlp" />
+
+The activation is essential. Without it, two layers multiply out to one: $W_2(W_1x) = (W_2W_1)x$, which is again a single linear layer, however many you stack.<Cite id="d2l-mlp" />
+
+## How much can an MLP represent?
+
+The <Term slug="universal-approximation-theorem" /> says that an MLP with a single hidden layer and enough units can approximate any continuous function on a bounded region as closely as you like. Cybenko proved it for sigmoid units in 1989, and Hornik, Stinchcombe and White proved a general version the same year.<Cite id="cybenko1989" /><Cite id="hornik1989" />
+
+The theorem is often over-read. It says such a network *exists*; it does not say how many units it needs, which can be enormous, or that training will find the right weights, or that the result will work on new data.<Cite id="goodfellow2016-mlp" /> In practice, deeper networks with fewer units per layer usually learn the same functions more efficiently than one very wide layer.<Cite id="goodfellow2016-mlp" />
+
+## Try it
+
+The script below runs the 784→128→10 forward pass on a fake batch of 64 images, counts the parameters, checks the XOR network and confirms that two linear layers collapse into one. Run it with `python code/core/intermediate/mlp_forward.py`.
+
+<CodeFile path="code/core/intermediate/mlp_forward.py" lines="16-38" highlight="23,24,27" title="forward pass, parameter count and XOR" />
+
+It prints `X (64, 784) -> H (64, 128) -> logits (64, 10)`, then `parameters: 100,480 + 1,290 = 101,770`, then outputs 0, 1, 1, 0 for the four XOR inputs.
+
+## Summary
+
+- An MLP is a stack of dense layers; each computes $h = \phi(Wx + b)$ and feeds the next.
+- The forward pass is the same recipe applied layer by layer, ending in logits or a number.
+- Track shapes as (batch, features): inner sizes must match, and the batch size passes through.
+- A dense layer has $n_\text{in} n_\text{out} + n_\text{out}$ parameters; 784→128→10 has 101,770.
+- Hidden layers with a non-linear activation create new representations, which is how they solve XOR.

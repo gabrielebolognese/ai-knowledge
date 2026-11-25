@@ -1,0 +1,256 @@
+---
+title: "Optimizers: SGD, momentum, RMSProp and Adam"
+slug: optimizers
+track: intermediate
+level: intermediate
+order: 80
+minutes: 25
+module: Training that generalizes
+summary: Optimizers turn gradients into weight updates. This lesson compares full-batch, stochastic and mini-batch gradient descent, runs momentum and Adam by hand for two steps, and shows how to pick an optimizer, a starting learning rate and a schedule in PyTorch.
+hatnote: This lesson assumes plain gradient descent. For the basic update rule, see "Gradient descent".
+prerequisites: [training-loop]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Compare full-batch, stochastic and mini-batch gradient descent
+  - Run momentum and Adam updates by hand for two steps
+  - Choose an optimizer and a starting learning rate, and use a schedule
+build: GD, momentum and Adam written by hand and checked against torch.optim
+reviewed: 2026-11-25
+seeAlso: [gradient-descent, hyperparameter-tuning, initialization-normalization]
+sources:
+  - id: d2l-optimization
+    title: "Dive into Deep Learning, chapter 12: Optimization Algorithms"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_optimization/index.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-adam
+    title: "Dive into Deep Learning, 12.10 Adam"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_optimization/adam.html
+    accessed: 2026-11-25
+    type: book
+  - id: kingma2014
+    title: "Adam: A Method for Stochastic Optimization"
+    author: Diederik P. Kingma, Jimmy Ba
+    publisher: arXiv (ICLR 2015)
+    year: 2014
+    url: https://arxiv.org/abs/1412.6980
+    accessed: 2026-11-25
+    type: paper
+  - id: sutskever2013
+    title: On the importance of initialization and momentum in deep learning
+    author: Ilya Sutskever, James Martens, George Dahl, Geoffrey Hinton
+    publisher: Proceedings of ICML 2013 (PMLR 28)
+    year: 2013
+    url: https://proceedings.mlr.press/v28/sutskever13.html
+    accessed: 2026-11-25
+    type: paper
+  - id: hinton-rmsprop
+    title: "Neural Networks for Machine Learning, Lecture 6: Overview of mini-batch gradient descent (RMSProp)"
+    author: Geoffrey Hinton, Nitish Srivastava, Kevin Swersky
+    publisher: University of Toronto (CSC321 slides)
+    url: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
+    accessed: 2026-11-25
+    type: course
+  - id: loshchilov2017
+    title: Decoupled Weight Decay Regularization
+    author: Ilya Loshchilov, Frank Hutter
+    publisher: arXiv (ICLR 2019)
+    year: 2017
+    url: https://arxiv.org/abs/1711.05101
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-optim
+    title: torch.optim
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/optim.html
+    accessed: 2026-11-25
+    type: docs
+  - id: cs231n-nn3
+    title: "Neural Networks Part 3: Learning and Evaluation"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-3/
+    accessed: 2026-11-25
+    type: course
+  - id: robbins1951
+    title: A Stochastic Approximation Method
+    author: Herbert Robbins, Sutton Monro
+    publisher: The Annals of Mathematical Statistics 22(3)
+    year: 1951
+    url: https://doi.org/10.1214/aoms/1177729586
+    accessed: 2026-11-25
+    type: paper
+  - id: smith2015
+    title: Cyclical Learning Rates for Training Neural Networks
+    author: Leslie N. Smith
+    publisher: arXiv (WACV 2017)
+    year: 2015
+    url: https://arxiv.org/abs/1506.01186
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Distill: Why Momentum Really Works (Gabriel Goh, 2017)"
+    url: https://distill.pub/2017/momentum/
+  - title: "Sebastian Ruder: An overview of gradient descent optimization algorithms"
+    url: https://www.ruder.io/optimizing-gradient-descent/
+exercises:
+  - id: opt-momentum-two-steps
+    type: numeric
+    difficulty: easy
+    title: Momentum by hand
+    prompt: "Minimise $f(w) = w^2$ (gradient $2w$) with momentum: start at $w = 1$, $v = 0$, $\\beta = 0.9$, $\\eta = 0.1$, using $v \\leftarrow \\beta v + g$ and $w \\leftarrow w - \\eta v$. What is $w$ after two steps?"
+    answer: 0.46
+    tolerance: 0.001
+    hint: "Step 1: $g = 2$, $v = 2$, $w = 0.8$. Now repeat with the new $w$, remembering to keep 0.9 of the old velocity."
+    explanation: "Step 2: $g = 2 \\cdot 0.8 = 1.6$, $v = 0.9 \\cdot 2 + 1.6 = 3.4$, $w = 0.8 - 0.1 \\cdot 3.4 = 0.46$. Plain gradient descent would be at $0.64$: the velocity carried the ball further."
+  - id: opt-adam-scale
+    type: numeric
+    difficulty: medium
+    title: Adam's first step
+    prompt: "A weight starts at $w = 0.5$ and its first gradient is $g = 0.02$. Adam uses $\\eta = 0.001$ and the default betas. What is $w$ after the first step? (Ignore $\\epsilon$.)"
+    answer: 0.499
+    tolerance: 0.00001
+    hint: "After bias correction at $t = 1$, $\\hat m = g$ and $\\hat v = g^2$."
+    explanation: "$\\hat m / \\sqrt{\\hat v} = 0.02 / 0.02 = 1$, so the step is exactly $\\eta = 0.001$ downhill: $w = 0.5 - 0.001 = 0.499$. The size of Adam's first step does not depend on the size of the gradient, only on its sign."
+  - id: opt-terminal-velocity
+    type: numeric
+    difficulty: medium
+    title: How much does momentum amplify?
+    prompt: "If the gradient stays at the same value $g$ for many steps, the momentum velocity $v \\leftarrow \\beta v + g$ settles at $g / (1 - \\beta)$. With $\\beta = 0.9$, by what factor is the effective step larger than plain gradient descent's?"
+    answer: 10
+    tolerance: 0
+    explanation: "$1/(1 - 0.9) = 10$. On a steady slope, momentum with $\\beta = 0.9$ moves about ten times as far per step as plain gradient descent with the same learning rate, which is why the learning rate is often lowered when momentum is added."
+  - id: opt-choose
+    type: mcq
+    difficulty: medium
+    title: Pick the optimizer
+    prompt: You are training a small Transformer and want weight decay that does not interact with Adam's per-parameter scaling. Which PyTorch optimizer fits best?
+    options:
+      - "`torch.optim.SGD(params, lr=0.1)` without momentum"
+      - "`torch.optim.Adam(params, lr=3e-4, weight_decay=0.01)`"
+      - "`torch.optim.AdamW(params, lr=3e-4, weight_decay=0.01)`"
+      - "`torch.optim.RMSprop(params, lr=1.0)`"
+    answer: 2
+    explanation: "`Adam` with `weight_decay` adds the decay to the gradient, so it then gets divided by Adam's running scale. `AdamW` applies the decay directly to the weights (decoupled), which Loshchilov and Hutter showed regularises better; it is the usual choice for Transformers. Plain SGD without momentum would train slowly, and a learning rate of 1.0 with RMSprop would diverge."
+---
+
+An **optimizer** is the rule that turns gradients into weight updates. Plain <Term slug="gradient-descent" /> is the simplest optimizer; the variants in this lesson add memory of past gradients (momentum) and per-parameter step sizes (RMSProp and Adam), which usually train neural networks faster and more reliably.<Cite id="d2l-optimization" /> In PyTorch every one of them is a class in [`torch.optim`](https://docs.pytorch.org/docs/stable/optim.html) with the same `zero_grad()` and `step()` interface.<Cite id="pt-optim" />
+
+## How much data per step
+
+Gradient descent can estimate the gradient from different amounts of data.<Cite id="d2l-optimization" />
+
+| Variant | Examples per step | Trade-off |
+|---|---|---|
+| Full-batch | The whole training set | Exact gradient, but one step is very expensive |
+| Stochastic (SGD) | 1 | Very cheap and very noisy |
+| Mini-batch | Typically 32 to 512 | The standard compromise, and fast on vector hardware |
+
+The stochastic idea goes back to Robbins and Monro's 1951 work on stochastic approximation.<Cite id="robbins1951" /> In current practice "SGD" almost always means mini-batch SGD. The noise from small batches is not purely a cost: it lets the optimizer jiggle out of flat or poor regions.<Cite id="cs231n-nn3" /> One pass over the training set is an <Term slug="epoch" />, and one mini-batch update is an *iteration*.
+
+## Momentum
+
+Plain gradient descent forgets everything at each step. In a long, narrow valley the gradient points mostly across the valley, so the path zig-zags from wall to wall and moves slowly along the floor. **Momentum** keeps a running velocity $v$ that adds up recent gradients. Components that keep the same sign build up, and components that flip sign cancel out.<Cite id="d2l-optimization" /><Cite id="sutskever2013" />
+
+<Analogy breaks="A real ball has mass and friction set by physics; here β is a number you choose, and the 'ball' can pass through hills that a real one could not.">
+Momentum works like a heavy ball rolling downhill. It gathers speed on a steady slope and keeps rolling through small bumps, instead of stopping to re-check the direction at every step.
+</Analogy>
+
+Use the bowl from the gradient descent lesson, $f(w) = (w-3)^2$ with gradient $2(w-3)$, starting at $w = 0$ with $\eta = 0.1$ and $\beta = 0.9$:
+
+<MathSteps
+  title="Two steps of momentum"
+  legend={[
+    { symbol: 'g', meaning: 'gradient at the current w' },
+    { symbol: 'v', meaning: 'velocity (starts at 0)' },
+    { symbol: '\\beta', meaning: 'momentum coefficient, typically 0.9' },
+    { symbol: '\\eta', meaning: 'learning rate' },
+  ]}
+>
+  <Step tex="g_1 = 2(0 - 3) = -6,\quad v_1 = 0.9 \cdot 0 + \hl{(-6)} = -6" words="The first velocity is just the first gradient, because the old velocity is zero." />
+  <Step tex="w_1 = 0 - 0.1 \cdot \hl{v_1} = 0.6" words="Step along the velocity. The first step is identical to plain gradient descent." />
+  <Step tex="g_2 = 2(0.6 - 3) = -4.8,\quad v_2 = \hl{0.9 \cdot (-6)} + (-4.8) = -10.2" words="Keep 90% of the old velocity and add the new gradient. Both point the same way, so the velocity grows." />
+  <Step tex="w_2 = 0.6 - 0.1 \cdot (-10.2) = \hl{1.62}" words="The second step is much longer than plain gradient descent's, which reached only 1.08." />
+  <Step tex="v \leftarrow \beta v + g,\qquad w \leftarrow w - \eta\, v" words="The general rule. This is exactly what torch.optim.SGD does when you pass momentum=0.9." />
+</MathSteps>
+
+Sutskever and colleagues showed that momentum, together with good initialization, was crucial for training deep and recurrent networks with SGD.<Cite id="sutskever2013" /> The same velocity that speeds things up can also overshoot: in the script below, momentum passes $w = 3$ on its third step and has to roll back.
+
+## Per-parameter step sizes: RMSProp
+
+Different weights can see gradients of very different sizes. **RMSProp**, proposed by Geoffrey Hinton in a 2012 Coursera lecture rather than in a paper, keeps a running average $s$ of each parameter's *squared* gradient and divides the step by $\sqrt{s}$.<Cite id="hinton-rmsprop" /> Parameters with consistently large gradients get smaller steps, and parameters with tiny gradients get larger ones.<Cite id="d2l-optimization" />
+
+## Adam
+
+**Adam** (Kingma and Ba, 2014) combines the two ideas. It keeps a momentum-like average of gradients $m$ (the *first moment*) and an RMSProp-like average of squared gradients $v$ (the *second moment*). Both start at zero, so in the first steps they are biased towards zero; Adam divides them by $1 - \beta^t$ to correct this.<Cite id="kingma2014" /> The paper's defaults are $\beta_1 = 0.9$, $\beta_2 = 0.999$ and $\epsilon = 10^{-8}$.<Cite id="kingma2014" /><Cite id="d2l-adam" />
+
+<MathSteps
+  title="Two steps of Adam with bias correction"
+  legend={[
+    { symbol: 'm', meaning: 'running average of gradients' },
+    { symbol: 'v', meaning: 'running average of squared gradients' },
+    { symbol: '\\hat m, \\hat v', meaning: 'bias-corrected averages' },
+    { symbol: 't', meaning: 'step number, starting at 1' },
+  ]}
+>
+  <Step tex="m_1 = 0.9 \cdot 0 + 0.1 \cdot (-6) = -0.6,\quad v_1 = 0.999 \cdot 0 + 0.001 \cdot 36 = 0.036" words="Start from w = 0 with g = −6. Both averages are tiny because they started at zero." />
+  <Step tex="\hat m_1 = \frac{-0.6}{\hl{1 - 0.9}} = -6,\quad \hat v_1 = \frac{0.036}{\hl{1 - 0.999}} = 36" words="Bias correction undoes the pull towards zero. At t = 1 it recovers the raw gradient and its square." />
+  <Step tex="w_1 = 0 - 0.1 \cdot \frac{-6}{\sqrt{36}} = \hl{0.1}" words="The step is the learning rate times the sign of the gradient: its size does not depend on how big the gradient is." />
+  <Step tex="g_2 = -5.8,\ m_2 = -1.12,\ v_2 = 0.069604,\ \hat m_2 = \frac{-1.12}{\hl{1 - 0.9^2}} = -5.895,\ \hat v_2 = \frac{0.069604}{\hl{1 - 0.999^2}} = 34.82" words="At w = 0.1 the gradient is −5.8. Update both averages, then correct with the squared betas, since t = 2." />
+  <Step tex="w_2 = 0.1 - 0.1 \cdot \frac{-5.895}{\sqrt{34.82}} = 0.1 + 0.0999 = \hl{0.1999}" words="Again a step of almost exactly η. Adam moves at a steady pace set by the learning rate, while momentum would accelerate." />
+  <Step tex="w \leftarrow w - \eta\, \frac{\hat m}{\sqrt{\hat v} + \epsilon}" words="The general Adam update, applied to every parameter separately." />
+</MathSteps>
+
+Two practical consequences follow from this. Adam still needs a learning rate: $10^{-3}$ is a common start for small networks and about $3 \times 10^{-4}$ for Transformers.<Cite id="cs231n-nn3" /> And on this simple bowl Adam is slower than plain gradient descent, because its steps stay near $\eta = 0.1$ until it gets close. Its advantage shows on real losses, where gradient scales differ wildly between parameters.<Cite id="d2l-adam" />
+
+### AdamW
+
+Adding `weight_decay` to `torch.optim.Adam` puts the decay term into the gradient, where it is then divided by $\sqrt{\hat v}$, so weights with large gradients are barely regularised. Loshchilov and Hutter proposed applying the decay directly to the weights instead ("decoupled weight decay"). This is `torch.optim.AdamW`, the standard optimizer for Transformers.<Cite id="loshchilov2017" /><Cite id="pt-optim" />
+
+<Exercise id="opt-adam-scale" />
+
+## Choosing an optimizer and a learning rate
+
+A reasonable default order is:<Cite id="cs231n-nn3" /><Cite id="d2l-optimization" />
+
+1. **Adam or AdamW** with $\eta = 10^{-3}$ for a first working model: robust and forgiving.
+2. **SGD with momentum 0.9** when you have time to tune it. On image tasks a well-tuned SGD often generalises slightly better than Adam, but results vary.
+3. Change the learning rate by factors of about 3 to 10, never in small linear steps. The lesson on [tuning hyperparameters](/course/intermediate/hyperparameter-tuning/) shows how to search for it.
+
+<Callout type="pitfall">
+"Adam doesn't need a learning rate." It does. Ten times too high still diverges, and ten times too low still crawls.
+</Callout>
+
+### Learning-rate schedules
+
+A <Term slug="learning-rate" /> that suits the start of training is usually too large at the end, so most training runs change it over time. Common schedules are step decay, cosine decay to zero, and a short **warmup** that starts small and ramps up during the first few hundred steps, which helps Adam on Transformers.<Cite id="d2l-optimization" /> Smith's cyclical schedules, which move the rate up and down between bounds, are another option.<Cite id="smith2015" /> In PyTorch a scheduler wraps the optimizer and is stepped *after* `optimizer.step()`:<Cite id="pt-optim" />
+
+```python
+opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=0.01)
+warmup = torch.optim.lr_scheduler.LinearLR(opt, start_factor=0.1, total_iters=100)
+cosine = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=900)
+sched = torch.optim.lr_scheduler.SequentialLR(opt, schedulers=[warmup, cosine], milestones=[100])
+
+for step in range(1000):
+    ...                  # forward, loss, opt.zero_grad(), loss.backward()
+    opt.step()
+    sched.step()         # once per batch here; many vision recipes step once per epoch
+```
+
+## Try it
+
+The script implements the three update rules by hand and runs the same three steps with `torch.optim`:
+
+<CodeFile path="code/core/intermediate/optimizers_compare.py" lines="24-43" highlight="27,28,39,40,41" title="momentum and Adam, written by hand" />
+
+It prints `SGD 0.6000, 1.0800, 1.4640`, `momentum 0.6000, 1.6200, 2.8140` and `Adam 0.1000, 0.1999, 0.2996`, with `match: True` against PyTorch for all three. After 50 steps plain SGD sits at `3.0000`, momentum at `3.0915` (still swinging around the minimum) and Adam at `3.1689`: on a perfect bowl, the fancy optimizers are not better.
+
+## Summary
+
+- Mini-batch SGD estimates the gradient from a small random batch: cheap, slightly noisy and the standard choice.
+- Momentum adds up past gradients ($v \leftarrow \beta v + g$), speeding up steady directions and damping zig-zags.
+- RMSProp and Adam give each parameter its own step size; Adam's bias correction makes early steps about $\eta$ in size.
+- Use AdamW for Transformers, start Adam near $10^{-3}$, and tune the learning rate on a log scale with a schedule.

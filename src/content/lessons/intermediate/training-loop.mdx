@@ -1,0 +1,217 @@
+---
+title: The PyTorch training loop
+slug: training-loop
+track: intermediate
+level: intermediate
+order: 50
+minutes: 30
+module: PyTorch fundamentals
+summary: The five lines at the heart of every PyTorch training run (forward, loss, zero_grad, backward, step), the validation pass around them, and a complete MLP that reaches about 97% on MNIST on a laptop CPU.
+hatnote: For the model and data objects used here, see "nn.Module, Dataset and DataLoader". For the full digit project, see "MNIST baseline with an MLP".
+prerequisites: [pytorch-modules-data, gradient-descent]
+tools: [Python 3, PyTorch, torchvision]
+outcomes:
+  - "Write the five-line loop: forward, loss, zero_grad, backward, step"
+  - Add a validation pass with model.eval() and torch.no_grad()
+  - Train an MLP on MNIST to about 97% and log loss per epoch
+  - Explain what one iteration does to the numbers
+build: A complete MNIST training script with validation, logging and a best-model checkpoint
+reviewed: 2026-11-25
+seeAlso: [pytorch-modules-data, evaluation-metrics, debugging-training, mnist-mlp-baseline]
+sources:
+  - id: pt-optimization
+    title: "Learn the Basics: Optimizing Model Parameters"
+    publisher: PyTorch Tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/basics/optimization_tutorial.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-crossentropy
+    title: torch.nn.CrossEntropyLoss
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-intro
+    title: Learn the Basics
+    publisher: PyTorch Tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/basics/intro.html
+    accessed: 2026-11-25
+    type: docs
+  - id: d2l-autograd
+    title: "Dive into Deep Learning, 2.5 Automatic Differentiation"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_preliminaries/autograd.html
+    accessed: 2026-11-25
+    type: book
+  - id: tv-mnist
+    title: torchvision.datasets.MNIST
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/vision/stable/generated/torchvision.datasets.MNIST.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-module
+    title: torch.nn.Module (train, eval)
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-no-grad
+    title: torch.no_grad
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.no_grad.html
+    accessed: 2026-11-25
+    type: docs
+  - id: kingma2014
+    title: "Adam: A Method for Stochastic Optimization"
+    author: Diederik P. Kingma, Jimmy Ba
+    publisher: arXiv (ICLR 2015)
+    year: 2014
+    url: https://arxiv.org/abs/1412.6980
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "PyTorch tutorial: Training a classifier"
+    url: https://docs.pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+  - title: "Andrej Karpathy: A Recipe for Training Neural Networks"
+    url: https://karpathy.github.io/2019/04/25/recipe/
+exercises:
+  - id: tl-order
+    type: mcq
+    difficulty: easy
+    title: Put the five lines in order
+    prompt: Which order of operations inside the batch loop is correct?
+    options:
+      - "`optimizer.step()`, `loss.backward()`, `optimizer.zero_grad()`, forward, loss"
+      - "forward, loss, `optimizer.zero_grad()`, `loss.backward()`, `optimizer.step()`"
+      - "forward, `loss.backward()`, loss, `optimizer.step()`, `optimizer.zero_grad()`"
+      - "forward, loss, `optimizer.step()`, `loss.backward()`, `optimizer.zero_grad()`"
+    answer: 1
+    explanation: "You need the loss before you can call `backward()` on it, and you need the gradients from `backward()` before `step()` can use them. `zero_grad()` must come before `backward()` so that old gradients are not added to the new ones. (Calling it at the very end of the loop also works, as long as it runs once per iteration before the next `backward()`.)"
+  - id: tl-iterations
+    type: numeric
+    difficulty: easy
+    title: Iterations per run
+    prompt: "The training split has 55,000 images and the batch size is 64. The last, smaller batch is kept. How many optimizer steps happen in 3 epochs?"
+    answer: 2580
+    tolerance: 0
+    hint: "One step per batch. Batches per epoch = 55,000 / 64, rounded up."
+    explanation: "55,000 / 64 = 859.4, so each epoch has 860 batches (859 full ones and one of 24 images). Three epochs give 3 × 860 = 2,580 steps."
+  - id: tl-second-step
+    type: numeric
+    difficulty: medium
+    title: The next iteration by hand
+    prompt: "Continue the worked example: the model is $\\hat y = wx$ with $w = 1.25$, the batch is $x = [1, 2]$, $y = [2, 4]$, the loss is the mean squared error and $\\eta = 0.1$. What is $w$ after one more SGD step?"
+    answer: 1.625
+    tolerance: 0.0001
+    hint: "The gradient is $\\frac{1}{2}\\sum_i 2(\\hat y_i - y_i)x_i$. First compute $\\hat y = [1.25, 2.5]$."
+    explanation: "Errors $\\hat y - y = [-0.75, -1.5]$. Gradient $= (-0.75)(1) + (-1.5)(2) = -3.75$. Update $w = 1.25 - 0.1 \\cdot (-3.75) = 1.625$, closer to the true value 2."
+  - id: tl-eval-vs-nograd
+    type: reveal
+    difficulty: medium
+    title: eval() or no_grad()?
+    prompt: "A colleague says: \"I call `model.eval()` during validation, so I don't need `torch.no_grad()`.\" What is wrong with this, and what does each call actually do?"
+    answer: "model.eval() only switches layers such as dropout and batch normalization to inference behaviour; it does not stop autograd. torch.no_grad() stops the graph from being recorded. Validation should use both."
+    explanation: "Without `no_grad()` the validation pass still records every operation for a backward pass that never comes, which wastes memory and time. Without `eval()` dropout keeps dropping units and batch normalization uses batch statistics, so the validation score is wrong. They solve different problems."
+---
+
+The **training loop** is the piece of code that repeatedly shows a model a batch of examples, measures how wrong it is, and nudges its weights to be a little less wrong. In <Term slug="pytorch" /> it is written by hand, which makes every step visible and easy to change.<Cite id="pt-optimization" /> Almost every model in this course, from digit recognisers to the chess evaluator, trains with the same few lines.<Cite id="pt-intro" />
+
+## The five lines
+
+For each mini-batch of inputs `X` and labels `y`, a PyTorch training step does five things in a fixed order:<Cite id="pt-optimization" />
+
+1. **Forward pass**: `logits = model(X)` runs the inputs through the network.
+2. **Loss**: `loss = loss_fn(logits, y)` compares predictions with the labels and returns a single number, the <Term slug="loss-function" />.
+3. **Clear old gradients**: `optimizer.zero_grad()` sets every parameter's `.grad` back to zero.
+4. **Backward pass**: `loss.backward()` runs backpropagation and stores $\partial L / \partial w$ in each parameter's `.grad`.<Cite id="d2l-autograd" />
+5. **Update**: `optimizer.step()` changes every parameter using its gradient, for plain SGD $w \leftarrow w - \eta \cdot \text{grad}$.
+
+Step 3 exists because PyTorch *adds* new gradients to whatever is already stored in `.grad` instead of overwriting it. That is useful for advanced tricks such as accumulating gradients over several small batches, but if you forget to clear them, each step uses the sum of all past gradients and training goes wrong.<Cite id="pt-optimization" />
+
+<Analogy breaks="A student remembers past mistakes; the model keeps nothing between steps except its weights and the optimizer's running averages.">
+The loop is like a practice routine with flash cards: attempt the stack (forward), get graded (loss), wipe last round's notes (zero_grad), work out what went wrong (backward), adjust (step). One lap through the whole deck is an epoch.
+</Analogy>
+
+## One iteration with numbers
+
+Take a model with a single weight, $\hat y = wx$, starting at $w = 0.5$, a batch of two examples $x = [1, 2]$ with targets $y = [2, 4]$, the mean squared error, and SGD with <Term slug="learning-rate" /> $\eta = 0.1$. The true weight is 2.
+
+<MathSteps
+  title="What one training step does"
+  legend={[
+    { symbol: 'w', meaning: 'the only weight' },
+    { symbol: '\\hat y', meaning: 'predictions for the batch' },
+    { symbol: 'L', meaning: 'mean squared error over the batch' },
+    { symbol: '\\eta', meaning: 'learning rate' },
+  ]}
+>
+  <Step tex="\hat y = w x = 0.5 \cdot [1, 2] = \hl{[0.5,\ 1.0]}" words="Forward pass: predict both examples at once." />
+  <Step tex="L = \tfrac{1}{2}\big((0.5-2)^2 + (1-4)^2\big) = \tfrac{2.25 + 9}{2} = \hl{5.625}" words="Loss: average the squared errors over the batch." />
+  <Step tex="\frac{\partial L}{\partial w} = \tfrac{1}{2}\sum_i 2(\hat y_i - y_i)\,x_i = (-1.5)(1) + (-3)(2) = \hl{-7.5}" words="Backward pass (after zero_grad set the old value to 0): the chain rule gives the slope of the loss with respect to w." />
+  <Step tex="w \leftarrow 0.5 - 0.1 \cdot (-7.5) = \hl{1.25}" words="Step: move against the gradient. The weight jumps towards 2." />
+  <Step tex="L_\text{new} = \tfrac{1}{2}\big((1.25-2)^2 + (2.5-4)^2\big) = \hl{1.406}" words="Check: the next forward pass gives a loss four times smaller." example="5.625 → 1.406" />
+</MathSteps>
+
+A real network does exactly this, except that $w$ is a list of about a hundred thousand numbers and `loss.backward()` computes all their gradients in one pass.<Cite id="d2l-autograd" />
+
+<Exercise id="tl-second-step" />
+
+## Epochs, iterations and batches
+
+One **iteration** (or step) processes one batch. One <Term slug="epoch" /> is a full pass over the training data, so with 55,000 images and a batch size of 64 an epoch has 860 iterations. The `DataLoader` with `shuffle=True` deals the batches in a new random order every epoch, so the model never sees the same sequence twice.<Cite id="pt-intro" />
+
+Log the **average** training loss over each epoch rather than the last batch's loss: a single batch is noisy, and the average shows the trend. Call `loss.item()` when you log it. The `loss` object is a tensor attached to the computation graph, and storing it in a list keeps every graph alive in memory.<Cite id="pt-optimization" />
+
+## Loss functions take logits
+
+For classification, the last layer outputs one raw score per class, called <Term slug="logits" />. `nn.CrossEntropyLoss` expects exactly these: it applies a log-<Term slug="softmax" /> internally and then computes the <Term slug="cross-entropy" /> against **integer class labels** (`dtype=torch.long`, shape `(N,)`).<Cite id="pt-crossentropy" /> Two common mistakes follow from this:
+
+- Adding `nn.Softmax` as the model's last layer, then using `CrossEntropyLoss`. Softmax is applied twice, the gradients shrink, and training is slow or stalls.
+- Passing float or one-hot labels where class indices are expected (the loss accepts probabilities as targets only in a specific form, which is rarely what you want).
+
+Apply softmax yourself only when you need probabilities to display, never before the loss.<Cite id="pt-crossentropy" />
+
+## Validation: eval mode and no_grad
+
+After each epoch, measure the model on a <Term slug="validation-set">validation set</Term>, data it does not train on. Two calls make this pass correct and cheap:<Cite id="pt-optimization" />
+
+- `model.eval()` switches layers that behave differently at inference time, such as <Term slug="dropout" /> and <Term slug="batch-normalization" />, into evaluation mode. `model.train()` switches them back.<Cite id="pt-module" />
+- `with torch.no_grad():` tells autograd not to record operations, which saves memory and time because no backward pass will follow.<Cite id="pt-no-grad" />
+
+They are independent: `eval()` does not turn off gradients, and `no_grad()` does not change dropout. A validation pass needs both.
+
+<Callout type="pitfall">
+Forgetting `model.train()` at the start of the next epoch leaves dropout switched off for the rest of training. Put `model.train()` at the top of every epoch, not once before the loop.
+</Callout>
+
+## A complete run on MNIST
+
+The companion script trains a 784 → 128 → 10 network on <Term slug="mnist" /> with the Adam optimizer at its usual starting learning rate of $10^{-3}$.<Cite id="kingma2014" /> torchvision downloads the data on the first run; the 60,000 training images are split into 55,000 for training and 5,000 for validation, and the official 10,000 test images are scored once at the end.<Cite id="tv-mnist" /> Before training, the validation loss should be close to $\ln 10 \approx 2.303$, the loss of a model that guesses uniformly among ten classes; a very different value points to a bug.
+
+On a laptop CPU the run takes about a minute and prints:
+
+| Stage | Train loss | Val loss | Val accuracy |
+|---|---|---|---|
+| Before training | – | 2.316 | 0.108 |
+| Epoch 1 | 0.267 | 0.148 | 0.956 |
+| Epoch 2 | 0.116 | 0.117 | 0.962 |
+| Epoch 3 | 0.080 | 0.106 | 0.967 |
+
+The best checkpoint then scores about **97.3%** on the test set. Exact digits vary slightly between PyTorch versions and machines, but the shape of the curve should match.<Cite id="pt-intro" /> The project lesson [MNIST baseline with an MLP](/course/project-digits-letters/mnist-mlp-baseline/) continues from here.
+
+## Try it
+
+The heart of the script is the batch loop. Run it with `python code/core/intermediate/train_loop_mnist.py`, or add `--epochs 5` to train longer.
+
+<CodeFile path="code/core/intermediate/train_loop_mnist.py" lines="59-78" highlight="67,68,69,70,71" title="the training loop with a validation pass" />
+
+Every epoch ends with a call to `evaluate`, which wraps the forward pass in `model.eval()` and `torch.no_grad()`, and the best model according to validation accuracy is saved with its <Term slug="state-dict" /> (see [Saving, loading and reusing models](/course/intermediate/saving-loading-models/)). To see why a single number such as accuracy is not the whole story, continue with [Evaluation](/course/intermediate/evaluation-metrics/).
+
+## Summary
+
+- Every training step is forward, loss, `zero_grad()`, `backward()`, `step()`.
+- PyTorch accumulates gradients, so clear them once per iteration.
+- `CrossEntropyLoss` takes logits and integer labels; never put softmax before it.
+- Validate with `model.eval()` and `torch.no_grad()`, then switch back with `model.train()`.
+- A 784 → 128 → 10 MLP reaches about 97% on MNIST in three epochs on a CPU.
