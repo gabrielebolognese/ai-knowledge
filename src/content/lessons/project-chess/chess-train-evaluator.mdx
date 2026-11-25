@@ -8,7 +8,7 @@ minutes: 30
 module: The neural evaluator and UCI
 summary: Build a 205,121-parameter network with a sparse EmbeddingBag first layer and ClippedReLU, train it with Adam on a laptop CPU to imitate Stockfish scores in win-probability space, and check that what it learned makes sense.
 hatnote: For where the training positions come from, see "A training set from the Lichess evaluation database".
-prerequisites: [chess-dataset]
+prerequisites: [chess-dataset, training-loop, optimizers, multilayer-perceptron]
 tools: [Python 3, PyTorch, python-chess]
 outcomes:
   - Build the network with EmbeddingBag as a sparse first layer and ClippedReLU

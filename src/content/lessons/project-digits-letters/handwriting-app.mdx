@@ -8,7 +8,7 @@ minutes: 30
 module: Letters (EMNIST) and the drawing app
 summary: Build a tkinter drawing window that sends your handwriting to the model you trained, with a live preview of the 28×28 image the model sees and its top-3 guesses. The key step is preprocessing the drawing exactly like the training data; skipping it drops a 99% model to between 15% and 40%.
 hatnote: This capstone uses the checkpoints saved in "A CNN that reads digits at 99%" and "From digits to letters with EMNIST".
-prerequisites: [emnist-letters, mnist-evaluate]
+prerequisites: [emnist-letters, mnist-evaluate, saving-loading-models]
 tools: [Python 3, PyTorch, Pillow, tkinter]
 outcomes:
   - Build a tkinter drawing canvas that sends your drawing to the saved model

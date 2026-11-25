@@ -8,7 +8,7 @@ minutes: 20
 module: Digits (MNIST)
 summary: Train a 784→128→10 multilayer perceptron on MNIST with a reusable training script, check it in seconds with --smoke, reach about 97% test accuracy in about a minute on a CPU, and keep the number as the baseline the CNN has to beat.
 hatnote: For loading and normalising the images, see "Meet MNIST".
-prerequisites: [mnist-dataset]
+prerequisites: [mnist-dataset, training-loop, multilayer-perceptron]
 tools: [Python 3, PyTorch, torchvision]
 outcomes:
   - Train a 784→128→10 MLP to about 97-98% test accuracy
@@ -59,8 +59,8 @@ sources:
 furtherReading:
   - title: "3Blue1Brown: But what is a neural network?"
     url: https://www.3blue1brown.com/lessons/neural-networks
-  - title: "Michael Nielsen: Neural Networks and Deep Learning, chapter 1 (an MNIST MLP from scratch)"
-    url: https://neuralnetworksanddeeplearning.com/chap1.html
+  - title: "Michael Nielsen: Neural Networks and Deep Learning, chapter 1 (an MNIST MLP from scratch; Internet Archive copy)"
+    url: https://web.archive.org/web/20251231234845/http://neuralnetworksanddeeplearning.com/chap1.html
 exercises:
   - id: mlp-params-256
     type: numeric

@@ -8,7 +8,7 @@ minutes: 25
 module: Classifying short texts
 summary: "Replace the word average with a bidirectional LSTM that reads each sentence in order, in both directions. Compare it honestly with the bag of embeddings on SST-2 and on negation, save it, and classify sentences you type yourself."
 hatnote: 'The LSTM cell is explained in "A character-level Shakespeare generator with an LSTM"; the baseline is "A bag-of-embeddings sentiment classifier".'
-prerequisites: [sentiment-bag-of-embeddings, shakespeare-lstm]
+prerequisites: [sentiment-bag-of-embeddings, shakespeare-lstm, recurrent-networks, saving-loading-models]
 tools: [Python 3, PyTorch]
 outcomes:
   - Upgrade to a 1-layer bidirectional LSTM and compare it with the bag-of-embeddings model

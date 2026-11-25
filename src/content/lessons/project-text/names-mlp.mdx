@@ -8,7 +8,7 @@ minutes: 25
 module: Generating text
 summary: Replace the count table with a small neural network that reads the last three letters through learned embeddings. With 11,897 parameters and about two minutes of CPU training, the dev loss falls from the bigram's 2.45 to 2.14.
 hatnote: The model follows Bengio et al. (2003) at the character level, as rebuilt in Karpathy's makemore.
-prerequisites: [names-bigram]
+prerequisites: [names-bigram, embeddings, training-loop]
 tools: [Python 3, PyTorch]
 outcomes:
   - Build the context-3 MLP with 10-dimensional embeddings (11,897 parameters)

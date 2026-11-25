@@ -8,7 +8,7 @@ minutes: 25
 module: Corpus and model
 summary: Train the 1.8M-parameter GPT on the standard library with random context windows, AdamW and a warm-up plus cosine schedule. This lesson estimates the compute budget, reads the loss in nats and bits per character, saves and resumes checkpoints, and uses a missing causal mask as a debugging exercise.
 hatnote: The model trained here is defined in "Writing a tiny GPT in PyTorch".
-prerequisites: [code-tiny-gpt]
+prerequisites: [code-tiny-gpt, hyperparameter-tuning, saving-loading-models]
 tools: [Python 3, PyTorch]
 outcomes:
   - Run training with random context windows, AdamW and a cosine schedule

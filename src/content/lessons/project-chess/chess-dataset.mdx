@@ -8,7 +8,7 @@ minutes: 25
 module: The neural evaluator and UCI
 summary: The neural evaluator learns from positions that Stockfish has already scored. This lesson streams the free Lichess evaluation export, keeps quiet positions, converts each score to the side to move, and encodes every position as 768 piece-square features.
 hatnote: This lesson builds the data. For the network that learns from it, see "Training the 768→256→32→1 evaluator".
-prerequisites: [chess-evaluation]
+prerequisites: [chess-evaluation, pytorch-modules-data]
 tools: [Python 3, python-chess, NumPy, zstandard]
 outcomes:
   - Stream positions from the Lichess evaluation export (CC0) without downloading everything

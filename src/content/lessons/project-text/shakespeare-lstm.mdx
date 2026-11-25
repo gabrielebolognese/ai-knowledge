@@ -8,7 +8,7 @@ minutes: 30
 module: Generating text
 summary: "Give the generator a memory: a recurrent network reads text one character at a time and carries a hidden state forward. A GRU lowers the names dev loss to 2.02, and a 2-layer LSTM trained for about 10 minutes on a CPU writes Shakespeare-like text at 1.50 nats per character."
 hatnote: For the transformer alternative on similar data, see "Writing a tiny GPT in PyTorch" in the code-autocompletion track.
-prerequisites: [names-mlp]
+prerequisites: [names-mlp, recurrent-networks]
 tools: [Python 3, PyTorch]
 outcomes:
   - Prepare TinyShakespeare (1.1 million characters, 65 symbols) with a 90/10 split

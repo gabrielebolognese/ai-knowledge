@@ -8,7 +8,7 @@ minutes: 25
 module: Completion and tooling
 summary: Write a byte-pair-encoding tokenizer from scratch, train it on the training files only, retrain the GPT on its tokens, and compare the two models fairly in bits per character. Along the way, see why a small model needs a small vocabulary.
 hatnote: This lesson upgrades the character model from "Training the code model on a CPU".
-prerequisites: [code-sampling-eval]
+prerequisites: [code-sampling-eval, tokenization-bpe]
 tools: [Python 3, PyTorch]
 outcomes:
   - Train a BPE vocabulary (a few hundred merges, scalable to 2-4k tokens) on the training files only

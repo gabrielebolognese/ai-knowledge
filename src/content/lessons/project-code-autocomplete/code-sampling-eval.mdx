@@ -8,7 +8,7 @@ minutes: 20
 module: Completion and tooling
 summary: Turn the trained model into a code completer. This lesson samples characters with temperature and top-k, decides when a completion should stop, and measures how often generated function bodies are valid Python with ast.parse, then explains why longer completions drift.
 hatnote: This lesson needs a trained checkpoint from "Training the code model on a CPU".
-prerequisites: [code-training]
+prerequisites: [code-training, language-modeling-sampling]
 tools: [Python 3, PyTorch]
 outcomes:
   - Complete a code prompt with temperature and top-k sampling

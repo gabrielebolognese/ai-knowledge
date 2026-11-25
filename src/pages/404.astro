@@ -1,0 +1,21 @@
+---
+// Not-found page. Static hosts (GitHub Pages, Netlify, Vercel) serve dist/404.html for unknown URLs.
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+<BaseLayout title="Page not found" description="This page does not exist in the AI Knowledge course.">
+  <main id="main" class="nf container">
+    <p class="eyebrow muted">Error 404</p>
+    <h1>This page is not in the course</h1>
+    <p class="t-lead">The link may be old, or the address may have a typo. Your progress is safe: it lives in this browser, not on this page.</p>
+    <div class="nf__actions">
+      <a class="btn btn-primary btn-lg" href="/course/">Go to your course</a>
+      <a class="btn btn-lg" href="/">Home</a>
+      <a class="btn btn-ghost btn-lg" href="/glossary/">Browse the glossary</a>
+    </div>
+  </main>
+  <style>
+    .nf { max-width: 720px; min-height: calc(100vh - 230px); padding-top: var(--s-9); padding-bottom: var(--s-9); }
+    .nf h1 { margin: var(--s-2) 0 var(--s-4); }
+    .nf__actions { display: flex; gap: var(--s-3); flex-wrap: wrap; margin-top: var(--s-6); }
+  </style>
+</BaseLayout>

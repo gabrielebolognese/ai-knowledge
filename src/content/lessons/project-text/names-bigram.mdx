@@ -8,7 +8,7 @@ minutes: 20
 module: Generating text
 summary: Count which letter follows which in 32,033 names, turn the counts into probabilities and sample new names. The result is a first language model, and its loss falls from 3.30 (pure guessing) to 2.45.
 hatnote: This is the first of three generators. "A neural name generator (Bengio-style MLP)" replaces the count table with a small network.
-prerequisites: []
+prerequisites: [probability-softmax, loss-functions, numpy-arrays]
 tools: [Python 3, PyTorch]
 outcomes:
   - Count character pairs in 32,033 names and turn the counts into probabilities

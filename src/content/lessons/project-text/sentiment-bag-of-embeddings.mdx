@@ -8,7 +8,7 @@ minutes: 20
 module: Classifying short texts
 summary: Average the learned vectors of a sentence's words and feed the average to one linear layer. Trained on SST-2 in about a minute and a half on a CPU, it reaches 78.7% test accuracy, and its mistakes show exactly what ignoring word order costs.
 hatnote: 'The data preparation is explained in "Short texts: preparing SST-2 movie-review sentences".'
-prerequisites: [sentiment-dataset]
+prerequisites: [sentiment-dataset, evaluation-metrics, training-loop]
 tools: [Python 3, PyTorch]
 outcomes:
   - Build Embedding → masked mean → Linear and train it on a CPU

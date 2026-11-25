@@ -24,6 +24,13 @@ const fullTitle = title === 'AI Knowledge' ? title : `${title} · AI Knowledge`;
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#FAF7F2" />
+    <meta name="color-scheme" content="light" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="AI Knowledge" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta name="twitter:card" content="summary" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script is:inline>
       try { if (sessionStorage.getItem('aik-allow-narrow') === '1') document.documentElement.classList.add('allow-narrow'); } catch (e) {}
