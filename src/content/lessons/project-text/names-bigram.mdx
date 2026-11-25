@@ -1,0 +1,216 @@
+---
+title: A bigram name generator from counts
+slug: names-bigram
+track: project-text
+level: intermediate
+order: 10
+minutes: 20
+module: Generating text
+summary: Count which letter follows which in 32,033 names, turn the counts into probabilities and sample new names. The result is a first language model, and its loss falls from 3.30 (pure guessing) to 2.45.
+hatnote: This is the first of three generators. "A neural name generator (Bengio-style MLP)" replaces the count table with a small network.
+prerequisites: []
+tools: [Python 3, PyTorch]
+outcomes:
+  - Count character pairs in 32,033 names and turn the counts into probabilities
+  - Sample new names from the bigram table, with temperature and top-k
+  - Compute the average negative log-likelihood and compare it with the uniform 3.30
+build: bigram.py, a counting language model that writes new names
+reviewed: 2026-11-25
+seeAlso: [names-mlp, shakespeare-lstm]
+sources:
+  - id: makemore
+    title: "makemore (GitHub repository)"
+    author: Andrej Karpathy
+    year: 2022
+    url: https://github.com/karpathy/makemore
+    accessed: 2026-11-25
+    type: code
+  - id: names-txt
+    title: "names.txt (makemore dataset file)"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://raw.githubusercontent.com/karpathy/makemore/master/names.txt
+    accessed: 2026-11-25
+    type: dataset
+  - id: ssa-names
+    title: "Beyond the Top 1000 Names: national data"
+    publisher: US Social Security Administration
+    url: https://www.ssa.gov/oact/babynames/limits.html
+    accessed: 2026-11-25
+    type: dataset
+  - id: karpathy-zero-to-hero
+    title: "Neural Networks: Zero to Hero (video course)"
+    author: Andrej Karpathy
+    url: https://karpathy.ai/zero-to-hero.html
+    accessed: 2026-11-25
+    type: video
+  - id: jm-ch3
+    title: "Speech and Language Processing, Chapter 3: N-gram Language Models"
+    author: Daniel Jurafsky, James H. Martin
+    publisher: Stanford University
+    url: https://web.stanford.edu/~jurafsky/slp3/3.pdf
+    accessed: 2026-11-25
+    type: book
+  - id: hf-generate
+    title: "How to generate text: using different decoding methods for language generation with Transformers"
+    author: Patrick von Platen
+    publisher: Hugging Face
+    year: 2020
+    url: https://huggingface.co/blog/how-to-generate
+    accessed: 2026-11-25
+    type: article
+  - id: fan2018
+    title: "Hierarchical Neural Story Generation"
+    author: Angela Fan, Mike Lewis, Yann Dauphin
+    publisher: arXiv
+    year: 2018
+    url: https://arxiv.org/abs/1805.04833
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Karpathy: The spelled-out intro to language modeling: building makemore (video)"
+    url: https://www.youtube.com/watch?v=PaCmpygFfXo
+  - title: "Wikipedia: Additive smoothing"
+    url: https://en.wikipedia.org/wiki/Additive_smoothing
+exercises:
+  - id: bigram-uniform-loss
+    type: numeric
+    difficulty: easy
+    title: The loss of pure guessing
+    prompt: "A model that knows nothing gives each of the 27 symbols the same probability. What is its average loss per character, $-\\ln(1/27)$? (Two decimals.)"
+    answer: 3.30
+    tolerance: 0.01
+    hint: "$-\\ln(1/27) = \\ln 27$."
+    explanation: "$\\ln 27 \\approx 3.2958$, which rounds to 3.30. Its perplexity is $e^{3.30} = 27$: as unsure as a fair 27-sided die. Every model in this track is judged against this number first."
+  - id: bigram-emma-loss
+    type: numeric
+    difficulty: medium
+    title: How surprised is the model by "emma"?
+    prompt: "The bigram table gives these probabilities for the five predictions in `.emma.`: 0.0492, 0.0381, 0.0257, 0.3871 and 0.1941. What is the average negative log-likelihood per character? (Two decimals.)"
+    answer: 2.51
+    tolerance: 0.02
+    hint: "Take $-\\ln$ of each probability, add the five numbers, divide by 5."
+    explanation: "The five losses are 3.013, 3.268, 3.661, 0.949 and 1.639. They add up to 12.53, and 12.53 / 5 = 2.51. The double m is the most surprising step; 'a' after 'm' and the end after 'a' are common, so they cost little. Averaged over all 182,625 training predictions, the figure is 2.45."
+  - id: bigram-why-bad-names
+    type: reveal
+    difficulty: medium
+    title: Why are the names so odd?
+    prompt: "The bigram model writes names such as `momakurailezitynn` and `staiyaubrtthrigotai`. Each pair of neighbouring letters is common, so what exactly is the model missing?"
+    answer: "It sees only the previous letter. It cannot know how long the name already is, whether it has just written a vowel cluster, or what the first letters were. Every step is locally plausible, but nothing keeps the whole name coherent, so names run on and mix fragments."
+    explanation: "Longer contexts would help, but a count table for 3 previous letters already has $27^3 \\times 27 \\approx 530{,}000$ cells, most of them never seen. The next lesson keeps a 3-letter context but replaces the table with a small network that shares what it learns between similar contexts."
+---
+
+A **bigram model** predicts the next character from the one character before it, using nothing but counts; it is the simplest <Term slug="n-gram">n-gram model</Term>. Built from 32,033 first names, it is the simplest possible <Term slug="language-model" />: a table that says, for example, how likely "a" is to follow "m".<Cite id="makemore" /> This lesson builds the table, samples new names from it, and measures how good it is with the same loss that every later model in this track uses.
+
+## The data: 32,033 names
+
+The file `names.txt` holds one lowercase name per line, from "emma" and "olivia" down to rare names.<Cite id="names-txt" /> It comes from Andrej Karpathy's makemore project, which built it from the US Social Security Administration's baby-name records.<Cite id="makemore" /><Cite id="ssa-names" /> The course bundles a copy: the repository is MIT-licensed and the underlying SSA data is a US government work, so redistribution is allowed (details in `bundled/LICENSES.md`).
+
+`text_data.py` loads the names, shuffles them once with a fixed seed and splits them 80/10/10 into 25,626 training, 3,203 development (dev) and 3,204 test names, the same split makemore uses.<Cite id="makemore" /> Every model in this track uses this exact split, so their losses can be compared directly.
+
+### A vocabulary of 27 symbols
+
+The names use the 26 letters a-z. One more symbol, `.`, marks both the start and the end of a name. So "emma" becomes `.emma.`, which contains five pairs of neighbours, called *bigrams*: `.e`, `em`, `mm`, `ma` and `a.`. The first pair teaches the model how names begin; the last teaches it when to stop.
+
+## Counting
+
+`count_bigrams` walks through every training name and adds 1 to cell `N[a, b]` each time character `b` follows character `a`.
+
+<CodeFile path="code/projects/project-text/bigram.py" lines="18-32" highlight="23,24,25,31,32" title="bigram.py: count the pairs, then normalise each row" />
+
+The result is a 27×27 table holding 182,625 counts. The most common pairs are `n.` (5,404 names end in n), `a.` (5,273) and `an` (4,389). To turn a row into probabilities, divide each count by the row total: of the 25,626 training names, 3,545 start with "a", so the probability that a name starts with "a" is about 0.138.
+
+<Analogy breaks="A real reader also uses earlier letters and knows what names sound like; the table looks only one letter back.">
+The table works like a reader who has seen thousands of names and remembers only one thing: after this letter, which letters came next, and how often.
+</Analogy>
+
+### Smoothing: never say never
+
+Some pairs never appear in the training names. With raw counts, their probability is exactly 0. That is a problem: 5 dev names contain such a pair (for example "jp" in the name "jp", or "kv" in "kvon"), and a probability of 0 means an infinite loss. Running `python bigram.py --smoothing 0` shows exactly this: the dev loss becomes `inf`.
+
+The fix is *add-one smoothing*: add 1 to every cell before normalising, so every pair keeps a small chance.<Cite id="jm-ch3" /> Line 31 does this. With 109 empty cells out of 729, the extra counts change the common probabilities very little.
+
+## Sampling a name
+
+To write a new name, start at `.`, look up that row, draw the next character with those probabilities, then repeat from the new character until `.` comes up again. `sample_name` in `bigram.py` does this, and the drawing itself happens in `sampling.py`, which every generator in this track shares.
+
+<CodeFile path="code/projects/project-text/sampling.py" lines="11-30" highlight="18,20,21,22,30" title="sampling.py: temperature and top-k" />
+
+Two knobs change how adventurous the sampling is.<Cite id="hf-generate" />
+
+- **<Term slug="sampling-temperature">Temperature</Term>** $T$ divides the scores before the <Term slug="softmax" />. Below 1 it favours the likely letters even more; above 1 it flattens the choice.
+- **Top-k** keeps only the $k$ highest-scoring letters and renormalises, so a rare letter can never be drawn by bad luck.<Cite id="fan2018" />
+
+For the bigram model, the score of a letter is simply the logarithm of its probability, so $T = 1$ without top-k reproduces the table exactly.
+
+<MathSteps
+  title="Temperature on three scores"
+  legend={[
+    { symbol: 'z_i', meaning: 'score (logit) of letter i' },
+    { symbol: 'T', meaning: 'temperature' },
+    { symbol: 'p_i', meaning: 'probability of drawing letter i' },
+  ]}
+>
+  <Step tex="z = [2,\ 1,\ 0]" words="Three letters A, B and C with scores 2, 1 and 0. This is the example `python sampling.py` prints." />
+  <Step tex="p_i = \frac{e^{z_i/T}}{\sum_j e^{z_j/T}}" words="Divide each score by T, exponentiate, then divide by the sum so the probabilities add up to 1." />
+  <Step tex="T = 1:\quad p = [\hl{0.665},\ 0.245,\ 0.090]" words="The plain softmax: e² = 7.389, e¹ = 2.718, e⁰ = 1, and the sum is 11.107." />
+  <Step tex="T = 0.5:\quad p = [\hl{0.867},\ 0.117,\ 0.016]" words="Halving the temperature doubles the gaps between scores, so the favourite takes most of the probability." />
+  <Step tex="T = 1,\ k = 2:\quad p = [0.665,\ 0.245]\,/\,0.910 = [\hl{0.731},\ 0.269]" words="Top-k with k = 2 drops C and renormalises what is left." />
+</MathSteps>
+
+## How good is the model? The loss
+
+A language model is judged by how much probability it gives to the text that really comes next. For each pair in the dev names, take the probability the table gives to the true next character, take $-\ln$ of it, and average. This is the average *negative log-likelihood*, the same quantity as the <Term slug="cross-entropy" /> loss used to train networks.<Cite id="jm-ch3" />
+
+<MathSteps
+  title="From probabilities to one loss number"
+  legend={[
+    { symbol: 'p', meaning: 'probability the model gave to the character that really came next' },
+    { symbol: 'n', meaning: 'number of predictions' },
+    { symbol: 'L', meaning: 'average negative log-likelihood, in nats per character' },
+  ]}
+>
+  <Step tex="-\ln p" words="One prediction's loss: 0 if the model was certain and right, large if it gave the true character little probability." example="P(e | .) = 0.0492 gives −ln 0.0492 = 3.01" />
+  <Step tex="L = \frac{1}{n}\sum_{k=1}^{n} -\ln p_k" words="Average over all predictions. For `.emma.` the five losses average 2.51." />
+  <Step tex="L_{\text{uniform}} = -\ln \tfrac{1}{27} = \ln 27 \approx \hl{3.30}" words="The baseline: a model that guesses all 27 symbols equally." />
+  <Step tex="L_{\text{bigram, dev}} = \hl{2.45}" words="The count table on the 3,203 dev names. Lower is better; the gap to 3.30 is what one letter of context buys." />
+  <Step tex="e^{3.30} = 27, \qquad e^{2.45} \approx \hl{11.6}" words="Perplexity, the exponential of the loss, reads as 'as unsure as a choice among this many letters'. Context cut the effective choice from 27 to about 12." />
+</MathSteps>
+
+<Exercise id="bigram-uniform-loss" />
+
+The <Term slug="perplexity" /> reading makes the numbers concrete: the bigram model has narrowed each choice from 27 equally likely symbols to the uncertainty of about 11.6. Train and dev loss are almost identical (2.4548 and 2.4533), which is expected: a table of 729 probabilities estimated from 182,625 pairs has nothing to overfit.
+
+<Exercise id="bigram-emma-loss" />
+
+## Try it
+
+From `code/projects/project-text/`:
+
+```bash
+python text_data.py                    # 32,033 names, 27 symbols, the 80/10/10 split
+python bigram.py                       # count, evaluate, sample 10 names (a few seconds)
+python bigram.py --smoothing 0         # the dev loss becomes inf: see "Smoothing"
+python generate.py --model checkpoints/bigram.pt --temperature 0.5 --top-k 5
+```
+
+Measured on the course's test machine (Windows 11 laptop CPU, PyTorch 2.15 CPU build):
+
+```text
+uniform guess : loss 3.2958  perplexity 27.00
+train         : loss 2.4548  perplexity 11.64
+dev           : loss 2.4533  perplexity 11.63
+samples: dexze, momakurailezitynn, konimittain, llayn, ka, da, staiyaubrtthrigotai, ...
+```
+
+The samples show both what the model knows and what it lacks. Names start and end in plausible places and the pairs are common, but there is no sense of a whole name. Karpathy reaches the same 2.45 in the first makemore lecture, which builds this table step by step.<Cite id="karpathy-zero-to-hero" />
+
+<Exercise id="bigram-why-bad-names" />
+
+## Summary
+
+- A bigram model is a 27×27 table of next-character probabilities, built by counting pairs in 25,626 training names.
+- Add-one smoothing prevents zero probabilities; without it the dev loss is infinite.
+- Sampling repeats "look up the row, draw a letter"; temperature and top-k control how adventurous the draw is.
+- The loss is the average $-\ln p$ of the true next character: 3.30 for guessing, 2.45 for the bigram table (perplexity about 11.6).
+- One letter of context is not enough for coherent names, which motivates the neural model in the next lesson.

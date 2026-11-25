@@ -1,0 +1,279 @@
+---
+title: A character-level Shakespeare generator with an LSTM
+slug: shakespeare-lstm
+track: project-text
+level: advanced
+order: 30
+minutes: 30
+module: Generating text
+summary: "Give the generator a memory: a recurrent network reads text one character at a time and carries a hidden state forward. A GRU lowers the names dev loss to 2.02, and a 2-layer LSTM trained for about 10 minutes on a CPU writes Shakespeare-like text at 1.50 nats per character."
+hatnote: For the transformer alternative on similar data, see "Writing a tiny GPT in PyTorch" in the code-autocompletion track.
+prerequisites: [names-mlp]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Prepare TinyShakespeare (1.1 million characters, 65 symbols) with a 90/10 split
+  - Train a character-level LSTM with truncated backpropagation through time and gradient clipping
+  - Compare the GRU with the bigram and MLP name models on the same split
+  - Sample with temperature and read the output critically
+build: char_rnn.py, a GRU/LSTM language model, and generate.py for sampling with a prompt
+reviewed: 2026-11-25
+seeAlso: [names-mlp, code-tiny-gpt, sentiment-bilstm]
+sources:
+  - id: karpathy2015-rnn
+    title: "The Unreasonable Effectiveness of Recurrent Neural Networks"
+    author: Andrej Karpathy
+    year: 2015
+    url: https://karpathy.github.io/2015/05/21/rnn-effectiveness/
+    accessed: 2026-11-25
+    type: article
+  - id: char-rnn
+    title: "char-rnn (GitHub repository)"
+    author: Andrej Karpathy
+    year: 2015
+    url: https://github.com/karpathy/char-rnn
+    accessed: 2026-11-25
+    type: code
+  - id: tinyshakespeare
+    title: "TinyShakespeare input.txt (char-rnn dataset file)"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
+    accessed: 2026-11-25
+    type: dataset
+  - id: pt-lstm
+    title: torch.nn.LSTM
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-clip-grad
+    title: torch.nn.utils.clip_grad_norm_
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html
+    accessed: 2026-11-25
+    type: docs
+  - id: hochreiter1997
+    title: "Long Short-Term Memory"
+    author: Sepp Hochreiter, Jürgen Schmidhuber
+    publisher: Neural Computation 9(8)
+    year: 1997
+    url: https://doi.org/10.1162/neco.1997.9.8.1735
+    accessed: 2026-11-25
+    type: paper
+  - id: cho2014
+    title: "Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation"
+    author: Kyunghyun Cho et al.
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1406.1078
+    accessed: 2026-11-25
+    type: paper
+  - id: bengio1994
+    title: "Learning long-term dependencies with gradient descent is difficult"
+    author: Yoshua Bengio, Patrice Simard, Paolo Frasconi
+    publisher: IEEE Transactions on Neural Networks 5(2)
+    year: 1994
+    url: https://doi.org/10.1109/72.279181
+    accessed: 2026-11-25
+    type: paper
+  - id: olah2015
+    title: "Understanding LSTM Networks"
+    author: Christopher Olah
+    year: 2015
+    url: https://colah.github.io/posts/2015-08-Understanding-LSTMs/
+    accessed: 2026-11-25
+    type: article
+  - id: nanogpt
+    title: "nanoGPT (GitHub repository)"
+    author: Andrej Karpathy
+    year: 2023
+    url: https://github.com/karpathy/nanoGPT
+    accessed: 2026-11-25
+    type: code
+furtherReading:
+  - title: "Dive into Deep Learning, 10.1 Long Short-Term Memory (LSTM)"
+    url: https://d2l.ai/chapter_recurrent-modern/lstm.html
+  - title: "Chung et al. (2014): Empirical Evaluation of Gated Recurrent Neural Networks on Sequence Modeling"
+    url: https://arxiv.org/abs/1412.3555
+exercises:
+  - id: lstm-cell-step
+    type: numeric
+    difficulty: medium
+    title: One LSTM step by hand
+    prompt: "A one-unit LSTM has old cell state $c_{t-1} = 1.0$. This step its gates come out as forget $f = 0.9$, input $i = 0.2$, candidate $g = 0.5$ and output $o = 0.8$. What is the new hidden state $h_t = o \\cdot \\tanh(c_t)$, with $c_t = f \\cdot c_{t-1} + i \\cdot g$? (Three decimals.)"
+    answer: 0.609
+    tolerance: 0.002
+    hint: "First $c_t = 0.9 \\cdot 1.0 + 0.2 \\cdot 0.5$. Then $\\tanh(1.0) \\approx 0.7616$."
+    explanation: "$c_t = 0.9 + 0.1 = 1.0$, so the memory kept its value: a little was forgotten and a little written. $h_t = 0.8 \\cdot \\tanh(1.0) = 0.8 \\cdot 0.7616 \\approx 0.609$. Note that $c_t$ is built by multiplying and adding, not by squashing through a full layer; that is what lets information survive many steps."
+  - id: lstm-detach
+    type: mcq
+    difficulty: medium
+    title: Why detach the hidden state?
+    prompt: "In `char_rnn.py` the hidden state is passed from one 100-character chunk to the next, but `detach(state)` is called first. What would happen without it?"
+    options:
+      - "The model would forget everything between chunks"
+      - "Backpropagation would try to go back through every chunk since the start, so memory use and time per step would grow until training failed (PyTorch also raises an error when it reaches the already freed graph)"
+      - "The loss would be computed incorrectly"
+      - "Nothing; detach only saves a little memory"
+    answer: 1
+    explanation: "Detaching keeps the values of the state, so the memory still flows forward, but cuts the record of how they were computed. Gradients then stop at the chunk border: this is truncated backpropagation through time. Without it, each backward pass would reach into the previous chunks, whose computation graphs PyTorch has already freed, and you would get the error 'Trying to backward through the graph a second time'."
+  - id: lstm-temperature-reading
+    type: reveal
+    difficulty: medium
+    title: Reading samples critically
+    prompt: "At temperature 0.8 the LSTM writes speaker names in capitals, line breaks and words such as 'thou' and 'lord', but the sentences make no sense. At temperature 0 it repeats one phrase. Explain both observations in terms of what the model has learned and how sampling works."
+    answer: "The model has learned local statistics of the text: which characters follow a given recent history, which covers spelling, frequent words, capitalised names followed by a colon and line breaks. It has no representation of meaning or plot, and its memory in practice spans tens to a few hundred characters, so sentences drift. At temperature 0 it always takes the single most likely character; once it enters a high-probability phrase, the most likely continuation leads back into the same phrase, so it loops."
+    explanation: "Loss in nats per character measures how well the model predicts the next character, not whether the text makes sense. Temperature 0.7-1.0 gives the best-looking samples; very low temperatures loop and high ones produce misspellings."
+---
+
+A **character-level recurrent network** reads text one character at a time and carries a vector of numbers, its *hidden state*, from each step to the next. The hidden state works as a memory, so the network is not limited to the last three characters like the MLP of the previous lesson. In 2015 Karpathy showed that such networks, trained on raw text, learn to write plausible-looking Shakespeare, Wikipedia markup and C code.<Cite id="karpathy2015-rnn" /> This lesson trains a GRU on the names, then a two-layer LSTM on 1.1 million characters of Shakespeare, on a laptop CPU.
+
+## From a fixed window to a memory
+
+The MLP saw exactly three characters. A <Term slug="recurrent-neural-network" /> instead applies the same small network at every position: it takes the current character and the previous hidden state, and produces a new hidden state and scores for the next character. Because the weights are shared across time, it handles text of any length.
+
+<Analogy breaks="A reader remembers meaning; the hidden state is a few hundred numbers that the network has learned to use, and nobody chose what each one stores.">
+The hidden state is like the running impression a reader keeps while reading aloud: it is updated after every character and coloured by everything read so far.
+</Analogy>
+
+Plain recurrent networks are hard to train over long spans. Backpropagating through many steps multiplies many factors together, so gradients shrink towards zero or blow up; Bengio, Simard and Frasconi analysed this problem in 1994.<Cite id="bengio1994" /> Gated cells were designed to reduce it.
+
+### The LSTM cell
+
+The <Term slug="long-short-term-memory">LSTM</Term> of Hochreiter and Schmidhuber adds a second vector, the *cell state*, which is changed only by element-wise multiplication and addition.<Cite id="hochreiter1997" /> Three gates, each a sigmoid with values between 0 and 1, decide how much of the old memory to keep, how much new information to write and how much to reveal.<Cite id="olah2015" />
+
+<MathSteps
+  title="One LSTM step, with a single memory unit"
+  legend={[
+    { symbol: 'c_{t-1}, c_t', meaning: 'old and new cell state (the long-term memory)' },
+    { symbol: 'f, i, o', meaning: 'forget, input and output gates, each between 0 and 1' },
+    { symbol: 'g', meaning: 'candidate value to write, between −1 and 1' },
+    { symbol: 'h_t', meaning: 'new hidden state, used for the prediction and passed on' },
+  ]}
+>
+  <Step tex="f = \sigma(\dots),\ i = \sigma(\dots),\ g = \tanh(\dots),\ o = \sigma(\dots)" words="All four are computed from the current character's embedding and the previous hidden state, each with its own weights. Suppose they come out as f = 0.9, i = 0.2, g = 0.5 and o = 0.8." />
+  <Step tex="c_t = \hl{f \cdot c_{t-1}} + i \cdot g = 0.9 \cdot 1.0 + 0.2 \cdot 0.5 = 1.0" words="Keep 90% of the old memory (1.0) and add 20% of the candidate. The memory is updated by multiplying and adding, never squashed through a whole layer." />
+  <Step tex="h_t = o \cdot \tanh(c_t) = 0.8 \cdot 0.7616 \approx \hl{0.609}" words="Reveal a filtered view of the memory. This is what the output layer reads to score the next character." />
+  <Step tex="\frac{\partial c_t}{\partial c_{t-1}} = f" words="The key property: the gradient flowing back along the cell state is multiplied only by the forget gate. When f stays near 1, gradients survive many steps." />
+</MathSteps>
+
+<Exercise id="lstm-cell-step" />
+
+The <Term slug="gated-recurrent-unit">GRU</Term> of Cho et al. is a lighter variant with two gates and no separate cell state; its new state is a gated blend of the old state and a candidate.<Cite id="cho2014" /> `char_rnn.py` supports both with `--cell gru` or `--cell lstm`, using PyTorch's built-in layers.<Cite id="pt-lstm" />
+
+## The model
+
+<CodeFile path="code/projects/project-text/char_rnn.py" lines="32-45" highlight="36,37,38,40,44,45" title="char_rnn.py: embedding, GRU or LSTM, and a linear head" />
+
+The network has three parts: an embedding for each character, the recurrent layers and a linear layer that turns each hidden state into scores for the next character. `batch_first=True` makes the input shape (batch, time, features); PyTorch's default puts time first, a common source of silent bugs.<Cite id="pt-lstm" /> The forward pass returns the new state as well, so the caller can hand it to the next chunk.
+
+## Training on a long stream
+
+TinyShakespeare is a single file of 1,115,394 characters drawn from Shakespeare's plays, with 65 distinct symbols: letters, punctuation, spaces and line breaks.<Cite id="tinyshakespeare" /> Shakespeare's text is in the public domain and the char-rnn repository is MIT-licensed; the script downloads the file rather than bundling it, only to keep the repository small.<Cite id="char-rnn" /> The first 90% (1,003,854 characters) is used for training and the last 10% for validation, as in nanoGPT.<Cite id="nanogpt" />
+
+The text is cut into 32 rows of equal length that are read side by side, and each training step takes the next 100 characters of every row. The hidden state is carried from one chunk to the next, so the network can use context from earlier chunks, but gradients stop at the chunk border. This is *truncated backpropagation through time*.
+
+<CodeFile path="code/projects/project-text/char_rnn.py" lines="134-147" highlight="136,141,142,143,145,146" title="char_rnn.py: carry the memory, cut the gradient, clip" />
+
+Line 141 detaches the state: its values flow forward, but its computation history is dropped. Line 146 clips the gradient: if the combined size (norm) of all gradients exceeds 1.0, they are scaled down to 1.0, which prevents rare exploding steps from wrecking the weights.<Cite id="pt-clip-grad" /> Karpathy's char-rnn uses clipping for the same reason.<Cite id="char-rnn" />
+
+<Exercise id="lstm-detach" />
+
+## Results on names: the third generator
+
+First, the GRU on the names, with the same train/dev split as the bigram table and the MLP. The names are joined into one stream separated by `.`, so the GRU makes exactly one prediction per character plus one for the end of each name, like the earlier models. `python char_rnn.py --data names` (1 layer, 128 units, 66,555 parameters) took about 1.5 minutes on the test machine:
+
+| Step | Train loss | Dev loss |
+|---|---|---|
+| 500 | 2.180 | 2.067 |
+| 1,000 | 2.004 | 2.026 |
+| 1,500 | 1.938 | **2.022** |
+| 2,000 | 1.892 | 2.034 |
+| 3,000 | 1.833 | 2.071 |
+
+After step 1,500 the training loss keeps falling while the dev loss rises: the network is starting to memorise the 25,626 training names. The script therefore keeps the weights with the best dev loss (early stopping). The progression across the module is now complete:
+
+| Model | Context | Parameters | Dev loss | Perplexity |
+|---|---|---|---|---|
+| Uniform guess | none | 0 | 3.30 | 27.0 |
+| Bigram counts | 1 character | 729 probabilities | 2.45 | 11.6 |
+| Bengio-style MLP | 3 characters | 11,897 | 2.14 | 8.5 |
+| GRU | the whole name so far | 66,555 | **2.02** | **7.6** |
+
+## Results on Shakespeare
+
+`python char_rnn.py --data shakespeare` trains a 2-layer LSTM with 256 units per layer (876,929 parameters) for 2,000 steps, about 10 minutes on the test machine. To see what happens after that point, the test machine also ran 3,000 steps (13 minutes, with other jobs sharing the CPU):
+
+| Step | Train loss | Validation loss | Time |
+|---|---|---|---|
+| 0 | | 4.1760 | |
+| 500 | 1.941 | 1.694 | 1.8 min |
+| 1,000 | 1.472 | 1.579 | 5.0 min |
+| 1,500 | 1.367 | 1.518 | 7.3 min |
+| 2,000 | 1.317 | **1.498** | 9.7 min |
+| 2,500 | 1.278 | 1.503 | 11.7 min |
+| 3,000 | 1.250 | 1.507 | 13.2 min |
+
+The validation loss stops improving after about 2,000 steps (each step reads 32 × 100 characters, so 2,000 steps are about six passes over the training text) while the training loss keeps falling, so 2,000 is the default and the script keeps the best weights in any case. In the first rows the training loss is above the validation loss: it is averaged over the steps since the last report, while the model was still improving, and it is measured with dropout switched on.
+
+<MathSteps
+  title="Reading the Shakespeare loss"
+  legend={[
+    { symbol: 'L', meaning: 'validation loss in nats per character' },
+    { symbol: 'V', meaning: 'number of distinct symbols (65)' },
+  ]}
+>
+  <Step tex="L_{\text{uniform}} = \ln 65 \approx \hl{4.17}" words="The untrained model's first loss was 4.1760, as expected for 65 equally likely symbols." />
+  <Step tex="L = \hl{1.498} \;\Rightarrow\; e^{L} \approx 4.47" words="After training, the model is on average as unsure as a choice among about 4.5 characters, instead of 65." />
+  <Step tex="1.50 / \ln 2 \approx 2.16 \text{ bits per character}" words="Dividing by ln 2 converts nats to bits, the unit used in many compression and language-modelling papers." />
+</MathSteps>
+
+For comparison, nanoGPT's README reports a validation loss of about 1.88 for a small character-level transformer trained on a CPU for a few minutes on the same file, and about 1.47 for a 10.65-million-parameter transformer trained on a GPU.<Cite id="nanogpt" /> The LSTM here, with a similar number of parameters (0.88 million against about 0.8 million), does better than that small transformer, but it also saw about four times as many characters during training (2,000 steps × 3,200 against 2,000 × 768), so this is not a verdict on the architectures. The losses are comparable because both use the same 65-character vocabulary and the same 90/10 split.
+
+### What the samples look like
+
+At temperature 0.8, prompted with `ROMEO:`, the test machine produced:
+
+```text
+ROMEO:Npressive
+The parents rolours when thou dost part of mine.
+Give me to be my good most severer presence
+Of your reasons and Bushy friends of England,
+And whom for that friends to the seasons appeal.
+
+QUEEN ELIZABETH:
+No noble lord,
+Being thee, nor slain? how doth my life,
+Which. Shall I use of the gods put of wears,
+I am this secret with put her honours.
+
+Second Servingman:
+A left more shall be the
+```
+
+The model has clearly learned the format: speaker names in capitals followed by a colon, line breaks, archaic words and mostly correct spelling. It has not learned meaning. Sentences start plausibly and wander, and characters speak to nobody in particular. Karpathy's samples from much larger LSTMs show the same pattern at a higher level of polish.<Cite id="karpathy2015-rnn" />
+
+<Exercise id="lstm-temperature-reading" />
+
+## Try it
+
+From `code/projects/project-text/`:
+
+```bash
+python char_rnn.py --smoke                    # GRU on names, 60 steps: seconds
+python char_rnn.py --data names               # about 1.5 minutes, best dev loss about 2.02
+python char_rnn.py --data shakespeare         # downloads 1.1 MB; about 10 minutes on a laptop CPU
+python generate.py --model checkpoints/rnn-shakespeare.pt --prompt "JULIET:" --temperature 0.8
+python generate.py --model checkpoints/rnn-shakespeare.pt --temperature 0     # greedy: watch it loop
+python char_rnn.py --data shakespeare --cell gru --steps 1000 --hidden 128    # a smaller, faster GRU
+```
+
+The `--prompt` text is fed through the network first, so the generated text continues from it. Change one thing at a time (cell type, hidden size, sequence length) and compare validation losses at the same number of steps.
+
+## Summary
+
+- A recurrent network carries a hidden state from character to character, so its context is not limited to a fixed window.
+- The LSTM's cell state is updated by multiplying and adding, and its forget gate lets gradients survive many steps; the GRU is a lighter two-gate variant.
+- Long texts are trained in chunks with the state carried forward but detached (truncated backpropagation through time) and with gradient clipping.
+- On names, the GRU reaches a dev loss of 2.02 (bigram 2.45, MLP 2.14) and starts to overfit after about 1,500 steps.
+- On TinyShakespeare, a 2-layer LSTM reaches 1.50 nats per character in about 10 minutes on a CPU and writes text with the right form but no meaning.

@@ -1,0 +1,200 @@
+---
+title: A bag-of-embeddings sentiment classifier
+slug: sentiment-bag-of-embeddings
+track: project-text
+level: intermediate
+order: 50
+minutes: 20
+module: Classifying short texts
+summary: Average the learned vectors of a sentence's words and feed the average to one linear layer. Trained on SST-2 in about a minute and a half on a CPU, it reaches 78.7% test accuracy, and its mistakes show exactly what ignoring word order costs.
+hatnote: 'The data preparation is explained in "Short texts: preparing SST-2 movie-review sentences".'
+prerequisites: [sentiment-dataset]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Build Embedding → masked mean → Linear and train it on a CPU
+  - Reach about 78-82% test accuracy and report precision and recall
+  - Find sentences it gets wrong because word order is ignored ("not good")
+build: classifier.py (BagOfEmbeddings) and train_classifier.py
+reviewed: 2026-11-25
+seeAlso: [sentiment-dataset, sentiment-bilstm, names-mlp]
+sources:
+  - id: socher2013
+    title: "Recursive Deep Models for Semantic Compositionality Over a Sentiment Treebank"
+    author: Richard Socher et al.
+    publisher: EMNLP 2013 (ACL Anthology)
+    year: 2013
+    url: https://aclanthology.org/D13-1170/
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-embedding
+    title: torch.nn.Embedding
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Embedding.html
+    accessed: 2026-11-25
+    type: docs
+  - id: sklearn-metrics
+    title: "scikit-learn User Guide: Metrics and scoring (precision, recall and F-measures)"
+    publisher: scikit-learn
+    url: https://scikit-learn.org/stable/modules/model_evaluation.html
+    accessed: 2026-11-25
+    type: docs
+  - id: iyyer2015
+    title: "Deep Unordered Composition Rivals Syntactic Methods for Text Classification"
+    author: Mohit Iyyer, Varun Manjunatha, Jordan Boyd-Graber, Hal Daumé III
+    publisher: ACL 2015 (ACL Anthology)
+    year: 2015
+    url: https://aclanthology.org/P15-1162/
+    accessed: 2026-11-25
+    type: paper
+  - id: kotzias2015
+    title: "Sentiment Labelled Sentences (UCI Machine Learning Repository, dataset 331)"
+    author: Dimitrios Kotzias, Misha Denil, Nando de Freitas, Padhraic Smyth
+    publisher: UCI Machine Learning Repository
+    year: 2015
+    url: https://archive.ics.uci.edu/dataset/331/sentiment+labelled+sentences
+    accessed: 2026-11-25
+    type: dataset
+  - id: kingma2014
+    title: "Adam: A Method for Stochastic Optimization"
+    author: Diederik P. Kingma, Jimmy Ba
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1412.6980
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Joulin et al. (2016): Bag of Tricks for Efficient Text Classification (fastText)"
+    url: https://arxiv.org/abs/1607.01759
+  - title: "Wikipedia: Bag-of-words model"
+    url: https://en.wikipedia.org/wiki/Bag-of-words_model
+exercises:
+  - id: bag-param-share
+    type: numeric
+    difficulty: easy
+    title: Where are the parameters?
+    prompt: "The vocabulary has 14,712 entries and each word vector has 64 numbers. The output layer maps 64 numbers to 2 scores, with biases. How many parameters does the output layer have?"
+    answer: 130
+    tolerance: 0
+    hint: "64 × 2 weights plus 2 biases."
+    explanation: "64 · 2 + 2 = 130. The embedding table has 14,712 · 64 = 941,568, so the whole model has 941,698 parameters and more than 99.98% of them are word vectors. The model is essentially a learned dictionary of word meanings with a tiny decision rule on top."
+  - id: bag-precision-recall
+    type: mcq
+    difficulty: medium
+    title: Reading precision and recall
+    prompt: "On the test sentences the model has 74.2% precision and 89.2% recall for the positive class. Which description fits?"
+    options:
+      - "It misses many positive sentences but is reliable when it says positive"
+      - "It finds most positive sentences, but a quarter of the sentences it calls positive are actually negative"
+      - "It is equally good on both classes"
+      - "Precision and recall say nothing about bias towards a class"
+    answer: 1
+    explanation: "Recall 89% means it finds 396 of the 444 positive sentences. Precision 74% means that of the 534 sentences it labels positive, 138 are negative. The model leans towards 'positive', which fits a training set that is 55.8% positive and many negative sentences that contain positive words ('not convincing', 'beautiful but empty')."
+  - id: bag-not-good
+    type: reveal
+    difficulty: medium
+    title: Why "the film is not good" comes out positive
+    prompt: "The trained model scores 'not' at −17.1 and 'good' at +15.6 on its positive-minus-negative direction, and the neutral words 'the' (+1.7) and 'film' (+3.4) slightly positive. Explain why 'not good' is weakly negative but 'the film is not good' is classified positive (62.9%)."
+    answer: "The sentence score is the average of word scores. For 'not good' the average is about (−17.1 + 15.6) / 2 ≈ −0.8: weakly negative. Adding 'the', 'film' and 'is' adds mildly positive words and increases the count, so the average moves to slightly positive. The model never sees that 'not' applies to 'good'; it only sees which words occur."
+    explanation: "Averaging is order-blind and dilutes strong words with neutral ones. Any fix needs a model that combines words in order, such as the BiLSTM in the next lesson, or features for word pairs (bigrams)."
+---
+
+A **bag-of-embeddings classifier** represents a sentence by the average of its words' vectors and makes its decision from that average alone. Word order is thrown away, as if the words were shaken in a bag. On the SST-2 movie-review sentences this simple model reaches 78.7% test accuracy after about a minute and a half of training on a CPU.<Cite id="socher2013" /> Its mistakes are just as useful as its score: they show precisely what ignoring order costs.
+
+## The model in three steps
+
+<CodeFile path="code/projects/project-text/classifier.py" lines="10-23" highlight="15,21,22,23" title="classifier.py: BagOfEmbeddings" />
+
+1. **Look up.** Each word id selects a row of a 14,712 × 64 <Term slug="embedding" /> table.<Cite id="pt-embedding" /> `padding_idx=0` keeps the `<pad>` row at zero and never updates it.
+2. **Average.** A mask marks real words with 1 and padding with 0, so the average is taken over the real words only. Without the mask, short sentences in a batch with long ones would be averaged with many zero vectors.
+3. **Decide.** One linear layer turns the 64-number average into two scores, negative and positive.
+
+<Analogy breaks="A taster can sometimes tell the order in which things were added, for instance by texture; the average keeps no trace of order at all.">
+The average works like a smoothie: you can taste which fruits went in and roughly how much of each, but not the order in which they were added.
+</Analogy>
+
+Iyyer et al. showed in 2015 that averaging word vectors, with a few extra layers, can rival far more complex models that parse sentence structure, and it trains much faster.<Cite id="iyyer2015" /> The version here is the smallest member of that family.
+
+<Exercise id="bag-param-share" />
+
+## Training
+
+`train_classifier.py --model bag` uses the standard loop: forward pass, cross-entropy loss over the two classes, backpropagation and an Adam update, in batches of 64 sentences.<Cite id="kingma2014" /> After every epoch it measures accuracy on the validation set carved out of the training data, and it keeps the weights of the best epoch.
+
+<CodeFile path="code/projects/project-text/train_classifier.py" lines="92-105" highlight="94,96,97,100,104,105" title="train_classifier.py: one epoch, then keep the best weights" />
+
+The learning rate is 0.005, higher than the usual 0.001, because each word vector is only updated in batches where that word appears; rare words would otherwise barely move in five epochs.
+
+## Results
+
+Measured on the course's test machine (Windows 11 laptop CPU, PyTorch 2.15 CPU build, seed 0), five epochs took 96 seconds:
+
+| Epoch | Train loss | Validation accuracy (carved) |
+|---|---|---|
+| 1 | 0.446 | 89.0% |
+| 2 | 0.254 | 90.4% |
+| 3 | 0.194 | **91.2%** |
+| 4 | 0.164 | 91.1% |
+| 5 | 0.149 | 90.9% |
+
+The validation accuracy of about 91% is optimistic, as the dataset lesson predicted: most carved validation phrases also occur inside training sentences. The honest number comes from the 872 GLUE sentences, evaluated once with the weights of epoch 3: **78.67% test accuracy**. That is within the 78-82% expected for a small model trained from scratch.
+
+### Precision and recall
+
+Accuracy hides which way the model errs. Counting the four outcomes for the positive class gives a fuller picture.<Cite id="sklearn-metrics" />
+
+<MathSteps
+  title="From the confusion counts to precision, recall and F1"
+  legend={[
+    { symbol: 'TP', meaning: 'positive sentences called positive (396)' },
+    { symbol: 'FP', meaning: 'negative sentences called positive (138)' },
+    { symbol: 'FN', meaning: 'positive sentences called negative (48)' },
+    { symbol: 'TN', meaning: 'negative sentences called negative (290)' },
+  ]}
+>
+  <Step tex="\text{accuracy} = \frac{TP + TN}{872} = \frac{396 + 290}{872} = \hl{78.7\%}" words="The share of all test sentences classified correctly." />
+  <Step tex="\text{precision} = \frac{TP}{TP + FP} = \frac{396}{534} = \hl{74.2\%}" words="Of the sentences the model calls positive, how many really are." />
+  <Step tex="\text{recall} = \frac{TP}{TP + FN} = \frac{396}{444} = \hl{89.2\%}" words="Of the truly positive sentences, how many the model finds." />
+  <Step tex="F_1 = \frac{2 \cdot P \cdot R}{P + R} = \frac{2 \cdot 0.742 \cdot 0.892}{0.742 + 0.892} = \hl{81.0\%}" words="The harmonic mean, which is high only when both precision and recall are high." />
+</MathSteps>
+
+High recall with lower precision means the model leans towards "positive": 138 negative sentences were called positive, against only 48 misses the other way. Part of this comes from the training data, which is 55.8% positive. The rest comes from how negative reviews are written, as the next section shows.
+
+<Exercise id="bag-precision-recall" />
+
+## Error analysis: what order-blindness costs
+
+The script also runs the 48 challenge sentences written for this course. The bag model gets 60.4% right, barely better than a coin, and its mistakes are telling: "not bad at all", "it was not bad", "i did not hate this movie" and "the story is never boring" are all called negative; "the acting is not convincing" and "beautiful to look at , but completely empty" are called positive.
+
+Because the decision is a linear function of an average, each word effectively has a single score. Projecting the trained word vectors onto the "positive minus negative" direction of the output layer gives "brilliant" +24.5, "good" +15.6, "the" +1.7, "not" −17.1 and "bad" −19.0. A sentence's score is close to the average of its words' scores, so:
+
+- "not good" averages to about −0.8, weakly negative (65.7% negative);
+- "the film is not good" adds three mildly positive words and comes out **positive** (62.9%);
+- "not bad" averages two negative words and is called negative with near certainty.
+
+The model has learned that "not" usually appears in negative reviews, which is true, but it cannot learn that "not" flips the next word. Socher et al. built the Sentiment Treebank precisely to study such composition effects.<Cite id="socher2013" />
+
+<Exercise id="bag-not-good" />
+
+### Other domains
+
+On the 3,000 bundled sentences from Amazon, Yelp and IMDb reviews (Kotzias et al., CC BY 4.0), the movie-trained model scores 79.1%.<Cite id="kotzias2015" /> That is close to its SST-2 test score: sentiment words such as "great", "waste" and "terrible" mean the same in a phone review as in a film review, although 7.4% of the tokens in these sentences, including product words such as "battery" and "headset", are unknown to the movie vocabulary.
+
+## Try it
+
+From `code/projects/project-text/`:
+
+```bash
+python train_classifier.py --smoke            # offline, bundled UCI sentences, a few seconds
+python train_classifier.py --model bag        # SST-2, 5 epochs, about 1.5 minutes
+python classify.py --model checkpoints/bag.pt "not good" "the film is not good" "not bad"
+```
+
+`classify.py` prints the label, the probability and any words the vocabulary does not know. The metrics of each run are saved in `outputs/metrics-bag.json`. Try `--epochs 10` and watch whether the carved validation accuracy and the test accuracy move together.
+
+## Summary
+
+- The bag of embeddings averages the word vectors of a sentence (ignoring padding) and applies one linear layer; 99.98% of its 941,698 parameters are word vectors.
+- On SST-2 it trains in about 1.5 minutes on a CPU and reaches 78.67% test accuracy (precision 74.2%, recall 89.2%, F1 81.0%).
+- The carved validation accuracy (about 91%) is optimistic because of overlapping phrases; report the GLUE sentences.
+- Order-blindness is the main weakness: "not bad" is called negative and "the film is not good" positive. Only 60.4% of the negation and contrast challenge sentences are right.
+- A model that reads words in order is needed to fix this, which is the next lesson.

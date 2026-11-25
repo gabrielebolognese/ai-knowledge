@@ -3298,7 +3298,7 @@
       "title": "Small-text models",
       "kind": "project",
       "level": "intermediate",
-      "codeDir": "code/projects/text/",
+      "codeDir": "code/projects/project-text/",
       "blurb": "Generate names and Shakespeare-like text character by character, then classify the sentiment of short sentences.",
       "outcome": "A name generator (bigram → MLP), a character-level LSTM that writes Shakespeare-like text, and a sentiment classifier at about 78-84% on SST-2.",
       "datasets": [
@@ -3377,7 +3377,9 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/text/bigram.py"
+                "code/projects/project-text/text_data.py",
+                "code/projects/project-text/sampling.py",
+                "code/projects/project-text/bigram.py"
               ]
             },
             {
@@ -3423,7 +3425,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/text/mlp_lm.py"
+                "code/projects/project-text/mlp_lm.py",
+                "code/projects/project-text/generate.py"
               ]
             },
             {
@@ -3477,8 +3480,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/text/char_lstm.py",
-                "code/projects/text/sample.py"
+                "code/projects/project-text/char_rnn.py",
+                "code/projects/project-text/generate.py"
               ]
             }
           ]
@@ -3533,7 +3536,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/text/sst2_data.py"
+                "code/projects/project-text/sst2_data.py"
               ]
             },
             {
@@ -3579,8 +3582,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/text/classifier.py",
-                "code/projects/text/train_classifier.py"
+                "code/projects/project-text/classifier.py",
+                "code/projects/project-text/train_classifier.py"
               ]
             },
             {
@@ -3630,8 +3633,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/text/classifier.py",
-                "code/projects/text/predict.py"
+                "code/projects/project-text/classifier.py",
+                "code/projects/project-text/classify.py"
               ]
             }
           ]

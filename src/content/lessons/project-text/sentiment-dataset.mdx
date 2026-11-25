@@ -1,0 +1,210 @@
+---
+title: "Short texts: preparing SST-2 movie-review sentences"
+slug: sentiment-dataset
+track: project-text
+level: intermediate
+order: 40
+minutes: 20
+module: Classifying short texts
+summary: Download the SST-2 sentiment dataset, split sentences into word tokens, build a vocabulary from the training data only, and pad sentences of different lengths into batches. Also covers the two small bundled sets and what each licence allows.
+hatnote: The generators in the first module worked with characters; the classifiers in this module work with words.
+prerequisites: []
+tools: [Python 3, PyTorch]
+outcomes:
+  - Download the SST-2 zip and read the tab-separated sentences
+  - Build a word vocabulary from the training split only, with <unk> and <pad>
+  - Pad and batch sentences of different lengths
+  - Explain why a validation set carved from SST-2's training phrases is optimistic
+build: sst2_data.py, which turns sentences into padded batches of word ids
+reviewed: 2026-11-25
+seeAlso: [sentiment-bag-of-embeddings, sentiment-bilstm]
+sources:
+  - id: socher2013
+    title: "Recursive Deep Models for Semantic Compositionality Over a Sentiment Treebank"
+    author: Richard Socher, Alex Perelygin, Jean Wu, Jason Chuang, Christopher D. Manning, Andrew Ng, Christopher Potts
+    publisher: EMNLP 2013 (ACL Anthology)
+    year: 2013
+    url: https://aclanthology.org/D13-1170/
+    accessed: 2026-11-25
+    type: paper
+  - id: glue
+    title: "GLUE Benchmark"
+    publisher: New York University, University of Washington, DeepMind
+    url: https://gluebenchmark.com/
+    accessed: 2026-11-25
+    type: dataset
+  - id: wang2018
+    title: "GLUE: A Multi-Task Benchmark and Analysis Platform for Natural Language Understanding"
+    author: Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, Samuel R. Bowman
+    publisher: arXiv
+    year: 2018
+    url: https://arxiv.org/abs/1804.07461
+    accessed: 2026-11-25
+    type: paper
+  - id: sst2-zip
+    title: "SST-2.zip (GLUE task data)"
+    publisher: GLUE / Facebook AI public files
+    url: https://dl.fbaipublicfiles.com/glue/data/SST-2.zip
+    accessed: 2026-11-25
+    type: dataset
+  - id: hf-sst2
+    title: "stanfordnlp/sst2 dataset card"
+    publisher: Hugging Face
+    url: https://huggingface.co/datasets/stanfordnlp/sst2
+    accessed: 2026-11-25
+    type: dataset
+  - id: kotzias2015
+    title: "Sentiment Labelled Sentences (UCI Machine Learning Repository, dataset 331)"
+    author: Dimitrios Kotzias, Misha Denil, Nando de Freitas, Padhraic Smyth
+    publisher: UCI Machine Learning Repository
+    year: 2015
+    url: https://archive.ics.uci.edu/dataset/331/sentiment+labelled+sentences
+    accessed: 2026-11-25
+    type: dataset
+  - id: pt-embedding
+    title: torch.nn.Embedding
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Embedding.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "Stanford Sentiment Treebank project page"
+    url: https://nlp.stanford.edu/sentiment/
+  - title: "Dive into Deep Learning, 16.1 Sentiment Analysis and the Dataset"
+    url: https://d2l.ai/chapter_natural-language-processing-applications/sentiment-analysis-and-dataset.html
+exercises:
+  - id: sst2-vocab-leak
+    type: mcq
+    difficulty: easy
+    title: Where should the vocabulary come from?
+    prompt: "You build the word vocabulary from the training **and** test sentences together. What goes wrong?"
+    options:
+      - "Nothing: more words is always better"
+      - "Training becomes slower, but results are the same"
+      - "Test words get their own ids even though the model never trained on them, and the test no longer measures what happens with genuinely unseen words"
+      - "The model cannot read the training sentences any more"
+    answer: 2
+    explanation: "A real user's sentence can contain words the model has never seen. Building the vocabulary from training data only means such words become `<unk>` at test time too, exactly as they will in use. Including test words is a mild form of leakage: their rows stay random, but the test no longer reflects the unseen-word problem honestly (5.6% of SST-2 test tokens are unknown)."
+  - id: sst2-padding
+    type: numeric
+    difficulty: easy
+    title: How much padding?
+    prompt: "A batch holds three sentences with 9, 4 and 20 tokens. After padding to the longest one, how many of the cells in the id matrix are `<pad>`?"
+    answer: 27
+    tolerance: 0
+    hint: "The matrix is 3 × 20. Subtract the real tokens."
+    explanation: "3 × 20 = 60 cells, and 9 + 4 + 20 = 33 hold real words, so 27 are padding. The models must ignore them: the bag of embeddings averages over real words only, and the BiLSTM uses packed sequences so padding never enters it."
+  - id: sst2-carved-val
+    type: short
+    difficulty: medium
+    title: An optimistic validation set
+    prompt: "In SST-2, 89% of the items in a validation set carved at random from the training data appear word for word inside some training item. Why, and what does that mean for the validation accuracy?"
+    answer: "SST-2's training data contains every labelled phrase of each parsed sentence, not just whole sentences, so a random validation phrase usually comes from a sentence whose other phrases (including the full sentence) stayed in training. The model has effectively seen the validation text, so validation accuracy overestimates accuracy on new sentences. It is still useful for choosing the best epoch, but the honest number is the GLUE validation set, which has whole sentences from other reviews."
+    explanation: "This is why the course reports the GLUE validation set (872 sentences) as the test score and treats the carved validation score only as a guide for early stopping. The general lesson: split by source document, not by row, whenever rows from the same document can overlap."
+---
+
+**SST-2** is a dataset of short movie-review texts, each labelled positive or negative, and a standard benchmark for <Term slug="sentiment-analysis" />. It is the binary version of the Stanford Sentiment Treebank and one of the tasks of the GLUE benchmark.<Cite id="socher2013" /><Cite id="wang2018" /> This lesson downloads it, cuts sentences into words, builds a vocabulary and pads sentences of different lengths into batches, the preparation that both classifiers in this module rely on.
+
+## What is in SST-2
+
+Socher et al. took sentences from movie reviews on the Rotten Tomatoes website, parsed each one into a tree of phrases and had people rate the sentiment of every phrase.<Cite id="socher2013" /> GLUE packages the binary version, with neutral items removed, as a zip file of tab-separated `sentence<TAB>label` lines, where 1 means positive.<Cite id="glue" /><Cite id="sst2-zip" />
+
+<Infobox title="SST-2 (GLUE version)" rows={[
+  { label: 'Train', value: '67,349 phrases and sentences' },
+  { label: 'Validation', value: '872 sentences' },
+  { label: 'Test', value: '1,821 sentences, labels hidden' },
+  { label: 'Labels', value: '0 negative, 1 positive' },
+  { label: 'Download', value: '7.4 MB zip' },
+  { label: 'Licence', value: 'not stated; cite the paper' },
+]} />
+
+The test labels are kept secret for the benchmark leaderboard, so this course uses GLUE's 872 validation sentences as its test set, and carves its own validation set out of the training data.<Cite id="wang2018" /> The training items are short: half of them have 7 tokens or fewer, because many are phrases such as "dry humor and jarring shocks". The test sentences are whole sentences, with a median of 19 tokens.
+
+### Licences: what may be shipped
+
+SST-2 does not state a licence: the Stanford page asks users to cite the paper, and the Hugging Face card lists the licence as unknown.<Cite id="hf-sst2" /> The course therefore never redistributes it. `sst2_data.py` downloads the zip into `data/`, which git ignores.
+
+Two small sets are bundled in `bundled/`, each with its licence recorded in `bundled/LICENSES.md`:
+
+- **Sentiment Labelled Sentences** by Kotzias et al.: 3,000 review sentences from Amazon, Yelp and IMDb, published by the UCI repository under CC BY 4.0, which allows redistribution with credit.<Cite id="kotzias2015" /> The smoke test trains on it offline, and the full run uses it as a test from other domains.
+- **`challenge.tsv`**: 48 sentences written for this course (released under CC0) that test negation and contrast, such as "not bad at all".
+
+## From sentences to tokens
+
+A classifier works with numbers, so each sentence is first split into *tokens* (here, words and punctuation marks) and each token is mapped to an id. SST-2 already comes lowercased and split, with "it's" written as "it 's" and "isn't" as "is n't". The tokenizer applies the same rules to anything a user types, so "I didn't like it, it's dull!" becomes `i did n't like it , it 's dull !`.
+
+<CodeFile path="code/projects/project-text/sst2_data.py" lines="28-33" highlight="31,32,33" title="sst2_data.py: split text the way SST-2 does" />
+
+Matching the dataset's conventions matters more than a clever tokenizer. If the model learned "n't" as a token during training, user input must produce "n't" too, or the most important negation word would become unknown.
+
+## A vocabulary from the training split only
+
+The vocabulary lists every distinct token in the training data, most frequent first, after two special entries: `<pad>` (id 0) fills empty positions and `<unk>` (id 1) stands for any word not in the list.
+
+<CodeFile path="code/projects/project-text/sst2_data.py" lines="75-92" highlight="83,84,85,86,92" title="sst2_data.py: Vocab, built from training sentences" />
+
+On SST-2 the vocabulary has 14,712 entries, and the most common tokens are "the", ",", "a", "and" and "of". Each id later selects one row of an embedding table, a trainable vector per word.<Cite id="pt-embedding" />
+
+<Analogy breaks="A real dictionary can be extended at any time; here the list is frozen once training starts, and any new word is mapped to one shared row.">
+The vocabulary is like a dictionary printed before the exam: words that were not in it on printing day all point to the same entry, "unknown word".
+</Analogy>
+
+Building the list only from training sentences is deliberate. In real use, people type words the model never saw, and those words become `<unk>`. On the SST-2 test sentences, 5.6% of tokens are unknown, which is an honest preview of that problem.
+
+<Exercise id="sst2-vocab-leak" />
+
+## Padding and batching
+
+Sentences have different lengths, but a batch is a rectangular matrix. `make_batches` pads every sentence with id 0 up to the longest one in its batch and also returns the true lengths, so the models can ignore the padding.
+
+<CodeFile path="code/projects/project-text/sst2_data.py" lines="95-107" highlight="102,103,104,106" title="sst2_data.py: pad to the longest sentence in each batch" />
+
+<MathSteps
+  title="How much of a batch is padding?"
+  legend={[
+    { symbol: 'B', meaning: 'number of sentences in the batch' },
+    { symbol: 'T_{\\max}', meaning: 'length of the longest sentence' },
+    { symbol: 'T_i', meaning: 'length of sentence i' },
+  ]}
+>
+  <Step tex="\text{cells} = B \times T_{\max} = 4 \times 20 = 80" words="`python sst2_data.py` prints a batch of 4 test sentences with lengths 9, 4, 20 and 20, padded to a 4 × 20 matrix." />
+  <Step tex="\text{real tokens} = \textstyle\sum_i T_i = 9 + 4 + 20 + 20 = 53" words="Only these cells hold words." />
+  <Step tex="\text{padding share} = 1 - \tfrac{53}{80} \approx \hl{34\%}" words="A third of the computation would be wasted on padding, and worse, padding could distort the result if the model did not mask it out." />
+</MathSteps>
+
+<Exercise id="sst2-padding" />
+
+## Three splits, and one trap
+
+`split_off` shuffles the 67,349 training items and moves 5% into a validation set, giving 63,982 for training and 3,367 for validation. The positive share is 55.8% in training and 50.9% in the test sentences, so a model that always said "positive" would score about 51% on the test.
+
+The trap is in how SST-2 was built. Its training data contains the labelled phrases of each parsed sentence, not just whole sentences.<Cite id="socher2013" /> A phrase moved into the carved validation set usually still has its parent sentence in training: on the test machine, 89% of validation items appear word for word inside some training item. Validation accuracy is therefore optimistic. The course uses it only to pick the best epoch and reports the GLUE sentences as the test score.
+
+<Exercise id="sst2-carved-val" />
+
+## Try it
+
+From `code/projects/project-text/`:
+
+```bash
+python sst2_data.py      # downloads SST-2.zip (7.4 MB) once, then prints the statistics below
+```
+
+```text
+SST-2: train 63,982 / val (carved from train) 3,367 / test (GLUE dev) 872
+  positive share: train 55.8%, test 50.9%
+  tokens per training item: median 7, max 54
+  vocabulary (train only): 14,712 entries; 5.6% of test tokens are <unk>
+  a padded batch of 4: (4, 20) lengths [9, 4, 20, 20] labels [1, 0, 1, 1]
+bundled: 3,000 UCI review sentences, 48 challenge sentences
+```
+
+Try `tokenize("I can't recommend it")` in a Python shell from this folder. It returns `ca n't`, exactly as the Penn Treebank conventions in SST-2 split "can't".
+
+## Summary
+
+- SST-2 has 67,349 labelled training phrases and 872 validation sentences from movie reviews; the validation set serves as the test set here.
+- SST-2 states no licence, so it is downloaded and cited, never redistributed. The bundled UCI sentences (CC BY 4.0) and the course's own challenge set (CC0) are committed with their licences.
+- Tokens follow SST-2's conventions ("is n't", "it 's"), and the 14,712-word vocabulary comes from training data only, with `<pad>` and `<unk>`.
+- Batches pad to the longest sentence and carry the true lengths, so models can mask the padding.
+- A validation set carved from SST-2's training phrases overlaps heavily with training; use it to choose epochs, not to report results.

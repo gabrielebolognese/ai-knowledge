@@ -1,0 +1,242 @@
+---
+title: "Capstone: a BiLSTM classifier for your own sentences"
+slug: sentiment-bilstm
+track: project-text
+level: advanced
+order: 60
+minutes: 25
+module: Classifying short texts
+summary: "Replace the word average with a bidirectional LSTM that reads each sentence in order, in both directions. Compare it honestly with the bag of embeddings on SST-2 and on negation, save it, and classify sentences you type yourself."
+hatnote: 'The LSTM cell is explained in "A character-level Shakespeare generator with an LSTM"; the baseline is "A bag-of-embeddings sentiment classifier".'
+prerequisites: [sentiment-bag-of-embeddings, shakespeare-lstm]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Upgrade to a 1-layer bidirectional LSTM and compare it with the bag-of-embeddings model
+  - Handle padding with packed sequences
+  - Save the model and classify sentences you type
+  - Explain what scale buys (small models from scratch against fine-tuned Transformers above 93%)
+build: BiLSTMClassifier in classifier.py and classify.py, a command-line sentiment checker
+reviewed: 2026-11-25
+seeAlso: [sentiment-bag-of-embeddings, shakespeare-lstm, sentiment-dataset]
+sources:
+  - id: hochreiter1997
+    title: "Long Short-Term Memory"
+    author: Sepp Hochreiter, Jürgen Schmidhuber
+    publisher: Neural Computation 9(8)
+    year: 1997
+    url: https://doi.org/10.1162/neco.1997.9.8.1735
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-lstm
+    title: torch.nn.LSTM
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-pack
+    title: torch.nn.utils.rnn.pack_padded_sequence
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.utils.rnn.pack_padded_sequence.html
+    accessed: 2026-11-25
+    type: docs
+  - id: schuster1997
+    title: "Bidirectional recurrent neural networks"
+    author: Mike Schuster, Kuldip K. Paliwal
+    publisher: IEEE Transactions on Signal Processing 45(11)
+    year: 1997
+    url: https://doi.org/10.1109/78.650093
+    accessed: 2026-11-25
+    type: paper
+  - id: wang2018
+    title: "GLUE: A Multi-Task Benchmark and Analysis Platform for Natural Language Understanding"
+    author: Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, Samuel R. Bowman
+    publisher: arXiv
+    year: 2018
+    url: https://arxiv.org/abs/1804.07461
+    accessed: 2026-11-25
+    type: paper
+  - id: devlin2018
+    title: "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"
+    author: Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova
+    publisher: arXiv
+    year: 2018
+    url: https://arxiv.org/abs/1810.04805
+    accessed: 2026-11-25
+    type: paper
+  - id: maas2011
+    title: "Learning Word Vectors for Sentiment Analysis"
+    author: Andrew L. Maas, Raymond E. Daly, Peter T. Pham, Dan Huang, Andrew Y. Ng, Christopher Potts
+    publisher: ACL 2011 (ACL Anthology)
+    year: 2011
+    url: https://aclanthology.org/P11-1015/
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-save
+    title: "Saving and Loading Models"
+    publisher: PyTorch Tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html
+    accessed: 2026-11-25
+    type: docs
+  - id: socher2013
+    title: "Recursive Deep Models for Semantic Compositionality Over a Sentiment Treebank"
+    author: Richard Socher et al.
+    publisher: EMNLP 2013 (ACL Anthology)
+    year: 2013
+    url: https://aclanthology.org/D13-1170/
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Large Movie Review Dataset (IMDB) download page"
+    url: https://ai.stanford.edu/~amaas/data/sentiment/
+  - title: "Papers with Code: Sentiment analysis on SST-2"
+    url: https://paperswithcode.com/sota/sentiment-analysis-on-sst-2-binary
+exercises:
+  - id: bilstm-param-count
+    type: numeric
+    difficulty: medium
+    title: Count the LSTM parameters
+    prompt: "PyTorch's LSTM layer has $4H(I + H) + 8H$ parameters per direction, for input size $I$ and hidden size $H$. With $I = 64$ and $H = 128$, how many parameters do **both** directions have together?"
+    answer: 198656
+    tolerance: 0
+    hint: "One direction: $4 \\cdot 128 \\cdot (64 + 128) + 8 \\cdot 128$."
+    explanation: "One direction has $4 \\cdot 128 \\cdot 192 + 1{,}024 = 98{,}304 + 1{,}024 = 99{,}328$; two directions have 198,656. Add the 941,568 embedding parameters and the 514 of the output layer (256 · 2 + 2) to get the 1,140,738 that `python classifier.py` prints. The factor 4 is the four gate blocks, and the 8H is two bias vectors per gate."
+  - id: bilstm-why-pack
+    type: mcq
+    difficulty: medium
+    title: Why pack the sequences?
+    prompt: "A batch holds a 4-word sentence padded to 20 positions. Without packing, what goes wrong in the **backward** direction of the BiLSTM?"
+    options:
+      - "Nothing, padding is ignored automatically"
+      - "The backward LSTM starts at position 20 and reads 16 padding tokens before it reaches the real last word, so its final state is diluted by padding"
+      - "The forward LSTM cannot read the sentence"
+      - "The batch cannot be processed at all"
+    answer: 1
+    explanation: "The forward direction would at least see the real words first, although its 'final' state would also be read after the padding. The backward direction would begin in the padding. Packing tells the LSTM each sentence's true length, so both directions start and stop at real words, and `h` holds the state after the true last (or first) word."
+  - id: bilstm-scale
+    type: reveal
+    difficulty: hard
+    title: What would it take to reach 93%?
+    prompt: "The small models in this track reach about 80% on SST-2. Fine-tuned pre-trained Transformers such as BERT exceed 93%. Where does most of that gap come from, and why can't more epochs on SST-2 alone close it?"
+    answer: "Most of the gap comes from pre-training: BERT first learns from billions of words of unlabelled text what words mean and how they combine, including negation and contrast, and only then is fine-tuned on SST-2's labels. Our models learn everything from about 64,000 labelled phrases, so rare words, unseen words (5.6% of test tokens) and subtle constructions stay poorly learned. More epochs on the same small data mainly cause overfitting, as the falling validation accuracy after the best epoch shows."
+    explanation: "Scale here means both model size and, above all, the amount of text seen before the task. That is why modern NLP starts from pre-trained models; the GLUE benchmark was built to measure exactly this kind of transfer."
+---
+
+A **bidirectional LSTM classifier** reads a sentence word by word, once from left to right and once from right to left, and classifies it from the two final memories. Unlike the bag of embeddings, it sees word order, so it can in principle learn that "not" changes the word after it. This capstone trains it on SST-2, compares it honestly with the baseline, and wraps it in `classify.py` so you can test your own sentences.
+
+## Reading in both directions
+
+The previous lesson's <Term slug="long-short-term-memory">LSTM</Term> read text in one direction.<Cite id="hochreiter1997" /> For classification the whole sentence is available at once, so there is no reason to read only forwards. A bidirectional network runs two independent recurrent layers, one over the words in order and one in reverse, and combines their results; Schuster and Paliwal introduced the idea in 1997.<Cite id="schuster1997" />
+
+<Analogy breaks="A person rereads with understanding; the two LSTMs never exchange information while reading, only their final states are combined.">
+It is like reading a sentence once normally and once backwards and then deciding: the first reading ends knowing how the sentence finished, the second ends knowing how it began.
+</Analogy>
+
+<CodeFile path="code/projects/project-text/classifier.py" lines="26-41" highlight="32,38,39,40,41" title="classifier.py: BiLSTMClassifier" />
+
+The forward LSTM's last state summarises the sentence ending at its last word; the backward LSTM's last state summarises it ending at its first word. Line 40 joins the two 128-number states into 256 numbers, and a linear layer produces the two scores. Dropout (30%) on the embeddings and on the joined state reduces overfitting.
+
+### Packing: keep padding out
+
+Sentences in a batch are padded to the same length. If the padded matrix went straight into the LSTM, the backward direction would start in the padding and read many empty tokens before the real words. `pack_padded_sequence` (line 38) passes each sentence's true length, so both directions start and stop at real words.<Cite id="pt-pack" /> `enforce_sorted=False` lets the batch keep its original order.
+
+<Exercise id="bilstm-why-pack" />
+
+<MathSteps
+  title="Where the 1,140,738 parameters are"
+  legend={[
+    { symbol: 'I', meaning: 'input size per step: the 64-number word vector' },
+    { symbol: 'H', meaning: 'hidden size per direction: 128' },
+  ]}
+>
+  <Step tex="4H(I + H) + 8H = 4 \cdot 128 \cdot 192 + 1{,}024 = 99{,}328" words="One LSTM direction: four gate blocks, each with weights for the input and the previous state, plus PyTorch's two bias vectors per gate." />
+  <Step tex="2 \times 99{,}328 = \hl{198{,}656}" words="Both directions." />
+  <Step tex="941{,}568 + 198{,}656 + 514 = \hl{1{,}140{,}738}" words="Add the embedding table (14,712 × 64) and the output layer (256 · 2 + 2). The word vectors are still 83% of the model." />
+</MathSteps>
+
+<Exercise id="bilstm-param-count" />
+
+## Results: an honest comparison
+
+`python train_classifier.py --model bilstm` trains for four epochs with Adam at a learning rate of 0.002 and keeps the best epoch by validation accuracy. On the test machine (Windows 11 laptop CPU, PyTorch 2.15 CPU build, seed 0) it took 682 seconds, about 11 minutes, while other training jobs shared the CPU:
+
+| Epoch | Train loss | Validation accuracy (carved) |
+|---|---|---|
+| 1 | 0.556 | 83.4% |
+| 2 | 0.356 | 88.5% |
+| 3 | 0.271 | **90.4%** |
+
+Side by side with the baseline, on the same data and test sentences:
+
+| | Bag of embeddings | BiLSTM |
+|---|---|---|
+| Parameters | 941,698 | 1,140,738 |
+| Training time (test machine) | 96 s | 682 s |
+| **Test accuracy** (872 GLUE sentences) | 78.67% | **83.14%** |
+| Precision / recall, positive class | 74.2% / 89.2% | 80.5% / 88.3% |
+| False positives / misses | 138 / 48 | 95 / 52 |
+| Challenge set (48 sentences) | 60.4% (29) | 64.6% (31) |
+| UCI Amazon/Yelp/IMDb (3,000) | 79.1% | 81.2% |
+
+The BiLSTM gains 4.5 points of test accuracy, almost all of it from fewer false positives: 95 negative sentences called positive instead of 138. That fits the error analysis of the previous lesson, where negative reviews full of positive words fooled the average. It also transfers slightly better to the other review domains. It costs about seven times more training time.
+
+### Negation: better, not solved
+
+On the 48 challenge sentences the BiLSTM gets 31 right against 29 for the bag. With so few sentences, two extra correct answers are within noise, so the honest conclusion is "slightly better at most". Looking at individual sentences is more informative:
+
+- It now handles **negated praise**: "not good" is negative (85.4%) and "the film is not good" is negative (91.4%), where the bag said positive.
+- It still fails **negated criticism**: "not bad", "it was not bad", "i did not hate this movie" and "the story is never boring" are all called negative.
+
+The second group needs the model to learn that negating a negative word gives a mild positive, and the training data rarely shows that. Of the 63,982 training items, 5,594 contain "not", "n't", "never" or "no", and 68% of those are negative. Phrases such as "not bad", "not dull" or "never boring" occur only about 30 times in total. The architecture can represent order; the data barely teaches this pattern. Socher et al. evaluated exactly these two cases, negated positive and negated negative sentences, and reported that a tree-structured model trained on the treebank's phrase-level labels captured negation better than bag-of-words baselines.<Cite id="socher2013" />
+
+## What scale buys
+
+Both models here learn everything from about 64,000 labelled phrases. The GLUE paper's own baselines, trained without large-scale pre-training, also land in the 80s on SST-2.<Cite id="wang2018" /> Fine-tuned pre-trained Transformers do far better: BERT reported 93.5% (base) and 94.9% (large) on the SST-2 test set.<Cite id="devlin2018" /> The difference is mostly the billions of words of unlabelled text BERT read before it ever saw a sentiment label, from which it learned what words mean and how they combine.
+
+<Exercise id="bilstm-scale" />
+
+## Classifying your own sentences
+
+`train_classifier.py` saves the weights, the vocabulary and the configuration together in one checkpoint, so `classify.py` can rebuild exactly the same model and tokenizer.<Cite id="pt-save" />
+
+<CodeFile path="code/projects/project-text/classify.py" lines="19-35" highlight="23,24,25,31,32,33,34" title="classify.py: rebuild the model and score one sentence" />
+
+The sentence goes through the same tokenizer and vocabulary as in training. Softmax turns the two scores into a probability, and any word mapped to `<unk>` is reported, because the model knows nothing about it.
+
+```bash
+python classify.py "a warm, funny and clever film" "not good at all" "the jokes never miss"
+python classify.py --model checkpoints/bag.pt "not bad at all"     # compare with the baseline
+python classify.py                                                 # interactive: type, Enter, empty line to quit
+```
+
+On the test machine the BiLSTM and the bag of embeddings answered:
+
+| Sentence | BiLSTM | Bag of embeddings |
+|---|---|---|
+| not good | negative 85.4% | negative 65.7% |
+| the film is not good | negative 91.4% | positive 62.9% |
+| not bad | negative 96.1% | negative 100.0% |
+| the jokes never miss | negative 79.5% | negative 75.1% |
+| i laughed the whole time | positive 95.4% | positive 99.8% |
+| the cinematography was gorgeous but the plot was a total mess | negative 97.8% | negative 98.4% |
+
+Treat the probability as the model's confidence, not as a calibrated chance of being right: small networks trained with cross-entropy are often overconfident on unusual inputs, especially those full of unknown words.
+
+## Try it
+
+From `code/projects/project-text/`:
+
+```bash
+python train_classifier.py --smoke --model bilstm   # offline, bundled sentences, under a minute
+python train_classifier.py --model bilstm           # SST-2: see the timings above
+python classify.py "your own sentence here"
+```
+
+As a longer-text challenge, adapt `sst2_data.py` to the IMDB Large Movie Review Dataset: 25,000 training and 25,000 test reviews, each hundreds of words long.<Cite id="maas2011" /> Long reviews make the LSTM much slower per example and make the final state's limited memory a real constraint; truncating each review to its first and last 200 words is a common workaround.<Cite id="pt-lstm" />
+
+## Summary
+
+- A BiLSTM reads each sentence in both directions and classifies from the two final states; packing keeps padding out of both directions.
+- It has 1,140,738 parameters, 83% of them still in the word vectors.
+- On SST-2 it reaches 83.14% test accuracy against 78.67% for the bag of embeddings, mainly by making fewer false-positive errors, at about seven times the training time.
+- Saving weights, vocabulary and configuration together lets `classify.py` rebuild the exact model and score any sentence, reporting unknown words.
+- Small models trained from scratch stay around 80% on SST-2; pre-trained Transformers exceed 93% because of what they learned from unlabelled text.

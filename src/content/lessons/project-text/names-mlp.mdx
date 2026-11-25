@@ -1,0 +1,201 @@
+---
+title: A neural name generator (Bengio-style MLP)
+slug: names-mlp
+track: project-text
+level: intermediate
+order: 20
+minutes: 25
+module: Generating text
+summary: Replace the count table with a small neural network that reads the last three letters through learned embeddings. With 11,897 parameters and about two minutes of CPU training, the dev loss falls from the bigram's 2.45 to 2.14.
+hatnote: The model follows Bengio et al. (2003) at the character level, as rebuilt in Karpathy's makemore.
+prerequisites: [names-bigram]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Build the context-3 MLP with 10-dimensional embeddings (11,897 parameters)
+  - Train it and beat the bigram dev loss (about 2.1-2.2)
+  - Sample names, with or without a starting prefix, and judge them
+build: mlp_lm.py, a neural language model that writes names, and generate.py to sample from it
+reviewed: 2026-11-25
+seeAlso: [names-bigram, shakespeare-lstm]
+sources:
+  - id: bengio2003
+    title: "A Neural Probabilistic Language Model"
+    author: Yoshua Bengio, Réjean Ducharme, Pascal Vincent, Christian Jauvin
+    publisher: Journal of Machine Learning Research 3
+    year: 2003
+    url: https://www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf
+    accessed: 2026-11-25
+    type: paper
+  - id: makemore
+    title: "makemore (GitHub repository)"
+    author: Andrej Karpathy
+    year: 2022
+    url: https://github.com/karpathy/makemore
+    accessed: 2026-11-25
+    type: code
+  - id: pt-embedding
+    title: torch.nn.Embedding
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Embedding.html
+    accessed: 2026-11-25
+    type: docs
+  - id: karpathy-zero-to-hero
+    title: "Neural Networks: Zero to Hero (video course)"
+    author: Andrej Karpathy
+    url: https://karpathy.ai/zero-to-hero.html
+    accessed: 2026-11-25
+    type: video
+  - id: pt-ce
+    title: torch.nn.functional.cross_entropy
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.cross_entropy.html
+    accessed: 2026-11-25
+    type: docs
+  - id: d2l-lm
+    title: "Dive into Deep Learning, 9.3 Language Models"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_recurrent-neural-networks/language-model.html
+    accessed: 2026-11-25
+    type: book
+furtherReading:
+  - title: "Karpathy: Building makemore Part 2: MLP (video)"
+    url: https://www.youtube.com/watch?v=TCH_1BHY58I
+  - title: "Wikipedia: Word embedding"
+    url: https://en.wikipedia.org/wiki/Word_embedding
+exercises:
+  - id: mlp-param-count
+    type: numeric
+    difficulty: easy
+    title: Count the parameters
+    prompt: "The model has an embedding table of 27 × 10, a hidden layer from 30 inputs to 200 units (with biases) and an output layer from 200 to 27 (with biases). How many parameters is that in total?"
+    answer: 11897
+    tolerance: 0
+    hint: "Embedding 27·10; hidden 30·200 + 200; output 200·27 + 27."
+    explanation: "270 + 6,200 + 5,427 = 11,897. `python mlp_lm.py` prints the same number. Note that 30 is 3 characters × 10 numbers each: the hidden layer sees the three embeddings side by side."
+  - id: mlp-start-loss
+    type: mcq
+    difficulty: medium
+    title: A suspicious first loss
+    prompt: "You remove the lines that shrink the output layer at initialisation (`self.out.weight.mul_(0.1)`), and the first printed loss is 3.9 instead of 3.30. What does that tell you?"
+    options:
+      - "The model has already learned something before training"
+      - "The initial outputs are confidently wrong: the random scores are spread out, so some wrong letters get high probability"
+      - "The data split is broken"
+      - "The learning rate is too small"
+    answer: 1
+    explanation: "An untrained model should be unsure, giving every symbol about 1/27 and a loss of $\\ln 27 = 3.30$. A higher first loss means the random scores are large, so the softmax is confident before it knows anything. Training then wastes its first steps undoing that confidence. Scaling the last layer down at initialisation fixes it, a check Karpathy recommends in the makemore lectures."
+  - id: mlp-why-generalise
+    type: reveal
+    difficulty: medium
+    title: Why does the network beat the table?
+    prompt: "A count table with a 3-letter context would need $27^3 = 19{,}683$ rows, most of them never seen. The MLP uses the same 3-letter context with only 11,897 parameters and does better. Why?"
+    answer: "The network does not store each context separately. Every letter is a point in a shared 10-dimensional embedding space, and the hidden layer is a smooth function of those points. Contexts made of letters that behave alike (for example different vowels) get similar inputs and therefore similar predictions, so evidence from one context helps others it has never seen."
+    explanation: "This sharing is the central idea of Bengio et al. (2003): learn a distributed representation for each symbol together with the prediction function. A table cannot generalise this way; each cell learns only from its own counts."
+---
+
+A **neural language model** predicts the next symbol with a neural network instead of a count table. This lesson builds the model that Bengio and colleagues proposed in 2003, at the level of characters: the last three letters are turned into learned vectors, passed through a hidden layer, and scored against all 27 symbols.<Cite id="bengio2003" /> With 11,897 parameters and about two minutes of training on a CPU, it lowers the dev loss from the bigram table's 2.45 to 2.14.
+
+## From a table to a function
+
+The bigram table from the previous lesson sees one letter. Extending the table to three letters does not work well: it would need $27^3 = 19{,}683$ rows of 27 probabilities, and most three-letter contexts appear rarely or never in 25,626 names. Each cell learns only from its own counts.
+
+Bengio et al. proposed a different design: give every symbol a learned vector, its <Term slug="embedding" />, and compute the next-symbol probabilities with a smooth function of those vectors.<Cite id="bengio2003" /> Symbols that behave alike get similar vectors, so what the model learns about one context carries over to similar ones. Karpathy's makemore rebuilds exactly this model on the names, which is the version used here.<Cite id="makemore" />
+
+<Analogy breaks="Real map pins have two coordinates; here each letter has ten, and the axes have no names. Plots in two dimensions are only projections.">
+An embedding is like a pin on a map for each letter. Training moves the pins so that letters used in similar ways, such as vowels, end up near each other, and nearby pins lead to similar predictions.
+</Analogy>
+
+## The training examples
+
+Each name provides one example per character: the three previous characters as input, and the character that follows as the target. "emma" gives five examples: `...` → e, `..e` → m, `.em` → m, `emm` → a and `mma` → `.`.
+
+<CodeFile path="code/projects/project-text/mlp_lm.py" lines="22-32" highlight="26,29,30,31" title="mlp_lm.py: a sliding window of three characters" />
+
+The training names produce 182,625 examples, the same number of predictions the bigram model was scored on, so the losses are directly comparable.
+
+## The network
+
+<CodeFile path="code/projects/project-text/mlp_lm.py" lines="35-50" highlight="39,40,41,43,47,48,49,50" title="mlp_lm.py: embeddings, a tanh layer and 27 scores" />
+
+The forward pass has four steps. Each of the three input ids looks up a row of the embedding table, a matrix with one trainable row of 10 numbers per symbol.<Cite id="pt-embedding" /> The three rows are placed side by side into 30 numbers. A hidden layer of 200 units with the tanh activation mixes them, and an output layer produces 27 scores, one per possible next symbol.
+
+<MathSteps
+  title="The forward pass and its parameter count"
+  legend={[
+    { symbol: 'C', meaning: 'embedding table, 27 rows × 10 columns' },
+    { symbol: 'x', meaning: 'the three embeddings side by side (30 numbers)' },
+    { symbol: 'h', meaning: 'hidden layer activations (200 numbers)' },
+    { symbol: 'W_1, b_1, W_2, b_2', meaning: 'weights and biases of the two linear layers' },
+  ]}
+>
+  <Step tex="x = [\,C_{c_1},\ C_{c_2},\ C_{c_3}\,] \in \mathbb{R}^{30}" words="Look up the three characters' rows and concatenate them. The table has 27 × 10 = 270 parameters." example="for '.em': the rows for '.', 'e' and 'm'" />
+  <Step tex="h = \tanh(x W_1 + b_1) \in \mathbb{R}^{200}" words="A hidden layer squashes a weighted mix of the 30 inputs into the range −1 to 1. Weights and biases: 30·200 + 200 = 6,200." />
+  <Step tex="z = h W_2 + b_2 \in \mathbb{R}^{27}" words="One score per possible next character. Weights and biases: 200·27 + 27 = 5,427." />
+  <Step tex="p = \operatorname{softmax}(z), \qquad L = -\ln p_{\text{true}}" words="Softmax turns the scores into probabilities, and the loss is the same negative log-likelihood the bigram model was scored with." />
+  <Step tex="270 + 6{,}200 + 5{,}427 = \hl{11{,}897}" words="The total parameter count, which `python mlp_lm.py` prints." />
+</MathSteps>
+
+<Exercise id="mlp-param-count" />
+
+Bengio's paper also adds a direct connection from the embeddings to the output and works on words instead of characters; the structure is otherwise the same.<Cite id="bengio2003" /> The code uses PyTorch's `cross_entropy`, which applies the softmax and the negative log internally and is more numerically stable than doing both by hand.<Cite id="pt-ce" />
+
+### A sensible starting point
+
+Line 43 multiplies the output weights by 0.1 at initialisation. Small output weights give 27 nearly equal scores, so the untrained model is close to uniform and its first loss is close to $\ln 27 = 3.30$. The test machine printed 3.2951 at step 0. A much higher first loss means the random network is confidently wrong, and training spends its first steps undoing that; Karpathy uses this check in the makemore lectures.<Cite id="karpathy-zero-to-hero" />
+
+<Exercise id="mlp-start-loss" />
+
+## Training
+
+The loop draws a random minibatch of 32 examples, computes the loss, backpropagates and takes a gradient-descent step with learning rate 0.1. After 70% of the steps, the learning rate drops to 0.01 for finer adjustments.
+
+<CodeFile path="code/projects/project-text/mlp_lm.py" lines="109-122" highlight="111,113,114,116,118,119" title="mlp_lm.py: minibatch SGD with one learning-rate drop" />
+
+The full training loss and dev loss are measured five times during the run. Watching both is the simplest overfitting check: if training loss kept falling while dev loss rose, the model would be memorising the training names.<Cite id="d2l-lm" />
+
+## Results
+
+Measured on the course's test machine (Windows 11 laptop CPU, PyTorch 2.15 CPU build, seed 42), `python mlp_lm.py` took about 1 minute 45 seconds of training:
+
+| Step | Train loss | Dev loss |
+|---|---|---|
+| 0 | 3.2951 | (uniform: 3.2958) |
+| 10,000 | 2.2615 | 2.2659 |
+| 20,000 | 2.2268 | 2.2458 |
+| 30,000 | 2.1887 | 2.2193 |
+| 40,000 | 2.1141 | 2.1454 |
+| 50,000 | 2.1086 | **2.1418** |
+
+The test loss, measured once at the end, was 2.1397. The drop after step 35,000 is the learning-rate change. The gap between train (2.11) and dev (2.14) is small, so the model fits the data without much memorising. A larger hidden layer or embedding would lower the loss a little further and widen that gap; makemore's lectures land in the same 2.1-2.2 range for this size.<Cite id="karpathy-zero-to-hero" />
+
+| Model | Dev loss | Perplexity |
+|---|---|---|
+| Uniform guess | 3.30 | 27.0 |
+| Bigram counts (previous lesson) | 2.45 | 11.6 |
+| MLP, 3-letter context | **2.14** | **8.5** |
+
+Samples at temperature 1 now look much more like names: `anueden, kis, marian, dan, shan, silaylen, kemarco, man, emiah, aden`. Some are real names, and the rest at least follow English spelling patterns over several letters.
+
+<Exercise id="mlp-why-generalise" />
+
+## Try it
+
+From `code/projects/project-text/`:
+
+```bash
+python mlp_lm.py --smoke          # 2,000 steps, a setup check: loss falls from 3.30 to about 2.36
+python mlp_lm.py                  # the full run: about 2 minutes, dev loss about 2.14
+python generate.py --model checkpoints/mlp.pt --prefix ma --num 5 --temperature 0.8 --top-k 10
+python mlp_lm.py --block 5 --emb 16 --hidden 300   # a longer context and a wider model: compare dev loss
+```
+
+With `--prefix ma`, temperature 0.8 and top-k 10, the test machine produced `maritha, marienne, maya, mader, mariel`. Try temperature 0.3 (safe, repetitive names) and 1.5 (inventive, often unpronounceable) to feel what the knob does. Change one setting at a time and compare the dev loss, never the test loss, so the test set stays a fair final check.
+
+## Summary
+
+- The Bengio-style MLP turns the last three characters into learned 10-number embeddings, mixes them in a 200-unit tanh layer and scores 27 possible next characters.
+- It has 11,897 parameters: 270 in the embedding table, 6,200 in the hidden layer and 5,427 in the output layer.
+- A small output layer at initialisation gives a first loss near $\ln 27 = 3.30$, the sign of a healthy start.
+- After about two minutes of CPU training the dev loss is 2.14 (perplexity 8.5), against 2.45 for the bigram table.
+- Embeddings let similar contexts share what they learn, which a count table cannot do.
