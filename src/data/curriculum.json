@@ -2697,7 +2697,7 @@
       "title": "Handwritten digits and letters",
       "kind": "project",
       "level": "intermediate",
-      "codeDir": "code/projects/digits-letters/",
+      "codeDir": "code/projects/project-digits-letters/",
       "blurb": "Recognise handwritten digits (MNIST) and letters (EMNIST), then draw your own and let the model read them.",
       "outcome": "A CNN at about 99% on MNIST and about 92-94% on EMNIST letters, plus a drawing app that reads your handwriting.",
       "datasets": [
@@ -2770,7 +2770,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/digits-letters/data.py"
+                "code/projects/project-digits-letters/data.py"
               ]
             },
             {
@@ -2816,8 +2816,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/digits-letters/models.py",
-                "code/projects/digits-letters/train.py"
+                "code/projects/project-digits-letters/models.py",
+                "code/projects/project-digits-letters/train.py"
               ]
             },
             {
@@ -2866,8 +2866,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/digits-letters/models.py",
-                "code/projects/digits-letters/train.py"
+                "code/projects/project-digits-letters/models.py",
+                "code/projects/project-digits-letters/train.py"
               ]
             },
             {
@@ -2911,7 +2911,7 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/digits-letters/evaluate.py"
+                "code/projects/project-digits-letters/evaluate.py"
               ]
             }
           ]
@@ -2962,8 +2962,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/digits-letters/data.py",
-                "code/projects/digits-letters/train.py"
+                "code/projects/project-digits-letters/data.py",
+                "code/projects/project-digits-letters/train.py"
               ]
             },
             {
@@ -3009,8 +3009,8 @@
                 ]
               },
               "codeFiles": [
-                "code/projects/digits-letters/preprocess.py",
-                "code/projects/digits-letters/draw_app.py"
+                "code/projects/project-digits-letters/preprocess.py",
+                "code/projects/project-digits-letters/draw_app.py"
               ]
             }
           ]

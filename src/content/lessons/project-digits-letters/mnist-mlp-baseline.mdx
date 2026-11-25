@@ -1,0 +1,208 @@
+---
+title: An MLP baseline for MNIST
+slug: mnist-mlp-baseline
+track: project-digits-letters
+level: intermediate
+order: 20
+minutes: 20
+module: Digits (MNIST)
+summary: Train a 784→128→10 multilayer perceptron on MNIST with a reusable training script, check it in seconds with --smoke, reach about 97% test accuracy in about a minute on a CPU, and keep the number as the baseline the CNN has to beat.
+hatnote: For loading and normalising the images, see "Meet MNIST".
+prerequisites: [mnist-dataset]
+tools: [Python 3, PyTorch, torchvision]
+outcomes:
+  - Train a 784→128→10 MLP to about 97-98% test accuracy
+  - Use the training script with --smoke and full runs
+  - Record a baseline to compare the CNN against
+build: models.py with an MLP, and train.py, the training script for the whole project
+reviewed: 2026-11-25
+seeAlso: [mnist-dataset, mnist-cnn]
+sources:
+  - id: pt-mnist-example
+    title: "pytorch/examples: MNIST"
+    publisher: PyTorch (GitHub)
+    url: https://github.com/pytorch/examples/tree/main/mnist
+    accessed: 2026-11-25
+    type: code
+  - id: tv-mnist
+    title: torchvision.datasets.MNIST
+    publisher: PyTorch
+    url: https://docs.pytorch.org/vision/stable/generated/torchvision.datasets.MNIST.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-optimization
+    title: "Optimizing Model Parameters"
+    publisher: PyTorch
+    url: https://docs.pytorch.org/tutorials/beginner/basics/optimization_tutorial.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-ce
+    title: torch.nn.CrossEntropyLoss
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
+    accessed: 2026-11-25
+    type: docs
+  - id: kingma2014
+    title: "Adam: A Method for Stochastic Optimization"
+    author: Diederik P. Kingma, Jimmy Ba
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1412.6980
+    accessed: 2026-11-25
+    type: paper
+  - id: wiki-mnist
+    title: MNIST database
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/MNIST_database
+    accessed: 2026-11-25
+    type: wikipedia
+furtherReading:
+  - title: "3Blue1Brown: But what is a neural network?"
+    url: https://www.3blue1brown.com/lessons/neural-networks
+  - title: "Michael Nielsen: Neural Networks and Deep Learning, chapter 1 (an MNIST MLP from scratch)"
+    url: https://neuralnetworksanddeeplearning.com/chap1.html
+exercises:
+  - id: mlp-params-256
+    type: numeric
+    difficulty: easy
+    title: A wider hidden layer
+    prompt: "How many parameters does the MLP have with 256 hidden units instead of 128 (784 → 256 → 10)?"
+    answer: 203530
+    tolerance: 0
+    hint: "Each layer has inputs × outputs weights plus one bias per output."
+    explanation: "First layer $784 \\times 256 + 256 = 200{,}960$; second layer $256 \\times 10 + 10 = 2{,}570$; total $203{,}530$, twice the 101,770 of the default model."
+  - id: mlp-no-softmax
+    type: mcq
+    difficulty: medium
+    title: Where is the softmax?
+    prompt: "The MLP ends with `nn.Linear(128, 10)` and no softmax layer. Why?"
+    options:
+      - "Softmax is not needed for classification"
+      - "`nn.CrossEntropyLoss` expects raw scores (logits) and applies log-softmax itself"
+      - "Softmax would make the model too slow on a CPU"
+      - "The argmax at test time already computes probabilities"
+    answer: 1
+    explanation: "`CrossEntropyLoss` combines log-softmax and the negative log-likelihood in one numerically stable step, so it must receive logits. Adding your own softmax applies it twice, which squashes the gradients and slows learning. When you want probabilities (as the drawing app does), apply `torch.softmax` to the logits outside the model."
+  - id: mlp-epoch-one
+    type: reveal
+    difficulty: medium
+    title: Why so good so soon?
+    prompt: "The MLP is already at about 96% test accuracy after one epoch, and the next two epochs add only about one point. What does that tell you, and how would you try to get past 98%?"
+    answer: "One epoch is 938 weight updates on varied data, enough for a small model to learn most of the easy structure; the remaining errors are harder cases. To go further you can train longer, widen the hidden layer, add a layer, use data augmentation, or switch to a model that understands images better: the CNN in the next lesson."
+    explanation: "Gains slowing down is normal: learning curves flatten. Wikipedia's MNIST table lists a 784-800-10 MLP at 1.6% error (98.4%), with a much wider layer and longer training; the CNN reaches about 99% with fewer tricks."
+---
+
+A **baseline** is the simplest reasonable model for a task, trained first so that every later model has a number to beat. For MNIST the classic baseline is a small <Term slug="perceptron">multilayer perceptron</Term> (MLP) that looks at the 784 pixel values of an image and outputs 10 scores, one per digit. This lesson builds that model, writes `train.py`, the training script the whole project reuses, and measures about 97% test accuracy in about a minute on a laptop CPU.
+
+## Why start with a baseline
+
+A number on its own says little. If a CNN scores 99%, is that impressive? Only a comparison answers that question. The baseline also tests the plumbing: if a simple MLP cannot learn, the bug is almost certainly in the data or the training loop, not in the architecture.
+
+The official PyTorch MNIST example follows the same idea: one short script that loads the data, defines a model, trains it and reports test accuracy after each <Term slug="epoch" />.<Cite id="pt-mnist-example" />
+
+## The model: 784 → 128 → 10
+
+An MLP cannot take a 28×28 grid directly. `nn.Flatten()` first unrolls each image row by row into a vector of 784 numbers. A hidden layer of 128 units with <Term slug="relu" /> follows, then an output layer with 10 units.
+
+<CodeFile path="code/projects/project-digits-letters/models.py" lines="11-24" title="models.py: the MLP baseline" />
+
+<Analogy breaks="A person reading the ribbon could still notice repeated patterns; the MLP genuinely has no built-in idea of which numbers were neighbours, and must learn every pixel position separately.">
+Flattening is like cutting a photo into its 28 rows and taping them end to end into one long ribbon: every pixel is still there, but the fact that pixel 1 and pixel 29 were stacked on top of each other is no longer visible.
+</Analogy>
+
+The last layer outputs raw scores called **logits**. The model has no <Term slug="softmax" /> at the end, because PyTorch's <Term slug="cross-entropy">cross-entropy loss</Term> takes logits and applies log-softmax internally, which is faster and numerically safer.<Cite id="pt-ce" />
+
+### Counting the parameters
+
+<MathSteps
+  title="Parameters of the 784 → 128 → 10 MLP"
+  legend={[
+    { symbol: 'n_{in}', meaning: 'inputs to a layer' },
+    { symbol: 'n_{out}', meaning: 'outputs of the layer' },
+  ]}
+>
+  <Step tex="n_{in} \cdot n_{out} + \hl{n_{out}}" words="A fully connected layer has one weight per input-output pair, plus one bias per output." />
+  <Step tex="784 \cdot 128 + 128 = \hl{100{,}480}" words="The hidden layer. Almost all of the model is here: every one of the 128 units has its own weight for every pixel." />
+  <Step tex="128 \cdot 10 + 10 = \hl{1{,}290}" words="The output layer: 10 digit scores from 128 hidden values." />
+  <Step tex="100{,}480 + 1{,}290 = 101{,}770" words="The total. `python models.py` prints the same number, layer by layer." />
+</MathSteps>
+
+## The training script
+
+`train.py` turns the training loop from the PyTorch optimisation tutorial into a command-line tool.<Cite id="pt-optimization" /> Its options choose the dataset, the model and the run length; the defaults are the ones used for the numbers in these lessons.
+
+<CodeFile path="code/projects/project-digits-letters/train.py" lines="24-40" highlight="32,37-38" title="train.py: command-line options" />
+
+### One epoch of training
+
+Each step takes a mini-batch of 64 images and performs the same five operations. With 60,000 images, one epoch is 938 steps.
+
+<CodeFile path="code/projects/project-digits-letters/train.py" lines="43-56" highlight="47-51" title="train.py: the training loop" />
+
+1. **Forward pass.** The batch of shape `(64, 1, 28, 28)` goes through the model and comes out as `(64, 10)` logits.
+2. **Loss.** Cross-entropy measures how little probability the model gave to the right digits, averaged over the batch.<Cite id="pt-ce" />
+3. **Zero the gradients.** PyTorch adds new gradients to old ones unless they are cleared.
+4. **Backward pass.** `loss.backward()` computes the gradient of the loss with respect to every weight.
+5. **Update.** The optimiser moves every weight a small step against its gradient.
+
+The optimiser is **Adam** with learning rate 0.001. Adam adapts the step size of each weight from running averages of its past gradients, and the default settings from its paper work well on many problems without tuning.<Cite id="kingma2014" />
+
+<Exercise id="mlp-no-softmax" />
+
+### Measuring accuracy
+
+After each epoch the script runs the whole test set through the model and counts how often the highest score belongs to the right digit.
+
+<CodeFile path="code/projects/project-digits-letters/train.py" lines="59-67" title="train.py: test accuracy" />
+
+`model.eval()` switches layers such as dropout to evaluation behaviour (the CNN uses dropout; the MLP does not, but the habit is cheap), and `@torch.no_grad()` tells PyTorch not to record operations for backpropagation, which saves time and memory.<Cite id="pt-optimization" />
+
+## Try it
+
+From `code/projects/project-digits-letters/`, first run the smoke test. It trains on a fixed sample of 1,000 images for one epoch, checks that the loss went down, and finishes in seconds:
+
+```bash
+python train.py --model mlp --smoke
+```
+
+```text
+MLP on mnist: 101,770 parameters, 1,000 training images, 1 epoch(s)
+epoch 1: test accuracy 78.80%  (1 s so far)
+smoke test OK: loss 2.01 -> 1.01 in 1 s (chance level is 10%; a full run reaches far higher accuracy)
+```
+
+Then the full run on all 60,000 images:
+
+```bash
+python train.py --model mlp
+```
+
+Measured on the course's test machine (Windows 11 laptop, PyTorch 2.15 CPU build), the whole command took 70 seconds including loading the data:<Cite id="tv-mnist" />
+
+| Epoch | Test accuracy | Time so far |
+|---|---|---|
+| 1 | 96.19% | 20 s |
+| 2 | 97.12% | 43 s |
+| 3 | **97.37%** | 62 s |
+
+Your numbers will differ by a few tenths of a percent with a different CPU, PyTorch version or seed (`--seed`). The model is saved as `checkpoints/mnist-mlp.pt`. Write down your final accuracy: it is the baseline.
+
+<Callout type="note">
+Larger MLPs do better. Wikipedia's MNIST table lists a 784-800-10 network at 1.6% error, and deeper MLPs trained with distorted copies of the images below 0.5%.<Cite id="wiki-mnist" /> Those results need much more computation and data augmentation; the next lesson gets further with less.
+</Callout>
+
+<Exercise id="mlp-params-256" />
+
+## What the baseline cannot do
+
+The MLP's first layer learns a separate weight for each pixel position. A stroke that appears two pixels further to the right activates completely different weights, so the network has to see enough examples of every pattern in every position. It also spends 100,352 of its 101,770 parameters on that first layer.
+
+A convolutional network fixes both problems by reusing one small set of weights at every position. That is the subject of [A CNN that reads digits at 99%](/course/project-digits-letters/mnist-cnn/).
+
+## Summary
+
+- A baseline is the simplest reasonable model; it gives later models a number to beat and tests the data pipeline.
+- The MLP flattens each image to 784 values and has 101,770 parameters, almost all in its first layer.
+- `train.py` runs the five-step loop (forward, loss, zero gradients, backward, update) with Adam at learning rate 0.001.
+- `--smoke` checks the whole pipeline in seconds; the full run reached 97.37% in about a minute.
+- The model outputs logits; `CrossEntropyLoss` applies the softmax itself.

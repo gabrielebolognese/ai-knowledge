@@ -24,3 +24,6 @@ code/**/checkpoints/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Plots and logs written by the companion scripts
+code/**/outputs/

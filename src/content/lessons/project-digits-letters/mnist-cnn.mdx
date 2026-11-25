@@ -1,0 +1,238 @@
+---
+title: A CNN that reads digits at 99%
+slug: mnist-cnn
+track: project-digits-letters
+level: intermediate
+order: 30
+minutes: 25
+module: Digits (MNIST)
+summary: Build a two-block convolutional network with 421,642 parameters, follow the shape of a batch through every layer, fix the classic missing-channel error, and train it to about 99% test accuracy on a CPU in under three minutes, compared with 97.4% for the MLP baseline.
+hatnote: This lesson replaces the model from "An MLP baseline for MNIST"; the training script stays the same.
+prerequisites: [mnist-mlp-baseline]
+tools: [Python 3, PyTorch, torchvision]
+outcomes:
+  - Build the 2-conv CNN and verify its 421,642 parameters
+  - Train it to about 99% and compare with the MLP baseline
+  - Fix the missing-channel-dimension error
+build: The CNN class in models.py, trained with train.py to about 99% on MNIST
+reviewed: 2026-11-25
+seeAlso: [mnist-mlp-baseline, mnist-evaluate, emnist-letters]
+sources:
+  - id: lecun1998
+    title: "Gradient-based learning applied to document recognition"
+    author: Yann LeCun, Léon Bottou, Yoshua Bengio, Patrick Haffner
+    publisher: Proceedings of the IEEE
+    year: 1998
+    url: https://doi.org/10.1109/5.726791
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-mnist-example
+    title: "pytorch/examples: MNIST"
+    publisher: PyTorch (GitHub)
+    url: https://github.com/pytorch/examples/tree/main/mnist
+    accessed: 2026-11-25
+    type: code
+  - id: pt-conv2d
+    title: torch.nn.Conv2d
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
+    accessed: 2026-11-25
+    type: docs
+  - id: cs231n-cnn
+    title: "CS231n: Convolutional Neural Networks for Visual Recognition"
+    publisher: Stanford University
+    url: https://cs231n.github.io/convolutional-networks/
+    accessed: 2026-11-25
+    type: course
+  - id: pt-maxpool
+    title: torch.nn.MaxPool2d
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
+    accessed: 2026-11-25
+    type: docs
+  - id: srivastava2014
+    title: "Dropout: A Simple Way to Prevent Neural Networks from Overfitting"
+    author: Nitish Srivastava, Geoffrey Hinton, Alex Krizhevsky, Ilya Sutskever, Ruslan Salakhutdinov
+    publisher: Journal of Machine Learning Research
+    year: 2014
+    url: https://jmlr.org/papers/v15/srivastava14a.html
+    accessed: 2026-11-25
+    type: paper
+  - id: lin2013
+    title: "Network In Network"
+    author: Min Lin, Qiang Chen, Shuicheng Yan
+    publisher: arXiv
+    year: 2013
+    url: https://arxiv.org/abs/1312.4400
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Dumoulin & Visin: A guide to convolution arithmetic for deep learning"
+    url: https://arxiv.org/abs/1603.07285
+  - title: "Dive into Deep Learning, chapter 7: Convolutional Neural Networks"
+    url: https://d2l.ai/chapter_convolutional-neural-networks/index.html
+  - title: "CNN Explainer (interactive visualisation)"
+    url: https://poloclub.github.io/cnn-explainer/
+exercises:
+  - id: cnn-output-size
+    type: numeric
+    difficulty: easy
+    title: A convolution without padding
+    prompt: "A 5×5 kernel slides over a 28×28 image with stride 1 and **no** padding. How wide is the output?"
+    answer: 24
+    tolerance: 0
+    hint: "Use $W_{out} = \\lfloor (W - K + 2P)/S \\rfloor + 1$."
+    explanation: "$(28 - 5 + 0)/1 + 1 = 24$. LeNet-5's first layer did the same on 32×32 inputs and got 28×28. `models.py` uses `padding = kernel_size // 2` instead, so the size stays 28 and the flattened size stays 3,136 for any odd kernel."
+  - id: cnn-params-k5
+    type: numeric
+    difficulty: medium
+    title: "Change the kernel size: predict the parameter count"
+    prompt: "`python train.py --kernel-size 5` builds the same CNN with 5×5 kernels (padding 2). Predict its total number of parameters before running `python models.py`."
+    answer: 454922
+    tolerance: 0
+    hint: "Only the two conv layers change: $(K \\cdot K \\cdot C_{in} + 1) \\cdot C_{out}$. The fully connected layers stay at 401,536 and 1,290."
+    explanation: "conv1 $(25 \\cdot 1 + 1) \\cdot 32 = 832$; conv2 $(25 \\cdot 32 + 1) \\cdot 64 = 51{,}264$; plus $401{,}536 + 1{,}290$ gives $454{,}922$. The kernels grew 2.8 times, but the model grew only 8%, because the fully connected layer dominates."
+  - id: cnn-k5-effect
+    type: mcq
+    difficulty: medium
+    title: "Change the kernel size: predict the effect"
+    prompt: "Before running it, predict: compared with 3×3 kernels (98.91% after 3 epochs), what will 5×5 kernels do to test accuracy and training time?"
+    options:
+      - "Accuracy jumps above 99.5%, training time about the same"
+      - "Accuracy about the same (within a few tenths of a percent), training noticeably slower"
+      - "Accuracy collapses below 90%, because 5×5 kernels cannot see thin strokes"
+      - "No change at all in either"
+    answer: 1
+    explanation: "Each 5×5 kernel does 25 multiplications per position instead of 9, so the convolutions cost about 2.8 times as much, while MNIST digits are already well described by stacked 3×3 filters (two 3×3 layers see a 5×5 patch). Measured on the test machine after 3 epochs: 98.98% instead of 98.91%, and 196 s of training instead of 158 s. The convolutions cost 2.8 times as much, but the whole run is only about 24% slower, because data loading and the large fully connected layer do not change. This is why modern CNNs mostly stack small 3×3 kernels."
+---
+
+A **convolutional neural network** (CNN) is a network whose first layers slide small grids of learned weights across the image instead of connecting every pixel to every unit.<Cite id="cs231n-cnn" /> LeCun and colleagues showed in 1998 that this design reads handwritten digits better than any fully connected network of the time; their LeNet-5 reached 0.95% test error on MNIST.<Cite id="lecun1998" /> This lesson builds a small modern CNN in the same spirit, follows a batch through it layer by layer, and trains it to about 99% on a CPU.
+
+## Two ideas that fit images
+
+The MLP from the [baseline lesson](/course/project-digits-letters/mnist-mlp-baseline/) treats the image as 784 unrelated numbers. A convolutional layer adds two assumptions that suit pictures:<Cite id="cs231n-cnn" />
+
+- **Local connectivity.** Each output value looks at a small patch only, for example 3×3 pixels, because strokes, corners and loops are local.
+- **Weight sharing.** The same small kernel is used at every position, so a detector for "short vertical stroke" learned in one place works everywhere in the image.
+
+<Analogy breaks="A real stencil is designed by a person; a CNN learns its kernels from data, and many of them look nothing like a neat pattern.">
+A convolution is like sweeping a small stencil across a page and writing down, at every position, how well the ink underneath matches the stencil. The sheet of scores is called a *feature map*.
+</Analogy>
+
+### One output value, and the size of the output
+
+<MathSteps
+  title="What a 3×3 convolution computes"
+  legend={[
+    { symbol: 'X', meaning: 'input image (one channel)' },
+    { symbol: 'K', meaning: '3×3 kernel of learned weights' },
+    { symbol: 'b', meaning: 'bias of the kernel' },
+    { symbol: 'W, K, P, S', meaning: 'input width, kernel size, padding, stride' },
+  ]}
+>
+  <Step tex="Y_{i,j} = b + \sum_{u=0}^{2}\sum_{v=0}^{2} \hl{K_{u,v}\, X_{i+u,\,j+v}}" words="Lay the kernel on the image with its corner at row i, column j, multiply the nine overlapping pairs, add them up, add the bias." />
+  <Step tex="K = \begin{pmatrix}1&0&-1\\1&0&-1\\1&0&-1\end{pmatrix},\; \text{patch} = \begin{pmatrix}1&2&0\\0&1&3\\2&1&0\end{pmatrix} \Rightarrow (1+0+2) - (0+3+0) = \hl{0}" words="A vertical-edge kernel adds the left column of the patch and subtracts the right one. Equal brightness on both sides gives 0: no edge here." />
+  <Step tex="W_{out} = \left\lfloor \frac{W - K + 2P}{S} \right\rfloor + 1" words="The output width: padded width, minus the kernel, divided by the stride, plus one for the starting position. Height works the same way." />
+  <Step tex="\frac{28 - 3 + 2\cdot 1}{1} + 1 = \hl{28}, \qquad \frac{28 - 2}{2} + 1 = \hl{14}" words="With padding 1, a 3×3 convolution keeps 28×28. A 2×2 max-pool with stride 2 halves it to 14, and a second pool gives 7." />
+</MathSteps>
+
+What PyTorch calls convolution is, strictly speaking, cross-correlation: the kernel is not flipped. Since the kernel is learned, the difference does not matter.<Cite id="pt-conv2d" />
+
+<Exercise id="cnn-output-size" />
+
+## The architecture
+
+The model has two convolutional blocks followed by a small classifier, the same overall shape as the official PyTorch MNIST example.<Cite id="pt-mnist-example" /> Each block is convolution, ReLU, then **2×2 max pooling**, which keeps the largest value in each 2×2 window and halves the width and height.<Cite id="pt-maxpool" />
+
+<CodeFile path="code/projects/project-digits-letters/models.py" lines="27-56" highlight="40,43,47,50" title="models.py: the CNN" />
+
+`python models.py` sends a dummy batch of 8 images through the network and prints the shape after every layer:
+
+```text
+input        (8, 1, 28, 28)
+Conv2d       (8, 32, 28, 28)
+ReLU         (8, 32, 28, 28)
+MaxPool2d    (8, 32, 14, 14)
+Conv2d       (8, 64, 14, 14)
+ReLU         (8, 64, 14, 14)
+MaxPool2d    (8, 64, 7, 7)
+Flatten      (8, 3136)
+Linear       (8, 128)
+ReLU         (8, 128)
+Dropout      (8, 128)
+Linear       (8, 10)
+```
+
+The image gets smaller (28 → 14 → 7) while the number of channels grows (1 → 32 → 64): the network trades position detail for more kinds of features. Early filters respond to edges and stroke fragments, the second block to combinations such as corners and loops.<Cite id="cs231n-cnn" />
+
+**Dropout** with probability 0.5 sits before the last layer. During training it zeroes a random half of the 128 values at every step, which keeps the classifier from relying on a few units; in evaluation mode it does nothing.<Cite id="srivastava2014" />
+
+### Where the parameters are
+
+<MathSteps
+  title="Counting the CNN's 421,642 parameters"
+  legend={[
+    { symbol: 'C_{in}, C_{out}', meaning: 'input and output channels' },
+    { symbol: 'K', meaning: 'kernel size (3)' },
+  ]}
+>
+  <Step tex="(K \cdot K \cdot C_{in} + 1) \cdot C_{out}" words="A conv layer has one K×K kernel per input channel for every output channel, plus one bias per output channel." />
+  <Step tex="\text{conv1: } (9 \cdot 1 + 1) \cdot 32 = \hl{320}, \quad \text{conv2: } (9 \cdot 32 + 1) \cdot 64 = \hl{18{,}496}" words="The second layer's kernels span all 32 channels of the first layer's output." />
+  <Step tex="\text{fc1: } 3136 \cdot 128 + 128 = \hl{401{,}536}, \quad \text{fc2: } 128 \cdot 10 + 10 = 1{,}290" words="The fully connected layers, counted like the MLP's." />
+  <Step tex="320 + 18{,}496 + 401{,}536 + 1{,}290 = 421{,}642" words="The total. The convolutions, which do the actual seeing, hold under 5% of it; fc1 holds 95%." />
+</MathSteps>
+
+That imbalance invites an experiment for later: replacing `Flatten` and the big linear layer with **global average pooling**, which averages each 7×7 map to one number, cuts the model to about 20,000 parameters at a small cost in accuracy.<Cite id="lin2013" />
+
+<Exercise id="cnn-params-k5" />
+
+## The missing channel dimension
+
+The most common error with a first CNN is feeding it a batch of shape `(N, 28, 28)`. `Conv2d` expects `(N, C, H, W)`; given three dimensions, it reads them as one unbatched image `(C, H, W)` with N channels.<Cite id="pt-conv2d" /> `python models.py` reproduces the error on purpose:
+
+```text
+RuntimeError: Given groups=1, weight of size [32, 1, 3, 3], expected input[1, 8, 28, 28] to have 1 channels, but got 8 channels instead
+```
+
+The fix is to insert the channel dimension with `x.unsqueeze(1)`, which turns `(8, 28, 28)` into `(8, 1, 28, 28)`. This project never meets the error in training, because `ToTensor()` already produces `(1, 28, 28)` per image, but it appears as soon as you build tensors by hand, for example from a NumPy array of drawings.
+
+<CodeFile path="code/projects/project-digits-letters/models.py" lines="116-122" highlight="117,122" title="models.py: reproducing and fixing the error" />
+
+## Try it
+
+The training script is unchanged; the CNN is its default model. From `code/projects/project-digits-letters/`:
+
+```bash
+python train.py --smoke     # 1,000 images, 1 epoch: about 75% in a few seconds
+python train.py             # the full run, 3 epochs
+```
+
+Measured on the course's test machine (laptop CPU, PyTorch 2.15), the full run took 2 minutes 46 seconds:<Cite id="pt-mnist-example" />
+
+| Epoch | CNN test accuracy | MLP test accuracy | CNN time so far |
+|---|---|---|---|
+| 1 | 98.43% | 96.19% | 55 s |
+| 2 | 98.67% | 97.12% | 105 s |
+| 3 | **98.91%** | 97.37% | 158 s |
+
+The CNN makes 109 mistakes on the 10,000 test images, against 263 for the MLP: fewer than half, with four times the parameters but the same training budget. Five epochs (`--epochs 5`, about 4.5 minutes) passed 99% in both runs measured: 99.02% with the default seed and 99.09% with `--seed 1`. Results vary by a few tenths of a percent between machines and seeds.
+
+<Callout type="pitfall">
+Each epoch takes about three times longer than for the MLP, because every convolution visits all 784 positions with 32 or 64 kernels. If a CPU run feels slow, `--threads` sets how many cores PyTorch uses, and `--smoke` remains the quick check.
+</Callout>
+
+<Exercise id="cnn-k5-effect" />
+
+## How it compares with LeNet-5
+
+The model in this lesson is a modern cousin of LeNet-5, not a copy. LeNet-5 took 32×32 inputs, used two convolutional layers with 5×5 kernels and only 6 and 16 feature maps, and shrank its maps with trainable averaging ("subsampling") layers followed by a squashing non-linearity. It had about 60,000 trainable parameters and was trained with a carefully tuned form of gradient descent.<Cite id="lecun1998" />
+
+Three later ideas account for most of the differences here: ReLU activations, max pooling instead of averaging, and dropout in the classifier, together with the Adam optimiser. They make a network of this size easy to train from default settings. The architecture's core idea, convolution and pooling stacked before a small classifier, is unchanged since 1998.<Cite id="cs231n-cnn" />
+
+## Summary
+
+- Convolutional layers reuse small learned kernels at every position (weight sharing) and look at local patches (local connectivity).
+- Output width is $\lfloor (W - K + 2P)/S \rfloor + 1$; padding 1 keeps 28×28, each 2×2 pool halves it.
+- The CNN has 421,642 parameters, 95% of them in the first fully connected layer.
+- A batch must have shape `(N, 1, 28, 28)`; use `unsqueeze(1)` when the channel dimension is missing.
+- Three epochs gave 98.91% test accuracy in under three minutes on a CPU, against 97.37% for the MLP.

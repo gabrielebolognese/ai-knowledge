@@ -1,0 +1,228 @@
+---
+title: "Capstone: draw a digit or letter and let your model read it"
+slug: handwriting-app
+track: project-digits-letters
+level: intermediate
+order: 60
+minutes: 30
+module: Letters (EMNIST) and the drawing app
+summary: Build a tkinter drawing window that sends your handwriting to the model you trained, with a live preview of the 28×28 image the model sees and its top-3 guesses. The key step is preprocessing the drawing exactly like the training data; skipping it drops a 99% model to between 15% and 40%.
+hatnote: This capstone uses the checkpoints saved in "A CNN that reads digits at 99%" and "From digits to letters with EMNIST".
+prerequisites: [emnist-letters, mnist-evaluate]
+tools: [Python 3, PyTorch, Pillow, tkinter]
+outcomes:
+  - Build a tkinter drawing canvas that sends your drawing to the saved model
+  - Preprocess the drawing exactly like the training data (crop, 20×20, centre of mass, polarity)
+  - Explain distribution shift and why skipping preprocessing breaks a 99% model
+build: draw_app.py, a desktop app that reads your handwriting, and preprocess.py, which frames drawings like the datasets
+reviewed: 2026-11-25
+seeAlso: [mnist-dataset, emnist-letters, mnist-evaluate]
+sources:
+  - id: wiki-mnist
+    title: MNIST database
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/MNIST_database
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: tv-mnist
+    title: torchvision.datasets.MNIST
+    publisher: PyTorch
+    url: https://docs.pytorch.org/vision/stable/generated/torchvision.datasets.MNIST.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-save-load
+    title: "Saving and Loading Models"
+    publisher: PyTorch
+    url: https://docs.pytorch.org/tutorials/beginner/saving_loading_models.html
+    accessed: 2026-11-25
+    type: docs
+  - id: lecun1998
+    title: "Gradient-based learning applied to document recognition"
+    author: Yann LeCun, Léon Bottou, Yoshua Bengio, Patrick Haffner
+    publisher: Proceedings of the IEEE
+    year: 1998
+    url: https://doi.org/10.1109/5.726791
+    accessed: 2026-11-25
+    type: paper
+  - id: cohen2017
+    title: "EMNIST: an extension of MNIST to handwritten letters"
+    author: Gregory Cohen, Saeed Afshar, Jonathan Tapson, André van Schaik
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1702.05373
+    accessed: 2026-11-25
+    type: paper
+  - id: d2l-shift
+    title: "Dive into Deep Learning, 4.7 Environment and Distribution Shift"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_linear-classification/environment-and-distribution-shift.html
+    accessed: 2026-11-25
+    type: book
+  - id: py-tkinter
+    title: "tkinter: Python interface to Tcl/Tk"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/library/tkinter.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pillow-imagedraw
+    title: "ImageDraw module"
+    publisher: Pillow
+    url: https://pillow.readthedocs.io/en/stable/reference/ImageDraw.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "Quiñonero-Candela et al. (eds.), Dataset Shift in Machine Learning (MIT Press, 2009)"
+    url: https://mitpress.mit.edu/9780262545877/dataset-shift-in-machine-learning/
+  - title: "TkDocs tutorial (modern tkinter)"
+    url: https://tkdocs.com/tutorial/
+exercises:
+  - id: app-polarity
+    type: mcq
+    difficulty: easy
+    title: The cheapest mistake
+    prompt: "A drawing app shrinks the whole 280×280 canvas (black ink on white) to 28×28 and sends it to the MNIST CNN without any other step. On redrawn test digits, the course measured 14.7% accuracy. Which single missing step explains most of the collapse?"
+    options:
+      - "Normalising with the mean and standard deviation"
+      - "Inverting the colours: MNIST has white ink on a black background"
+      - "Using a bigger canvas"
+      - "Training for more epochs"
+    answer: 1
+    explanation: "With inverted colours, the image is almost the opposite of everything the model has seen: the background, the largest part of the image, is bright. Adding the inversion alone lifted accuracy from 14.7% to 39.8%; cropping, scaling to 20×20 and centring by centre of mass brought it to 99.2%."
+  - id: app-shift-own-words
+    type: short
+    difficulty: medium
+    title: Distribution shift in your own words
+    prompt: "Explain to a friend, in two or three sentences, why a model with 99% test accuracy can fail on their handwriting, and what the app does about it."
+    answer: "The 99% was measured on images prepared in one particular way: white digits on black, scaled to a 20×20 box and centred by centre of mass. A drawing on a canvas is different (dark ink, any size, anywhere), so the model faces inputs unlike its training data, which is called distribution shift. The app removes most of the difference by preparing each drawing the same way as the training images before the model sees it."
+    explanation: "Test accuracy only predicts performance on data drawn from the same distribution as the test set. Matching the preprocessing is the cheapest way to keep real inputs inside that distribution; collecting training data that looks like real use is the more general fix."
+  - id: app-letters-gap
+    type: reveal
+    difficulty: hard
+    title: The last point for letters
+    prompt: "For digits, redrawn test images keep their accuracy after preprocessing (99.1% as stored, 99.2% redrawn). For letters it goes from 93.1% to 92.2%. Suggest reasons for the remaining gap and one way to test each."
+    answer: "The fake drawings have a uniform pen width and no grey levels, while EMNIST strokes vary and were blurred before downsampling: compare stroke thickness (mean ink) between redrawn and stored letters, or add a slight blur. The framing is matched only on average (the longest side is 23.7 pixels on average, but the original process depended on the scanned box): compare distributions, not only means. Training with small random shifts, scales and stroke widths (data augmentation) would make the model less sensitive to all of these."
+    explanation: "Measured on the course machine, redrawn letters had a mean intensity of 0.19 against 0.17 for EMNIST, so the pen is slightly too thick. Small residual shifts like this are normal; augmentation is the standard way to make a model robust to them."
+---
+
+The **capstone** of this project is a small desktop app: you draw a digit or a letter with the mouse, and the model you trained reads it, showing its three best guesses with probabilities. Building it takes few lines of interface code. The real lesson is the step in between, **preprocessing**: a drawing must be prepared exactly like the training images, or a model with 99% test accuracy fails on the first thing you draw.
+
+## Saving and loading the trained model
+
+`train.py` already saved each model with `save_checkpoint`. A checkpoint is a dictionary holding the model's `state_dict` (the tensors of learned weights), which PyTorch recommends over pickling the whole model object, plus everything needed to use it later.<Cite id="pt-save-load" />
+
+<CodeFile path="code/projects/project-digits-letters/models.py" lines="71-91" highlight="78,90" title="models.py: saving and loading a checkpoint" />
+
+The `dataset` entry is what lets one app serve both models: it tells the preprocessing which framing and which normalisation constants to use. `load_checkpoint` rebuilds the right architecture, loads the weights and calls `model.eval()`, so dropout is off and the same drawing always gets the same answer.<Cite id="pt-save-load" />
+
+## The drawing window
+
+tkinter, the interface toolkit bundled with Python, provides the window, a `Canvas` to draw on, labels and a button.<Cite id="py-tkinter" /> The canvas shows your strokes but cannot easily hand its pixels to Python, so the app keeps **two copies** of the drawing: the tkinter canvas you see, and a Pillow image of the same size that every stroke is also drawn into with `ImageDraw`.<Cite id="pillow-imagedraw" />
+
+<CodeFile path="code/projects/project-digits-letters/draw_app.py" lines="57-68" highlight="60-61,68" title="draw_app.py: every stroke is drawn twice" />
+
+The pen is 22 pixels wide on a 280×280 canvas. A digit drawn about 200 pixels tall and scaled down to 20 pixels then has strokes 2 to 3 pixels wide, like MNIST's. When you release the mouse button, `classify` runs the pipeline and updates the preview and the guesses.
+
+<CodeFile path="code/projects/project-digits-letters/draw_app.py" lines="70-78" highlight="73-74" title="draw_app.py: preprocess, predict, show" />
+
+<Figure src="/figures/digits-letters/draw-app.png" alt="The app window: on the left a white canvas with a large black handwritten 2; on the right a small black square showing a white 2 at 28 by 28 pixels, and the guesses 2 at 100.0%, 7 at 0.0% and 8 at 0.0%, above a Clear button." caption="draw_app.py with the MNIST CNN. The preview on the right is exactly the 28×28 image the model receives. Screenshot taken on Windows 11; the stroke was drawn by sending mouse events to the canvas." credit="Own work" license="CC BY 4.0" />
+
+## Distribution shift
+
+A test accuracy of 99% is a promise about images **like the test images**. If the inputs change, the promise no longer holds. This is called **distribution shift**: the data seen in use comes from a different distribution than the training data.<Cite id="d2l-shift" /> A canvas drawing differs from an MNIST image in three obvious ways: the colours are reversed, the digit can have any size, and it can sit anywhere on the canvas.
+
+<Analogy breaks="A person adapts to the new framing in a moment; the model has no way to adapt at all, which is why the conversion must happen before it sees the image.">
+Showing the model a raw canvas is like handing a cashier who has only ever seen coins a photocopy of a coin, enlarged and in the corner of a page: the information is there, but in a form they never learned to read.
+</Analogy>
+
+The fix is to remove those differences before the model sees the drawing, by repeating the steps that created the datasets. For MNIST those steps are known from LeCun and colleagues: scale the digit to fit 20×20 keeping its proportions, then centre it in 28×28 by its centre of mass.<Cite id="lecun1998" /><Cite id="wiki-mnist" />
+
+## The preprocessing pipeline
+
+### Step 1: polarity
+
+MNIST and EMNIST store white ink (high values) on a black background (0).<Cite id="tv-mnist" /> The canvas is the opposite, so mostly light images are inverted.
+
+<CodeFile path="code/projects/project-digits-letters/preprocess.py" lines="22-27" title="preprocess.py: white ink on black" />
+
+### Step 2: crop to the ink
+
+`crop_to_ink` cuts away every empty row and column, so it no longer matters where on the canvas you drew. Pixels count as ink above a value of 30, which ignores faint anti-aliasing noise.
+
+<CodeFile path="code/projects/project-digits-letters/preprocess.py" lines="30-35" title="preprocess.py: crop to the ink" />
+
+### Step 3: frame it like the dataset
+
+For digits, `mnist_frame` scales the crop so that its longer side is 20 pixels, pastes it into a black 28×28 image, then shifts it so the centre of mass lands at the centre.
+
+<MathSteps
+  title="Centring by centre of mass"
+  legend={[
+    { symbol: 'p_{r,c}', meaning: 'brightness of the pixel in row r, column c' },
+    { symbol: '\\bar r, \\bar c', meaning: 'centre of mass (row, column)' },
+  ]}
+>
+  <Step tex="\bar r = \frac{\sum_{r,c} \hl{p_{r,c}}\, r}{\sum_{r,c} p_{r,c}}" words="The ink-weighted average row: each pixel votes for its row with a weight equal to its brightness." />
+  <Step tex="\text{ink at rows } 10, 11, 18 \text{ with brightness } 1, 1, 2: \;\; \bar r = \frac{10 + 11 + 36}{4} = \hl{14.25}" words="A tiny example: the brighter pixel at row 18 pulls the average down the image." />
+  <Step tex="\Delta r = \operatorname{round}(14 - \bar r) = \hl{0}" words="Shift the image by the rounded difference. Measured over the MNIST training set, the centres of mass average exactly (14.0, 14.0), so 14 is the target." />
+</MathSteps>
+
+<CodeFile path="code/projects/project-digits-letters/preprocess.py" lines="38-52" highlight="41,50-51" title="preprocess.py: MNIST framing" />
+
+Letters were framed differently: EMNIST centres each character's bounding box in a square frame with a small border and downsamples it with bicubic interpolation, so letters fill more of the image.<Cite id="cohen2017" /> `emnist_frame` reproduces this. Its border was set from a measurement, not by trial on test images: with a border of 3/24 of the letter's size, the longest side of a framed letter comes out at 23.7 pixels, the same average as the EMNIST training letters (digits: 20.0 pixels).
+
+<CodeFile path="code/projects/project-digits-letters/preprocess.py" lines="55-66" title="preprocess.py: EMNIST framing" />
+
+### Step 4: the same tensor transform as training
+
+Finally, `predict` converts the 28×28 image with `drawing_transform`, which uses the same `ToTensor()` and the same mean and standard deviation as training, read from the same `STATS` table in `data.py`. Only the transpose is left out, because a drawing is already upright. Sharing one table means the two pipelines cannot drift apart.
+
+<CodeFile path="code/projects/project-digits-letters/preprocess.py" lines="77-93" highlight="82,90" title="preprocess.py: the whole pipeline and the prediction" />
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="88-91" title="data.py: the drawing transform shares STATS with training" />
+
+## Measuring what each step is worth
+
+A drawing app is hard to test by hand, so `preprocess.py --check` simulates it. It takes 1,000 test images, redraws each one as a canvas drawing (random size and position, solid black pen on white) and measures accuracy with full preprocessing and with the shortcuts a first version typically takes. Measured on the course machine:<Cite id="d2l-shift" />
+
+| Input given to the model | Digits CNN | Letters CNN |
+|---|---|---|
+| The stored test image | 99.1% | 93.1% |
+| Redrawn, full preprocessing | **99.2%** | **92.2%** |
+| Redrawn, canvas shrunk to 28×28 | 14.7% | 4.1% |
+| Redrawn, shrunk and inverted (no crop, no centring) | 39.8% | 41.0% |
+
+With full preprocessing, the redrawn images are read as well as the originals. Without it, the same model, with the same weights, falls to near chance. `outputs/preprocess-check.png` shows a few of these inputs side by side.
+
+<Exercise id="app-polarity" />
+
+## Try it
+
+From `code/projects/project-digits-letters/`, after training at least one model:
+
+```bash
+python draw_app.py                                     # digits (checkpoints/mnist-cnn.pt)
+python draw_app.py --ckpt checkpoints/letters-cnn.pt   # letters
+python draw_app.py --selftest                          # no window: draws two shapes in code and predicts
+python preprocess.py --check                           # the table above for your own model
+```
+
+Draw large, with one continuous gesture per stroke, then release the button. The right mouse button or **Clear** wipes the canvas. If no full model exists yet, the app falls back to the smoke-test checkpoint, which reads digits poorly but proves the pipeline works.
+
+<Callout type="tip">
+For letters, remember the classes merge upper and lower case: "a" means A or a. A single vertical bar is genuinely ambiguous between i and l, and the app's top-3 list shows the model hesitating between them.
+</Callout>
+
+<Callout type="warning">
+tkinter ships with the python.org installers for Windows and macOS. On some Linux distributions it is a separate package (for example `python3-tk` on Debian and Ubuntu); if `import tkinter` fails, install it with the system package manager.<Cite id="py-tkinter" />
+</Callout>
+
+<Exercise id="app-shift-own-words" />
+
+## Summary
+
+- A checkpoint stores the weights plus the dataset name and class names, so the app knows how to prepare inputs.
+- The app draws every stroke twice: on the visible tkinter canvas and into a Pillow image the model reads.
+- Distribution shift: a test score only holds for inputs like the test set.
+- Preprocessing repeats the dataset's construction: invert, crop to the ink, frame (20×20 plus centre of mass for digits, a bordered square for letters), then the training normalisation.
+- Measured: full preprocessing keeps 99.2% on redrawn digits; skipping it gives 15-40%.

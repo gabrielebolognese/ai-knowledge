@@ -1,0 +1,209 @@
+---
+title: "Meet MNIST: loading and looking at handwritten digits"
+slug: mnist-dataset
+track: project-digits-letters
+level: intermediate
+order: 10
+minutes: 15
+module: Digits (MNIST)
+summary: Download the 70,000 handwritten digits of MNIST with torchvision, check their shapes, labels and pixel values, normalise them with the dataset mean and standard deviation, and learn how each digit was centred, which matters again when you draw your own.
+hatnote: This is the first lesson of the handwritten digits and letters project. It assumes you can write a small PyTorch Dataset and DataLoader.
+prerequisites: []
+tools: [Python 3, PyTorch, torchvision, matplotlib]
+outcomes:
+  - Download MNIST with torchvision and inspect shapes, labels and pixel ranges
+  - Normalize with the dataset mean and standard deviation
+  - Plot a grid of samples and explain how MNIST was centred
+build: data.py, the data module the whole project shares
+reviewed: 2026-11-25
+seeAlso: [mnist-mlp-baseline, emnist-letters, handwriting-app]
+sources:
+  - id: wiki-mnist
+    title: MNIST database
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/MNIST_database
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: lecun1998
+    title: "Gradient-based learning applied to document recognition"
+    author: Yann LeCun, Léon Bottou, Yoshua Bengio, Patrick Haffner
+    publisher: Proceedings of the IEEE
+    year: 1998
+    url: https://doi.org/10.1109/5.726791
+    accessed: 2026-11-25
+    type: paper
+  - id: tv-mnist
+    title: torchvision.datasets.MNIST
+    publisher: PyTorch
+    url: https://docs.pytorch.org/vision/stable/generated/torchvision.datasets.MNIST.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-data
+    title: "Datasets & DataLoaders"
+    publisher: PyTorch
+    url: https://docs.pytorch.org/tutorials/beginner/basics/data_tutorial.html
+    accessed: 2026-11-25
+    type: docs
+  - id: tv-normalize
+    title: torchvision.transforms.Normalize
+    publisher: PyTorch
+    url: https://docs.pytorch.org/vision/stable/generated/torchvision.transforms.Normalize.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-mnist-example
+    title: "pytorch/examples: MNIST"
+    publisher: PyTorch (GitHub)
+    url: https://github.com/pytorch/examples/tree/main/mnist
+    accessed: 2026-11-25
+    type: code
+furtherReading:
+  - title: "Yadav & Bottou 2019: Cold Case: The Lost MNIST Digits"
+    url: https://arxiv.org/abs/1905.10498
+  - title: "Papers with Code: MNIST leaderboard"
+    url: https://paperswithcode.com/sota/image-classification-on-mnist
+exercises:
+  - id: mnist-normalized-ink
+    type: numeric
+    difficulty: easy
+    title: A pixel of pure ink
+    prompt: "After `ToTensor()` a fully inked pixel has the value $1.0$. What is it after `Normalize((0.1307,), (0.3081,))`? Give two decimals."
+    answer: 2.82
+    tolerance: 0.01
+    hint: "Subtract the mean, then divide by the standard deviation."
+    explanation: "$(1.0 - 0.1307) / 0.3081 = 0.8693 / 0.3081 \\approx 2.82$. A background pixel becomes $(0 - 0.1307)/0.3081 \\approx -0.42$. These are exactly the minimum and maximum that `python data.py` prints."
+  - id: mnist-centring
+    type: mcq
+    difficulty: easy
+    title: How a digit sits in its frame
+    prompt: "How was each MNIST digit positioned inside its 28×28 image?"
+    options:
+      - "Stretched to fill all 28×28 pixels"
+      - "Scaled to fit a 20×20 box, then moved so its centre of mass is at the centre of the image"
+      - "Scaled to fit a 20×20 box and placed in the top-left corner"
+      - "Cropped to the ink with no scaling"
+    answer: 1
+    explanation: "The digits were size-normalised to a 20×20 box keeping their aspect ratio, anti-aliased, then translated so the ink's centre of mass lands in the middle of the 28×28 field. A drawing app has to repeat these steps, as the capstone lesson shows."
+  - id: mnist-train-stats
+    type: short
+    difficulty: medium
+    title: Whose mean?
+    prompt: "The values 0.1307 and 0.3081 are the mean and standard deviation of the **training** images. Why not compute them on the training and test images together?"
+    answer: "The test set has to stand in for data the model has never seen. Any number fitted on data, even a mean, should come from the training set only; otherwise information from the test set leaks into the pipeline and the test score becomes slightly optimistic. In practice the difference here is tiny, but the habit matters."
+    explanation: "Normalisation constants are part of the model's preprocessing. The same rule applies to tokenizers, vocabularies and any other fitted step: fit on training data, then apply unchanged to validation, test and real inputs."
+---
+
+**MNIST** is a collection of 70,000 small grayscale pictures of handwritten digits, each labelled with the digit it shows.<Cite id="wiki-mnist" /> It was assembled by Yann LeCun, Corinna Cortes and Christopher Burges from two NIST handwriting databases and became the standard first benchmark for image classifiers after LeCun's 1998 paper on convolutional networks.<Cite id="lecun1998" /> This lesson downloads it, looks inside it, and writes `data.py`, the data module the rest of the project builds on.
+
+## What is in the dataset
+
+MNIST is split into 60,000 training images and 10,000 test images. Half of each split comes from NIST's Special Database 3, written by Census Bureau employees, and half from Special Database 1, written by high-school students, so the test set contains writers the model never saw during training.<Cite id="wiki-mnist" />
+
+Every image is 28×28 pixels, one byte per pixel. The background is 0 (black) and the ink has high values up to 255 (white); the edges of strokes are grey because the digits were anti-aliased when they were shrunk.<Cite id="lecun1998" />
+
+<Infobox title="MNIST at a glance" rows={[
+  { label: 'Images', value: '70,000 (60,000 train / 10,000 test)' },
+  { label: 'Size', value: '28 × 28 pixels, grayscale' },
+  { label: 'Classes', value: '10 (digits 0-9)' },
+  { label: 'Download', value: 'about 11 MB (four gzip files)' },
+  { label: 'Licence', value: 'not stated by the original page' },
+]} />
+
+### How each digit was framed
+
+The original scans were black-and-white images of varying size. LeCun and colleagues scaled each digit so that it fits inside a **20×20 box**, keeping its proportions, and then placed it in the 28×28 image so that its **centre of mass** sits at the centre.<Cite id="lecun1998" /> The centre of mass is the ink-weighted average position: bright pixels pull it towards themselves, faint pixels barely count.
+
+<Analogy breaks="A cardboard cut-out balances on one point in 3D; here the 'weight' of each pixel is simply its brightness, and the balance point is computed, not found by trial.">
+Centring by centre of mass is like balancing a cardboard cut-out of the digit on a fingertip and then sliding the whole picture until that balance point is exactly in the middle of the frame.
+</Analogy>
+
+This detail looks minor, but it is the reason a model that scores 99% on MNIST can still misread your own drawing. The capstone lesson, [Draw a digit or letter](/course/project-digits-letters/handwriting-app/), repeats these exact steps on canvas drawings.
+
+### The licence question
+
+The original MNIST page does not state a licence. Copies on the web are labelled CC BY-SA 3.0, MIT or public domain by different redistributors.<Cite id="wiki-mnist" /> This course therefore does not redistribute the images: `data.py` downloads them at run time from the mirror that torchvision uses, into a `data/` folder that git ignores.<Cite id="tv-mnist" />
+
+## Downloading MNIST with torchvision
+
+torchvision, PyTorch's computer-vision library, ships a ready-made `Dataset` class for MNIST. Passing `download=True` fetches the four files on first use; afterwards they are read from disk.<Cite id="tv-mnist" /> Each item is an `(image, label)` pair, exactly like the custom datasets in the PyTorch data tutorial.<Cite id="pt-data" />
+
+`load_datasets` in `data.py` wraps this for both datasets of the project. The letters branch is explained in [From digits to letters with EMNIST](/course/project-digits-letters/emnist-letters/).
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="94-101" title="data.py: loading MNIST" />
+
+Every image passes through a **transform** on its way out of the dataset. `ToTensor()` turns the 28×28 grid of bytes into a float tensor of shape `(1, 28, 28)` with values from 0 to 1. The leading 1 is the **channel** dimension: a colour image would have 3. Convolutional layers expect it, so keeping it from the start avoids a classic error later.<Cite id="tv-mnist" />
+
+## Normalising the pixels
+
+Neural networks train more smoothly when their inputs are centred around 0 with a spread of about 1, because the first layer's weights then start in a sensible range. `Normalize(mean, std)` does this for every pixel.<Cite id="tv-normalize" />
+
+<MathSteps
+  title="Normalising one pixel"
+  legend={[
+    { symbol: 'x', meaning: 'pixel value after ToTensor, between 0 and 1' },
+    { symbol: '\\mu', meaning: 'mean of all training pixels (0.1307)' },
+    { symbol: '\\sigma', meaning: 'standard deviation of all training pixels (0.3081)' },
+  ]}
+>
+  <Step tex="x - \hl{\mu}" words="Subtract the average pixel value. Since most pixels are background, the average is small: about 0.13." example="0 - 0.1307 = -0.1307 for a background pixel" />
+  <Step tex="\frac{x - \mu}{\hl{\sigma}}" words="Divide by the standard deviation, so a typical deviation from the mean becomes 1." example="(0 - 0.1307) / 0.3081 ≈ -0.42" />
+  <Step tex="x' = \frac{x-\mu}{\sigma} \in [-0.42,\; 2.82]" words="Background pixels become -0.42 and full ink becomes 2.82. Over the whole training set, the new values have mean 0 and standard deviation 1." />
+</MathSteps>
+
+The values 0.1307 and 0.3081 are the ones the official PyTorch MNIST example uses.<Cite id="pt-mnist-example" /> They are measured on the training images only; `python data.py --stats` recomputes them and prints the same numbers.
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="24-30" title="data.py: the normalisation constants" />
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="78-86" highlight="81,84" title="data.py: the transform every image goes through" />
+
+<Exercise id="mnist-normalized-ink" />
+
+## Try it
+
+From the folder `code/projects/project-digits-letters/`, with PyTorch installed (see [Install PyTorch](/course/setup/setup-install-pytorch/) or use [Google Colab](/course/setup/setup-colab/)), run:
+
+```bash
+python data.py
+```
+
+The first run downloads about 11 MB. On the course's test machine it printed:
+
+```text
+dataset      mnist: 60,000 train / 10,000 test images
+one image    (1, 28, 28) (channels, height, width), dtype torch.float32
+raw pixels   0.00 .. 1.00 after ToTensor (0 = black background, 1 = ink)
+normalized   -0.42 .. 2.82, using mean 0.1307 and std 0.3081
+stored labels 0 .. 9
+per class    min 5,421, max 6,742 training images
+first label  5 = '5'
+saved outputs/samples-mnist.png
+```
+
+Open `outputs/samples-mnist.png`. It shows the first 32 training digits with their labels; `save_grid` undoes the normalisation before plotting so the images look natural.
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="139-150" title="data.py: plotting a grid of samples" />
+
+Three things are worth noticing in the grid and in the printout:
+
+1. **The classes are not perfectly balanced.** The digit 5 has 5,421 training images and the digit 1 has 6,742. The imbalance is small, so plain accuracy remains a fair measure here.
+2. **Digits fill the middle and leave a margin.** That is the 20×20 box inside the 28×28 frame.
+3. **Handwriting varies a lot.** Some 4s are closed, some 7s have a bar, and a few images are hard to read even for a person.
+
+<Exercise id="mnist-centring" />
+
+## From dataset to batches
+
+Training uses mini-batches rather than one image at a time. `make_loaders` wraps both splits in a `DataLoader`, shuffles the training set every epoch, and offers a `smoke` option that keeps a fixed random sample of 1,000 images for a fast check of the whole pipeline.<Cite id="pt-data" />
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="115-129" title="data.py: subsets and data loaders" />
+
+<Callout type="tip">
+`num_workers=0` loads batches in the main process. It is slightly slower than parallel workers, but it works on every operating system without extra code; on Windows, parallel workers need the `if __name__ == "__main__":` guard and transforms that can be pickled, which is also why `data.py` uses named functions instead of lambdas.
+</Callout>
+
+## Summary
+
+- MNIST has 60,000 training and 10,000 test images of digits, 28×28 grayscale, white ink on black.
+- Each digit was scaled to fit 20×20 and centred by centre of mass in the 28×28 frame.
+- `ToTensor()` gives a `(1, 28, 28)` float tensor in 0..1; `Normalize(0.1307, 0.3081)` maps it to about -0.42..2.82.
+- The normalisation constants come from the training set only.
+- The dataset is downloaded at run time and never committed, because its licence is not stated.

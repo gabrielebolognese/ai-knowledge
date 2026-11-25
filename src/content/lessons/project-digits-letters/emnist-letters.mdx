@@ -1,0 +1,206 @@
+---
+title: From digits to letters with EMNIST
+slug: emnist-letters
+track: project-digits-letters
+level: intermediate
+order: 50
+minutes: 25
+module: Letters (EMNIST) and the drawing app
+summary: Train the same CNN on 145,600 handwritten letters from EMNIST. Fix the dataset's two quirks (transposed images and labels that start at 1), handle a failed download, reach about 93-94% test accuracy, and see why pairs such as i and l cap the score well below 99%.
+hatnote: This lesson reuses the CNN from "A CNN that reads digits at 99%" with 26 outputs.
+prerequisites: [mnist-cnn]
+tools: [Python 3, PyTorch, torchvision]
+outcomes:
+  - Load EMNIST letters and fix its transposed orientation
+  - Shift labels from 1-26 to 0-25
+  - Train the 26-class CNN to about 92-94% and explain the accuracy ceiling (i/l, g/q)
+  - Handle a failed download with the manual fallback
+build: The letters branch of data.py and a 26-class CNN trained to about 93.8%
+reviewed: 2026-11-25
+seeAlso: [mnist-cnn, mnist-evaluate, handwriting-app]
+sources:
+  - id: cohen2017
+    title: "EMNIST: an extension of MNIST to handwritten letters"
+    author: Gregory Cohen, Saeed Afshar, Jonathan Tapson, André van Schaik
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1702.05373
+    accessed: 2026-11-25
+    type: paper
+  - id: nist-emnist
+    title: The EMNIST Dataset
+    publisher: NIST
+    url: https://www.nist.gov/itl/products-and-services/emnist-dataset
+    accessed: 2026-11-25
+    type: dataset
+  - id: tv-emnist
+    title: torchvision.datasets.EMNIST
+    publisher: PyTorch
+    url: https://docs.pytorch.org/vision/stable/generated/torchvision.datasets.EMNIST.html
+    accessed: 2026-11-25
+    type: docs
+  - id: nist-sd19
+    title: NIST Special Database 19
+    publisher: NIST
+    url: https://www.nist.gov/srd/nist-special-database-19
+    accessed: 2026-11-25
+    type: dataset
+  - id: pt-forum-emnist
+    title: "Cannot download EMNIST dataset via torchvision dataset using Google Colab"
+    publisher: PyTorch Forums
+    url: https://discuss.pytorch.org/t/cannot-download-emnist-dataset-via-torchvision-dataset-using-google-colab/199400
+    accessed: 2026-11-25
+    type: article
+  - id: wiki-bayes
+    title: Bayes error rate
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Bayes_error_rate
+    accessed: 2026-11-25
+    type: wikipedia
+furtherReading:
+  - title: "TensorFlow Datasets: EMNIST (documents other split sizes)"
+    url: https://www.tensorflow.org/datasets/catalog/emnist
+  - title: "Papers with Code: EMNIST-Letters leaderboard"
+    url: https://paperswithcode.com/sota/image-classification-on-emnist-letters
+exercises:
+  - id: emnist-transpose
+    type: mcq
+    difficulty: easy
+    title: What the transpose does
+    prompt: "Without `fix_emnist_orientation`, how do EMNIST letters look when plotted?"
+    options:
+      - "Upside down only"
+      - "Mirrored and turned by a quarter turn, because rows and columns are swapped"
+      - "Correct; the transpose only speeds up training"
+      - "Shrunk to half size"
+    answer: 1
+    explanation: "The images are stored with rows and columns swapped. Swapping them back (a transpose) is the same as a quarter turn plus a mirror flip. A model trained on the unfixed images still learns, because it never sees anything else, but it then fails on upright drawings."
+  - id: emnist-label-k
+    type: numeric
+    difficulty: easy
+    title: Where k ends up
+    prompt: "EMNIST stores the letter k (11th letter of the alphabet) with label 11. Which output index of the 26-class CNN stands for k after `shift_letter_label`?"
+    answer: 10
+    tolerance: 0
+    hint: "Labels 1..26 become 0..25."
+    explanation: "$11 - 1 = 10$. Without the shift, label 26 (z) would be out of range for 26 outputs and `CrossEntropyLoss` would raise an index error; label 0 would never be used."
+  - id: emnist-ceiling
+    type: reveal
+    difficulty: medium
+    title: Why not 99% on letters?
+    prompt: "The same CNN gets 98.9% on digits but 93.8% on letters, even with twice as much training data. Give two reasons, and say whether a bigger model would close the gap."
+    answer: "First, merging upper and lower case puts very different shapes (G and g, Q and q) into one class while making some classes look alike: a lowercase l and an uppercase I are both a single bar, and a g and a q differ only by a small tail. Second, there are 26 classes instead of 10, so there are more pairs to confuse. A bigger model helps a little, but images that are genuinely ambiguous without context cannot be read reliably by any model: that part of the error is the Bayes error."
+    explanation: "The confusion matrix confirms it: most of the 1,299 mistakes are i↔l and g↔q. Published CNNs on EMNIST letters report around 93-95%; the remaining errors are largely ambiguity, not model weakness."
+---
+
+**EMNIST** (Extended MNIST) is a set of handwritten letters and digits converted into the same 28×28 format as MNIST, published by Gregory Cohen and colleagues at Western Sydney University in 2017.<Cite id="cohen2017" /> Its letters split lets the CNN from the digits module read the 26 letters of the Latin alphabet with almost no changes. This lesson loads it, fixes its two well-known quirks, trains the model to about 93.8%, and explains why letters are harder than digits.
+
+## Where the letters come from
+
+EMNIST is built from **NIST Special Database 19**, which holds handwriting samples from 3,600 writers: digits and upper- and lowercase letters, scanned at 128×128 pixels.<Cite id="nist-sd19" /> Cohen and colleagues converted those images with a process that follows MNIST's overall idea but uses more of the frame: each character was blurred slightly, cropped to its bounding box, centred in a square frame with a 2-pixel border, and downsampled to 28×28 with bicubic interpolation.<Cite id="cohen2017" />
+
+The result comes in six splits. The **letters** split has 145,600 images in 26 balanced classes, with upper and lower case merged: class "a" contains both A and a.<Cite id="nist-emnist" /> torchvision loads 124,800 of them for training and 20,800 for testing, 4,800 and 800 per letter.<Cite id="tv-emnist" />
+
+<Infobox title="EMNIST letters" rows={[
+  { label: 'Images', value: '145,600 (124,800 train / 20,800 test)' },
+  { label: 'Classes', value: '26, upper and lower case merged' },
+  { label: 'Per class', value: '4,800 train / 800 test' },
+  { label: 'Source', value: 'NIST Special Database 19' },
+  { label: 'Download', value: 'about 560 MB (all six splits)' },
+  { label: 'Licence', value: 'not published on the NIST page' },
+]} />
+
+<Callout type="note">
+The paper's own summary table lists different sizes for the letters split (88,800 training and 14,800 test images), and TensorFlow Datasets documents those numbers too. Trust the counts the library actually loads: `python data.py --dataset letters` prints them.
+</Callout>
+
+## Downloading, and what to do when it fails
+
+torchvision fetches a single archive from NIST that contains all six splits: 561,753,746 bytes, about 560 MB. After unpacking, the `data/EMNIST` folder takes about 2.2 GB on disk.<Cite id="tv-emnist" /> The NIST download link has broken several times over the years; users have reported failed downloads on the PyTorch forums.<Cite id="pt-forum-emnist" />
+
+`data.py` catches a failed download and prints a manual fallback: download the "Binary format as the original MNIST dataset" archive from the [NIST EMNIST page](https://www.nist.gov/itl/products-and-services/emnist-dataset), put the zip file into `data/EMNIST/raw/` without unpacking it, and run the command again.<Cite id="nist-emnist" /> `unpack_manual_emnist` then extracts only the four letters files, exactly where torchvision looks for them.
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="49-61" title="data.py: using a manually downloaded archive" />
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="102-111" highlight="103-104,108-110" title="data.py: loading the letters split" />
+
+The NIST page does not publish a licence for EMNIST. As with MNIST, the course downloads it at run time, never redistributes it, and cites the paper.<Cite id="nist-emnist" />
+
+## Quirk 1: the images are transposed
+
+Plot EMNIST images straight from torchvision and the letters look mirrored and lying on their side. The images are stored with rows and columns swapped relative to MNIST.<Cite id="tv-emnist" /> The fix is to swap them back with a **transpose**.
+
+<MathSteps
+  title="What a transpose does to an image"
+  legend={[
+    { symbol: 'r, c', meaning: 'row and column of a pixel' },
+    { symbol: 'X^\\top', meaning: 'the transposed image' },
+  ]}
+>
+  <Step tex="X^\top_{r,c} = X_{\hl{c,r}}" words="The pixel that was in row c, column r moves to row r, column c. Rows become columns." />
+  <Step tex="\begin{pmatrix} a & b & c \\ d & e & f \end{pmatrix}^{\!\top} = \begin{pmatrix} a & d \\ b & e \\ c & f \end{pmatrix}" words="A 2×3 example: the first row a b c becomes the first column." />
+  <Step tex="\text{transpose} = \hl{\text{quarter turn clockwise}} \text{, then a left-right mirror}" words="Geometrically, swapping rows and columns is a 90° rotation plus a mirror flip, which is exactly how the unfixed letters look." />
+</MathSteps>
+
+On a tensor of shape `(1, 28, 28)` the transpose is `img.transpose(1, 2)`: swap dimension 1 (height) with dimension 2 (width) and leave the channel alone. It runs inside the dataset transform, right after `ToTensor()`, so every training and test image comes out upright.
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="64-70" title="data.py: the orientation fix" />
+
+<Analogy breaks="A slide in the wrong way round is wrong for everyone who watches; a model trained on transposed letters is perfectly happy with them, and only fails when it meets upright letters from somewhere else.">
+Forgetting the transpose is like loading a slide into a projector the wrong way round: everything is there, but mirrored and turned, and only the audience that learned to read it that way can follow.
+</Analogy>
+
+A model trained without the fix still reaches a good test accuracy, because training and test images share the same orientation. The damage appears only in the [drawing app](/course/project-digits-letters/handwriting-app/), where your letters are upright. `python data.py --dataset letters` saves `outputs/samples-letters.png`; check that the letters in it read normally.
+
+<Exercise id="emnist-transpose" />
+
+## Quirk 2: labels start at 1
+
+The letters split labels a as 1 and z as 26; there is no class 0.<Cite id="tv-emnist" /> `CrossEntropyLoss` with 26 outputs expects labels 0 to 25, so label 26 would crash training. `shift_letter_label` subtracts 1 from every label as a `target_transform`.
+
+<CodeFile path="code/projects/project-digits-letters/data.py" lines="73-75" title="data.py: shifting the labels" />
+
+Both fixes are named functions rather than lambdas, so they also work with parallel `DataLoader` workers on Windows, where transforms must be picklable.
+
+<Exercise id="emnist-label-k" />
+
+## Training the letters model
+
+The model is the same CNN with 26 outputs instead of 10, which adds 3,354 parameters for 423,706 in total. The normalisation constants were recomputed on the letters training set: mean 0.1722, standard deviation 0.3309.
+
+```bash
+python train.py --dataset letters --smoke       # 1,000 letters, 1 epoch: about 23% (chance is 4%)
+python train.py --dataset letters --epochs 5    # the full run
+```
+
+Measured on the course's test machine, the full run took 9 minutes 11 seconds, of which 543 seconds were training:<Cite id="tv-emnist" />
+
+| Epoch | Test accuracy | Time so far |
+|---|---|---|
+| 1 | 90.88% | 107 s |
+| 2 | 92.26% | 215 s |
+| 3 | 92.84% | 323 s |
+| 4 | 93.19% | 431 s |
+| 5 | **93.75%** | 543 s |
+
+For comparison, the EMNIST paper's baseline, a non-deep classifier called OPIUM with 10,000 hidden units, reported 85.15% on letters.<Cite id="cohen2017" />
+
+## Why letters cap below 99%
+
+`python evaluate.py --ckpt checkpoints/letters-cnn.pt` shows where the 1,299 mistakes go:
+
+<Figure src="/figures/digits-letters/confusion-letters-cnn.png" alt="A 26 by 26 grid with a dark diagonal; the strongest off-diagonal cells are i predicted as l, l predicted as i, g predicted as q and q predicted as g." caption="Confusion matrix of the letters CNN on the 20,800 EMNIST test letters (log colour scale). The darkest off-diagonal cells are the i/l and g/q pairs." credit="Own work, generated with the course's evaluate.py" license="CC BY 4.0" />
+
+The four most frequent confusions are i read as l (213 times), l read as i (128), g read as q (115) and q read as g (53). The weakest classes are i (70.4% correct), g (79.9%), l (81.0%) and q (87.7%); most other letters are above 94%.
+
+Merging the cases causes much of this. An uppercase I and a lowercase l are both a single vertical bar, and a handwritten g and q can differ only by the direction of a small tail. Without the surrounding word, even a careful human reader has to guess. The error that remains even for a perfect classifier, because the classes genuinely overlap, is called the **Bayes error**.<Cite id="wiki-bayes" /> Bigger models and more epochs shave off a little more, but they cannot remove it.
+
+<Exercise id="emnist-ceiling" />
+
+## Summary
+
+- EMNIST letters: 145,600 images from NIST SD19, 26 classes with upper and lower case merged, loaded as 124,800 train and 20,800 test.
+- The images are stored transposed: fix them with `img.transpose(1, 2)` inside the transform.
+- Labels run from 1 to 26: subtract 1 for a 26-output model.
+- If the 560 MB download fails, put the manually downloaded zip into `data/EMNIST/raw/`.
+- The same CNN reaches 93.75% after five epochs; i/l and g/q confusions, partly Bayes error, keep letters well below the 99% of digits.
