@@ -1,0 +1,335 @@
+---
+/**
+ * The certificate as ONE self-contained SVG (A4 landscape, 297 x 210 mm drawn on a
+ * 3508 x 2480 grid = 300 dpi). Art direction: research/05-ux-design-brief.md §6.
+ * All artwork is our own and generated procedurally here: guilloche rosette, wax seal,
+ * laurel, node glyph, scalloped panel edge, bottom guilloche band.
+ *
+ * Text that changes per learner carries data-cert-* hooks; src/scripts/certificate.ts fills
+ * them, auto-fits the name and exports the SVG (with the fonts inlined as data: URLs) to
+ * PNG/PDF, so the download renders exactly like the preview.
+ */
+interface Props {
+  courseTitle?: string;
+  courseSubtitle?: string;
+}
+const { courseTitle = 'Deep Learning', courseSubtitle = 'From Foundations to Neural Chess Engines' } = Astro.props;
+
+const W = 3508, H = 2480;
+const P = 1240; // panel / parchment boundary (~35 / 65 split, deliberately off-centre)
+const X0 = 1560; // left-aligned start line of every text block on the parchment
+const f = (n: number) => (Math.round(n * 10) / 10).toString();
+
+// Fonts: the page registers these families (same files) with the FontFace API, and the
+// exporter inlines them, so preview and download use identical glyphs.
+const SERIF = "'AIK Cormorant', 'Cormorant Garamond', Garamond, Georgia, 'Times New Roman', serif";
+const DISPLAY = "'AIK Fraunces', 'Fraunces Variable', Georgia, serif";
+const SANS = "'AIK Inter', 'Inter Variable', 'Segoe UI', Arial, sans-serif";
+const SCRIPT = "'AIK Pinyon', 'Pinyon Script', 'Brush Script MT', cursive";
+
+// ---- Guilloche rosette (brief §6.4) ---------------------------------------------------
+// x(t) = (R - r) cos t + d cos(k t + φ),  y(t) = (R - r) sin t - d sin(k t + φ),  k = (R - r) / r.
+// Rotating the whole curve by α equals a phase shift, so one path + N rotated <use> copies.
+function trochoid(R: number, r: number, d: number, steps: number) {
+  const k = (R - r) / r;
+  let p = '';
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * 2 * Math.PI;
+    const x = (R - r) * Math.cos(t) + d * Math.cos(k * t);
+    const y = (R - r) * Math.sin(t) - d * Math.sin(k * t);
+    p += `${i ? 'L' : 'M'}${f(x)} ${f(y)}`;
+  }
+  return p + 'Z';
+}
+const rosetteOuter = trochoid(600, 100, 150, 900); // 6 lobes
+const rosetteInner = trochoid(330, 66, 92, 600); // 5 lobes
+const outerCopies = 40;
+const innerCopies = 30;
+
+// ---- Wax-seal edge (brief §6.5): r(θ) = R(1 + 0.04 sin 7θ + 0.025 sin 13θ + 0.015 sin 23θ)
+function waxEdge(R: number) {
+  let p = '';
+  for (let i = 0; i <= 240; i++) {
+    const th = (i / 240) * 2 * Math.PI;
+    const rr = R * (1 + 0.04 * Math.sin(7 * th) + 0.025 * Math.sin(13 * th) + 0.015 * Math.sin(23 * th));
+    p += `${i ? 'L' : 'M'}${f(rr * Math.cos(th))} ${f(rr * Math.sin(th))}`;
+  }
+  return p + 'Z';
+}
+const SEAL = { x: P, y: 1985, r: 215 };
+const sealEdge = waxEdge(SEAL.r);
+
+// ---- Scalloped panel edge: 18 px bites every 60 px (brief §6.3) ----------------------
+const scallops: number[] = [];
+for (let y = 30; y < H; y += 60) scallops.push(y);
+
+// ---- Bottom guilloche band on the parchment: y = A sin(ωx) + B sin(3ωx + φ), 5 strands --
+const bandX0 = P + 60, bandX1 = W - 130;
+const band = Array.from({ length: 6 }, (_, s) => {
+  let p = '';
+  for (let x = bandX0, i = 0; x <= bandX1; x += 12, i++) {
+    const y = 34 * Math.sin(x / 70 + s * 0.85) + 13 * Math.sin((3 * x) / 70 + s * 1.7);
+    p += `${i ? 'L' : 'M'}${x} ${f(y)}`;
+  }
+  return p;
+});
+
+// ---- Frame: double gold rule inset 110 px, 45° chamfers on the two right corners --------
+function frame(inset: number, chamfer: number, x0: number) {
+  const r = W - inset, t = inset, b = H - inset;
+  return `M${x0} ${t} H${r - chamfer} L${r} ${t + chamfer} V${b - chamfer} L${r - chamfer} ${b} H${x0}`;
+}
+const frameOuter = frame(110, 72, P + 40);
+const frameInner = frame(128, 64, P + 40);
+
+// Node glyph (three circles joined by lines), our own mark.
+const glyph = (s: number) => ({ top: [0, -26 * s], left: [-24 * s, 16 * s], right: [24 * s, 16 * s] });
+const g1 = glyph(1);
+---
+<svg
+  class="cert-svg"
+  data-cert-svg
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  viewBox={`0 0 ${W} ${H}`}
+  width={W}
+  height={H}
+  role="img"
+  aria-labelledby="cert-svg-title cert-svg-desc"
+  preserveAspectRatio="xMidYMid meet"
+>
+  <title id="cert-svg-title">AI Knowledge certificate of completion</title>
+  <desc id="cert-svg-desc" data-cert-desc>Certificate of completion for the course {courseTitle}: {courseSubtitle}.</desc>
+  <defs>
+    <!-- Gold foil (115°) for the dark panel, and a deeper foil that stays legible on parchment. -->
+    <linearGradient id="cf-foil" x1="0" y1="0" x2="1" y2="0.47">
+      <stop offset="0" stop-color="#7A5A12" /><stop offset="0.18" stop-color="#D8B45A" /><stop offset="0.34" stop-color="#F3E2A9" />
+      <stop offset="0.5" stop-color="#B8892F" /><stop offset="0.68" stop-color="#F3E2A9" /><stop offset="0.84" stop-color="#D8B45A" /><stop offset="1" stop-color="#7A5A12" />
+    </linearGradient>
+    <linearGradient id="cf-foil-deep" x1="0" y1="0" x2="1" y2="0.3">
+      <stop offset="0" stop-color="#6B4E0E" /><stop offset="0.22" stop-color="#A97E27" /><stop offset="0.4" stop-color="#C9A24A" />
+      <stop offset="0.55" stop-color="#8A6A1E" /><stop offset="0.74" stop-color="#C29A40" /><stop offset="1" stop-color="#6B4E0E" />
+    </linearGradient>
+    <linearGradient id="cf-foil-line" gradientUnits="userSpaceOnUse" x1={X0} y1="0" x2={W - 200} y2="0">
+      <stop offset="0" stop-color="#7A5A12" /><stop offset="0.2" stop-color="#D8B45A" /><stop offset="0.38" stop-color="#F3E2A9" />
+      <stop offset="0.55" stop-color="#B8892F" /><stop offset="0.75" stop-color="#E9D08A" /><stop offset="1" stop-color="#7A5A12" />
+    </linearGradient>
+    <linearGradient id="cf-foil-v" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2={H}>
+      <stop offset="0" stop-color="#7A5A12" /><stop offset="0.2" stop-color="#D8B45A" /><stop offset="0.4" stop-color="#F3E2A9" />
+      <stop offset="0.6" stop-color="#B8892F" /><stop offset="0.8" stop-color="#F3E2A9" /><stop offset="1" stop-color="#7A5A12" />
+    </linearGradient>
+    <linearGradient id="cf-navy" x1="0" y1="0" x2="0.25" y2="1">
+      <stop offset="0" stop-color="#0B1B3A" /><stop offset="0.55" stop-color="#10265A" /><stop offset="1" stop-color="#0B1B3A" />
+    </linearGradient>
+    <linearGradient id="cf-ox" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4A0F1B" /><stop offset="1" stop-color="#6E1A2B" />
+    </linearGradient>
+    <radialGradient id="cf-wax" cx="42%" cy="36%" r="68%">
+      <stop offset="0" stop-color="#9A3348" /><stop offset="0.55" stop-color="#6E1A2B" /><stop offset="1" stop-color="#3E0C17" />
+    </radialGradient>
+    <radialGradient id="cf-parch" cx="58%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#FBF6E6" /><stop offset="0.7" stop-color="#F6EFD9" /><stop offset="1" stop-color="#EFE5C8" />
+    </radialGradient>
+    <radialGradient id="cf-panel-glow" cx="38%" cy="45%" r="55%">
+      <stop offset="0" stop-color="#1E3F86" stop-opacity="0.55" /><stop offset="1" stop-color="#0B1B3A" stop-opacity="0" />
+    </radialGradient>
+    <filter id="cf-seal-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="10" dy="16" stdDeviation="14" flood-color="#1B0A0E" flood-opacity="0.45" />
+    </filter>
+    <filter id="cf-soft" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#000" flood-opacity="0.35" />
+    </filter>
+    <path id="cf-rosette-outer" d={rosetteOuter} />
+    <path id="cf-rosette-inner" d={rosetteInner} />
+    <path id="cf-seal-text-path" d={`M ${-158} 0 A 158 158 0 1 1 158 0 A 158 158 0 1 1 ${-158} 0`} />
+    <clipPath id="cf-panel-clip"><rect x="0" y="0" width={P} height={H} /></clipPath>
+    <clipPath id="cf-field-clip"><rect x={P} y="0" width={W - P} height={H} /></clipPath>
+  </defs>
+
+  <!-- ============ Parchment field ============ -->
+  <rect x="0" y="0" width={W} height={H} fill="url(#cf-parch)" />
+  <g clip-path="url(#cf-field-clip)" fill="none" stroke="url(#cf-foil-line)" stroke-width="2" opacity="0.2">
+    {band.map((p) => <path d={p} transform="translate(0 2262)" />)}
+  </g>
+  <path d={frameOuter} fill="none" stroke="url(#cf-foil-line)" stroke-width="5" />
+  <path d={frameInner} fill="none" stroke="#B8892F" stroke-width="1.6" opacity="0.85" />
+  <!-- single fleuron, top-right only (keeps the asymmetry) -->
+  <g transform={`translate(${W - 252} 250)`} fill="url(#cf-foil-deep)">
+    <path d="M0 -46 C8 -14 14 -8 46 0 C14 8 8 14 0 46 C-8 14 -14 8 -46 0 C-14 -8 -8 -14 0 -46Z" />
+    <circle r="7" fill="#F6EFD9" />
+    <circle r="62" fill="none" stroke="#B8892F" stroke-width="1.6" opacity="0.6" />
+  </g>
+
+  <!-- ============ Left panel ============ -->
+  <g clip-path="url(#cf-panel-clip)">
+    <rect x="0" y="0" width={P} height={H} fill="url(#cf-navy)" />
+    <rect x="0" y="0" width={P} height={H} fill="url(#cf-panel-glow)" />
+    <!-- oxblood diagonal band, ~8° from lower-left to mid-right -->
+    <path d={`M0 1735 L${P} 1560 L${P} 1840 L0 2015 Z`} fill="url(#cf-ox)" />
+    <path d={`M0 1715 L${P} 1540`} stroke="url(#cf-foil)" stroke-width="3" opacity="0.8" />
+    <path d={`M0 2035 L${P} 1860`} stroke="url(#cf-foil)" stroke-width="3" opacity="0.8" />
+    <!-- guilloche rosette, bleeding off the left edge; drawn twice with a small offset for moiré -->
+    <g transform="translate(470 1060)" fill="none" stroke="url(#cf-foil)" stroke-width="1.7">
+      <g opacity="0.5">
+        {Array.from({ length: outerCopies }, (_, i) => <use href="#cf-rosette-outer" transform={`rotate(${f((i * 360) / outerCopies / 6)})`} />)}
+      </g>
+      <g opacity="0.28" transform="rotate(0.9)">
+        {Array.from({ length: outerCopies }, (_, i) => <use href="#cf-rosette-outer" transform={`rotate(${f((i * 360) / outerCopies / 6)})`} />)}
+      </g>
+      <g opacity="0.6">
+        {Array.from({ length: innerCopies }, (_, i) => <use href="#cf-rosette-inner" transform={`rotate(${f((i * 360) / innerCopies / 5)})`} />)}
+      </g>
+      <circle r="736" stroke-width="2.4" opacity="0.55" />
+      <circle r="752" stroke-width="1.2" opacity="0.4" />
+      <!-- embossed monogram medallion -->
+      <circle r="196" fill="#0B1B3A" stroke="none" />
+      <circle r="196" stroke-width="6" />
+      <circle r="178" stroke-width="1.6" opacity="0.8" />
+      <g font-family={SERIF} font-style="italic" font-weight="600" font-size="236" text-anchor="middle" stroke="none">
+        <text x="-6" y="70" fill="#000" opacity="0.55">AK</text>
+        <text x="4" y="80" fill="#F3E2A9" opacity="0.35">AK</text>
+        <text x="0" y="76" fill="url(#cf-foil)">AK</text>
+      </g>
+    </g>
+    <!-- wordmark -->
+    <g transform="translate(150 236)">
+      <g transform="translate(40 0) scale(2.1)">
+        <path d={`M${g1.left.join(' ')} L${g1.top.join(' ')} L${g1.right.join(' ')} M${g1.left.join(' ')} H${g1.right[0]}`} fill="none" stroke="#D8B45A" stroke-width="2.2" opacity="0.8" />
+        <circle cx={g1.top[0]} cy={g1.top[1]} r="9" fill="url(#cf-foil)" />
+        <circle cx={g1.left[0]} cy={g1.left[1]} r="7.5" fill="#0B1B3A" stroke="#F6EFD9" stroke-width="2.2" />
+        <circle cx={g1.right[0]} cy={g1.right[1]} r="7.5" fill="#0B1B3A" stroke="#D8B45A" stroke-width="2.2" />
+      </g>
+      <text x="140" y="34" font-family={DISPLAY} font-weight="500" font-size="96" fill="#F6EFD9" letter-spacing="-1">AI <tspan font-weight="400" fill="#EFE5C8">Knowledge</tspan></text>
+      <text x="142" y="112" font-family={SANS} font-weight="600" font-size="27" letter-spacing="8.6" fill="#D8B45A">FREE · OPEN · SOURCED</text>
+    </g>
+    <!-- level ribbon -->
+    <g transform="translate(150 2160)" font-family={SERIF}>
+      <text x="0" y="0" font-family={SANS} font-weight="600" font-size="26" letter-spacing="7" fill="#D8B45A">THE PATH</text>
+      <path d="M22 44 V242" stroke="#D8B45A" stroke-width="2" opacity="0.6" />
+      <circle cx="22" cy="64" r="15" fill="#0B1B3A" stroke="#D8B45A" stroke-width="3" />
+      <rect x="9" y="128" width="26" height="26" transform="rotate(45 22 141)" fill="#0B1B3A" stroke="#D8B45A" stroke-width="3" />
+      <path d="M22 202 L38 211 V229 L22 238 L6 229 V211 Z" fill="url(#cf-foil)" />
+      <text x="70" y="78" font-size="48" font-weight="600" fill="#F6EFD9">Beginner</text>
+      <text x="70" y="155" font-size="48" font-weight="600" fill="#F6EFD9">Intermediate</text>
+      <text x="70" y="232" font-size="48" font-weight="600" fill="#F6EFD9">Advanced</text>
+    </g>
+  </g>
+  <!-- scalloped edge: parchment bites along the boundary, then a gold double hairline -->
+  <g fill="url(#cf-parch)">
+    {scallops.map((y) => <circle cx={P} cy={y} r="18" />)}
+  </g>
+  <path d={`M${P - 40} 0 V${H}`} stroke="url(#cf-foil-v)" stroke-width="4" />
+  <path d={`M${P - 54} 0 V${H}`} stroke="url(#cf-foil-v)" stroke-width="1.5" opacity="0.85" />
+
+  <!-- ============ Text on the parchment (left-aligned on X0) ============ -->
+  <g data-cert-text>
+    <text x={X0} y="318" font-family={SERIF} font-weight="600" font-size="70" letter-spacing="18.2" fill="url(#cf-foil-deep)">CERTIFICATE OF COMPLETION</text>
+    <g transform="translate(0 396)" stroke="#B8892F" stroke-width="2.4" fill="none">
+      <path d={`M${X0} 0 H${X0 + 620}`} />
+      <path d={`M${X0 + 652} 0 l14 -14 l14 14 l-14 14 z`} fill="url(#cf-foil-deep)" stroke="none" />
+      <path d={`M${X0 + 712} 0 H${X0 + 820}`} />
+    </g>
+    <text x={X0} y="560" font-family={SERIF} font-style="italic" font-weight="500" font-size="72" fill="#4A463F">This certifies that</text>
+
+    <!-- name: auto-fitted (one or two lines) by certificate.ts; box spans y 630–925 -->
+    <text data-cert-name x={X0} y="838" font-family={SERIF} font-style="italic" font-weight="600" font-size="228" fill="#0B1B3A" data-max-width="1740" data-center-y="772">
+      <tspan x={X0} y="838">Your Name</tspan>
+    </text>
+    <g data-cert-underline>
+      <path d={`M${X0} 962 H${W - 330}`} stroke="url(#cf-foil-line)" stroke-width="5" fill="none" />
+      <path d={`M${X0} 978 H${W - 470}`} stroke="#B8892F" stroke-width="1.4" opacity="0.6" fill="none" />
+      <path d={`M${W - 330} 962 c34 0 56 -18 56 -40 c0 -18 -14 -30 -30 -30 c-18 0 -28 14 -24 28 c3 12 16 16 26 10`} stroke="url(#cf-foil-deep)" stroke-width="4" fill="none" stroke-linecap="round" />
+      <path d={`M${X0 - 2} 962 l-26 0`} stroke="#B8892F" stroke-width="2" />
+    </g>
+
+    <text x={X0} y="1086" font-family={SERIF} font-style="italic" font-weight="500" font-size="64" fill="#4A463F">has completed the free, open course</text>
+    <text x={X0} y="1236" font-family={DISPLAY} font-weight="500" font-size="112" letter-spacing="9" fill="#0B1B3A" data-cert-course>{courseTitle.toUpperCase()}</text>
+    <text x={X0} y="1338" font-family={SERIF} font-style="italic" font-weight="600" font-size="86" fill="#173473" data-cert-subtitle>{courseSubtitle}</text>
+    <g font-family={SANS} font-weight="400" font-size="42" fill="#4A463F">
+      <text x={X0} y="1460">Neural-network foundations, PyTorch, convolutional and sequence models,</text>
+      <text x={X0} y="1518">Transformers and tokenization, finishing with a neural chess evaluator.</text>
+    </g>
+
+    <!-- stats row -->
+    <g transform="translate(0 1640)" font-family={SANS}>
+      <text x={X0} y="0" font-weight="600" font-size="40" fill="#0B1B3A">
+        <tspan data-cert-lessons>0</tspan><tspan font-weight="400" fill="#4A463F"> lessons completed</tspan>
+        <tspan fill="#B8892F" dx="22">◆</tspan>
+        <tspan dx="22" data-cert-hours>0</tspan><tspan font-weight="400" fill="#4A463F" data-cert-hours-label> hours of study</tspan>
+        <tspan fill="#B8892F" dx="22">◆</tspan>
+        <tspan dx="22" font-weight="400" fill="#4A463F" data-cert-project-label>Project: </tspan><tspan data-cert-project>—</tspan>
+      </text>
+    </g>
+
+    <!-- date · ID · signature -->
+    <g transform="translate(0 1905)">
+      <text data-cert-date x={X0} y="0" font-family={SERIF} font-weight="600" font-size="66" fill="#0B1B3A">1 January 2026</text>
+      <path d={`M${X0} 34 H${X0 + 500}`} stroke="url(#cf-foil-line)" stroke-width="2.4" />
+      <text x={X0} y="92" font-family={SANS} font-weight="600" font-size="30" letter-spacing="4.2" fill="#7A5A12">DATE OF COMPLETION</text>
+
+      <text data-cert-id x={X0 + 620} y="-4" font-family={SANS} font-weight="600" font-size="48" letter-spacing="3" fill="#0B1B3A">AK-0000-0000</text>
+      <path d={`M${X0 + 620} 34 H${X0 + 1060}`} stroke="url(#cf-foil-line)" stroke-width="2.4" />
+      <text x={X0 + 620} y="92" font-family={SANS} font-weight="600" font-size="30" letter-spacing="4.2" fill="#7A5A12">CERTIFICATE ID</text>
+
+      <text x={X0 + 1196} y="2" font-family={SCRIPT} font-size="98" fill="#0B1B3A" transform={`rotate(-3 ${X0 + 1196} 0)`}>AI Knowledge</text>
+      <path d={`M${X0 + 1180} 34 H${W - 250}`} stroke="url(#cf-foil-line)" stroke-width="2.4" />
+      <text x={X0 + 1180} y="92" font-family={SANS} font-weight="600" font-size="30" letter-spacing="4.2" fill="#7A5A12">SIGNED · AI KNOWLEDGE</text>
+    </g>
+
+    <text x={X0} y="2236" font-family={SANS} font-weight="400" font-size="29" fill="#6B655A">Self-issued certificate of completion from a free, open-source course. Not an accredited credential.</text>
+  </g>
+
+  <!-- ============ Wax seal on the boundary (locks the two halves together) ============ -->
+  <g transform={`translate(${SEAL.x} ${SEAL.y})`}>
+    <!-- ribbon tails (navy with gold hairlines), hanging at ±15° -->
+    <g transform="rotate(15)">
+      <path d="M-30 120 L-112 430 L-60 395 L-30 450 L40 140 Z" fill="#10265A" stroke="#D8B45A" stroke-width="3" />
+    </g>
+    <g transform="rotate(-15)">
+      <path d="M30 120 L112 430 L60 395 L30 450 L-40 140 Z" fill="#4A0F1B" stroke="#D8B45A" stroke-width="3" />
+    </g>
+    <path d={sealEdge} fill="url(#cf-wax)" filter="url(#cf-seal-shadow)" />
+    <path d={sealEdge} fill="none" stroke="#2E0911" stroke-width="3" opacity="0.5" />
+    <circle r="194" fill="none" stroke="url(#cf-foil)" stroke-width="7" />
+    <circle r="184" fill="none" stroke="#D8B45A" stroke-width="1.4" opacity="0.7" />
+    <circle r="142" fill="none" stroke="#2E0911" stroke-width="5" opacity="0.5" transform="translate(2 3)" />
+    <circle r="142" fill="none" stroke="url(#cf-foil)" stroke-width="2.6" />
+    <text font-family={SERIF} font-weight="600" font-size="29" fill="#F3E2A9" opacity="0.95">
+      <textPath href="#cf-seal-text-path" startOffset="0" textLength="980" lengthAdjust="spacing">AI KNOWLEDGE ✦ DEEP LEARNING ✦ MMXXVI ✦ FREE AND OPEN ✦</textPath>
+    </text>
+    <!-- laurel -->
+    <g fill="url(#cf-foil)" transform="scale(0.84)">
+      {[-1, 1].map((side) => (
+        <g transform={`scale(${side} 1)`}>
+          <path d="M-96 92 C-150 30 -142 -48 -96 -104" fill="none" stroke="url(#cf-foil)" stroke-width="3" />
+          {Array.from({ length: 7 }, (_, i) => {
+            const t = i / 6;
+            const x = -96 - 54 * Math.sin(Math.PI * t) * 0.92;
+            const y = 92 - 196 * t;
+            const ang = -60 + 120 * t;
+            return <ellipse cx={f(x)} cy={f(y)} rx={f(26 - i * 1.6)} ry={f(10 - i * 0.5)} transform={`rotate(${f(ang - 90)} ${f(x)} ${f(y)}) translate(-14 0)`} />;
+          })}
+        </g>
+      ))}
+    </g>
+    <!-- node glyph, embossed -->
+    <g transform="scale(2.1) translate(0 6)">
+      <g transform="translate(1.2 1.6)" opacity="0.6" fill="#2E0911" stroke="#2E0911">
+        <path d={`M${g1.left.join(' ')} L${g1.top.join(' ')} L${g1.right.join(' ')} M${g1.left.join(' ')} H${g1.right[0]}`} fill="none" stroke-width="3" />
+        <circle cx={g1.top[0]} cy={g1.top[1]} r="9" /><circle cx={g1.left[0]} cy={g1.left[1]} r="7.5" /><circle cx={g1.right[0]} cy={g1.right[1]} r="7.5" />
+      </g>
+      <path d={`M${g1.left.join(' ')} L${g1.top.join(' ')} L${g1.right.join(' ')} M${g1.left.join(' ')} H${g1.right[0]}`} fill="none" stroke="url(#cf-foil)" stroke-width="3" />
+      <circle cx={g1.top[0]} cy={g1.top[1]} r="9" fill="url(#cf-foil)" />
+      <circle cx={g1.left[0]} cy={g1.left[1]} r="7.5" fill="#6E1A2B" stroke="url(#cf-foil)" stroke-width="2.6" />
+      <circle cx={g1.right[0]} cy={g1.right[1]} r="7.5" fill="url(#cf-foil)" />
+    </g>
+  </g>
+
+  <!-- ============ Preview watermark (shown only while the certificate is locked) ============ -->
+  <g data-cert-watermark style="display:none" pointer-events="none">
+    <text x={(P + W) / 2 + 20} y={H / 2 + 110} text-anchor="middle" font-family={DISPLAY} font-weight="600" font-size="310" letter-spacing="40" fill="#0B1B3A" opacity="0.075" transform={`rotate(-12 ${(P + W) / 2} ${H / 2})`}>PREVIEW</text>
+  </g>
+
+  <!-- hidden measuring element for the name auto-fit (removed from exports) -->
+  <text data-cert-measure x="0" y="-500" font-family={SERIF} font-style="italic" font-weight="600" font-size="100" visibility="hidden" aria-hidden="true"></text>
+</svg>

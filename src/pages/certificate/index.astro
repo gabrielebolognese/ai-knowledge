@@ -1,0 +1,199 @@
+---
+// Certificate page (research/05-ux-design-brief.md §5.7 and §6). The unlock rule comes from
+// curriculum.json certificateRequirement (via the catalog), never hard-coded.
+// Everything runs in the browser: no upload, no server, works offline from the static build.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CertificateSVG from '../../components/certificate/CertificateSVG.astro';
+import { getCatalog } from '../../lib/catalog';
+import { TRACK_META } from '../../lib/course';
+import type { CertData, CertTrack } from '../../lib/certificate';
+
+const cat = await getCatalog();
+const req = cat.certificate;
+const toTrack = (id: string): CertTrack => {
+  const t = cat.trackById.get(id);
+  if (!t) throw new Error(`certificateRequirement names unknown track ${id}`);
+  return {
+    id,
+    title: t.title,
+    short: (TRACK_META as Record<string, { short: string }>)[id]?.short ?? t.title,
+    url: `/course/${id}/`,
+    lessons: t.lessons.map((l) => ({ slug: l.slug, title: l.title, url: l.url, minutes: l.minutes })),
+  };
+};
+const data: CertData = {
+  description: req.description,
+  core: req.allLessonsInTracks.map(toTrack),
+  projects: req.projectTracks.map(toTrack),
+  minProjects: req.minProjectTracksCompleted,
+  minutes: Object.fromEntries(cat.all.map((l) => [l.slug, l.minutes])),
+};
+const json = JSON.stringify(data).replace(/</g, '\\u003c');
+const COURSE_TITLE = 'Deep Learning';
+const COURSE_SUBTITLE = 'From Foundations to Neural Chess Engines';
+---
+<BaseLayout title="Your certificate" active="certificate" description="Personalise and download your AI Knowledge certificate of completion: generated in your browser, nothing is uploaded.">
+  <script type="application/json" id="aik-cert-data" set:html={json} />
+  <main id="main" class="cert" data-cert-page data-state="loading">
+    <header class="cert-head no-print">
+      <p class="eyebrow muted">Certificate</p>
+      <h1>Your certificate</h1>
+      <div class="cert-banner" data-cert-banner role="status">
+        <p class="cert-banner__locked">
+          <strong>You have completed <span data-cert-pct>0%</span> of the required lessons.</strong>{' '}
+          The preview is always open; downloading unlocks when the requirement below is met.{' '}
+          <a href="/course/">Continue the course →</a>
+        </p>
+        <p class="cert-banner__ready"><strong>Course complete.</strong> Type the name you want on it and download it.</p>
+        <p class="cert-banner__demo">Demo mode (<code>?demo=1</code>): the lock is bypassed for testing. This is not a completed course.</p>
+      </div>
+    </header>
+
+    <div class="cert-grid">
+      <section class="cert-form no-print" aria-labelledby="cert-form-title">
+        <h2 id="cert-form-title" class="sr-only">Personalise</h2>
+        <label class="field" for="cert-name">
+          <span class="field__label">Name on certificate</span>
+          <input id="cert-name" data-cert-input type="text" maxlength="48" autocomplete="name" spellcheck="false" placeholder="Your Name" />
+          <span class="field__hint"><span data-cert-count>0</span> / 48 characters · written exactly as you type it</span>
+        </label>
+        <label class="field" for="cert-date">
+          <span class="field__label">Date</span>
+          <input id="cert-date" data-cert-date-input type="date" />
+          <span class="field__hint">Defaults to today. The certificate ID is derived from name and date.</span>
+        </label>
+        <div class="cert-actions">
+          <button class="btn btn-primary btn-lg" type="button" data-cert-download="png" disabled>Download PNG</button>
+          <button class="btn btn-lg" type="button" data-cert-download="pdf" disabled>Download PDF</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-cert-clear>Clear name</button>
+        </div>
+        <p class="cert-note" data-cert-status aria-live="polite">Generated in your browser. Nothing is uploaded.</p>
+        <p class="cert-note muted">PNG: 3508 × 2480 px (A4 landscape at 300 dpi). PDF: one A4 landscape page.</p>
+
+        <div class="cert-req" data-cert-req>
+          <h2 class="cert-req__title">What unlocks it</h2>
+          <p class="cert-req__rule">{data.description}</p>
+          <ol class="cert-req__list" data-cert-list>
+            {data.core.map((t) => (
+              <li class="req" data-req-track={t.id}>
+                <details>
+                  <summary>
+                    <span class="req__mark" aria-hidden="true"></span>
+                    <span class="req__name">{t.title}</span>
+                    <span class="req__count" data-req-count>0 / {t.lessons.length}</span>
+                    <span class="req__bar" aria-hidden="true"><span data-req-bar></span></span>
+                  </summary>
+                  <ul class="req__lessons" data-req-remaining></ul>
+                </details>
+              </li>
+            ))}
+            <li class="req req--projects" data-req-projects>
+              <details>
+                <summary>
+                  <span class="req__mark" aria-hidden="true"></span>
+                  <span class="req__name">At least {data.minProjects} project track{data.minProjects > 1 ? 's' : ''}</span>
+                  <span class="req__count" data-req-count>0 / {data.minProjects}</span>
+                  <span class="req__bar" aria-hidden="true"><span data-req-bar></span></span>
+                </summary>
+                <ul class="req__lessons req__projects">
+                  {data.projects.map((t) => (
+                    <li data-req-project={t.id}>
+                      <a data-req-link href={t.url}>{t.title}</a>
+                      <span class="req__pcount" data-req-pcount>0 / {t.lessons.length}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="cert-preview" aria-label="Certificate preview">
+        <div class="cert-stage">
+          <div class="cert-sheet" data-cert-sheet>
+            <CertificateSVG courseTitle={COURSE_TITLE} courseSubtitle={COURSE_SUBTITLE} />
+          </div>
+        </div>
+        <p class="cert-meta no-print">
+          Certificate ID <code data-cert-id-out>AK-0000-0000</code> · Self-issued certificate of completion from a free open-source course. Not an accredited credential.
+        </p>
+      </section>
+    </div>
+  </main>
+  <script>
+    import '../../scripts/certificate';
+  </script>
+</BaseLayout>
+
+<style>
+  .cert { max-width: var(--container-wide); margin: 0 auto; padding: var(--s-7) var(--gutter) var(--s-8); }
+  .cert-head h1 { font-size: var(--t-h1); line-height: var(--lh-h1); margin: var(--s-2) 0 var(--s-4); }
+  .cert-banner { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: var(--s-4) var(--s-5); box-shadow: var(--sh-1); max-width: 980px; }
+  .cert-banner p { margin: 0; color: var(--ink-2); }
+  .cert-banner__ready, .cert-banner__demo { display: none; }
+  [data-state='ready'] .cert-banner { border-color: var(--gold-2); background: linear-gradient(100deg, #fffdf6, #fbf3dc); }
+  [data-state='ready'] .cert-banner__locked, [data-state='demo'] .cert-banner__locked { display: none; }
+  [data-state='ready'] .cert-banner__ready { display: block; }
+  [data-state='demo'] .cert-banner { border-color: var(--warn); background: var(--warn-soft, #fff6e6); }
+  [data-state='demo'] .cert-banner__demo { display: block; }
+
+  .cert-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: var(--s-7); margin-top: var(--s-6); align-items: start; }
+
+  .field { display: grid; gap: var(--s-2); margin-bottom: var(--s-5); }
+  .field__label { font-size: var(--t-ui); font-weight: 600; color: var(--ink); }
+  .field__hint { font-size: var(--t-small); color: var(--ink-3); }
+  .field input {
+    font: inherit; font-size: 1.15rem; min-height: 48px; padding: 0 var(--s-4);
+    border: 1px solid var(--line-strong); border-radius: var(--r-xs); background: var(--surface); color: var(--ink);
+  }
+  #cert-name { font-family: 'AIK Cormorant', 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 600; font-size: 1.5rem; }
+  .field input:focus-visible { outline: none; box-shadow: var(--focus); border-color: var(--accent); }
+
+  .cert-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center; }
+  .cert-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+  .cert-note { font-size: var(--t-small); color: var(--ink-2); margin: var(--s-3) 0 0; }
+
+  .cert-req { margin-top: var(--s-6); border-top: 1px solid var(--line); padding-top: var(--s-5); }
+  [data-state='ready'] .cert-req { display: none; }
+  .cert-req__title { font-family: var(--font-sans); font-size: var(--t-h3); line-height: var(--lh-h3); font-weight: 600; margin: 0 0 var(--s-2); border: 0; }
+  .cert-req__rule { font-size: var(--t-small); color: var(--ink-2); margin: 0 0 var(--s-4); }
+  .cert-req__list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
+  .req details { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); }
+  .req summary { display: grid; grid-template-columns: 18px 1fr auto; grid-template-rows: auto auto; column-gap: var(--s-3); row-gap: 6px; align-items: center; padding: var(--s-3) var(--s-4); cursor: pointer; list-style: none; }
+  .req summary::-webkit-details-marker { display: none; }
+  .req__mark { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line-strong); }
+  .req[data-complete='true'] .req__mark { background: var(--success); border-color: var(--success); box-shadow: inset 0 0 0 3px var(--surface); }
+  .req__name { font-weight: 600; font-size: var(--t-ui); }
+  .req__count { font-size: var(--t-small); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .req__bar { grid-column: 2 / 4; height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .req__bar span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 4px; transition: width var(--d-slow) var(--ease-out); }
+  .req[data-complete='true'] .req__bar span { background: var(--success); }
+  .req__lessons { margin: 0; padding: 0 var(--s-4) var(--s-3) calc(var(--s-4) + 18px + var(--s-3)); font-size: var(--t-small); display: grid; gap: 4px; }
+  /* rows below are created by certificate.ts, so they need :global() to escape Astro's scoping */
+  .req__lessons :global(li) { list-style: none; display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-3); }
+  .req__lessons :global(.req__done-note) { color: var(--success); }
+  .req__lessons :global(.req__pcount), .req__pcount { color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .req__projects li[data-complete='true'] a::after { content: ' ✓'; color: var(--success); }
+
+  .cert-preview { position: sticky; top: 88px; }
+  .cert-stage { background: var(--surface-2); border-radius: var(--r-lg); padding: var(--s-6); }
+  .cert-sheet { box-shadow: var(--sh-3); line-height: 0; transition: transform var(--d-base) var(--ease-out), box-shadow var(--d-base) var(--ease-out); }
+  .cert-sheet:hover { transform: translateY(-4px); box-shadow: 0 6px 12px rgb(27 26 23 / 0.07), 0 32px 72px rgb(27 26 23 / 0.16); }
+  .cert-sheet :global(.cert-svg) { display: block; width: 100%; height: auto; aspect-ratio: 3508 / 2480; }
+  .cert-meta { font-size: var(--t-small); color: var(--ink-2); margin: var(--s-4) 0 0; }
+  .cert-meta code { font-family: var(--font-mono); font-size: 0.95em; }
+
+  @media (prefers-reduced-motion: reduce) { .cert-sheet, .req__bar span { transition: none; } .cert-sheet:hover { transform: none; } }
+
+  @media print {
+    @page { size: A4 landscape; margin: 0; }
+    :global(.topbar), :global(.site-footer), .no-print, :global(.skip-link) { display: none !important; }
+    .cert { padding: 0; max-width: none; }
+    .cert-grid { display: block; margin: 0; }
+    .cert-preview { position: static; }
+    .cert-stage { padding: 0; background: none; border-radius: 0; }
+    .cert-sheet { box-shadow: none; transform: none !important; }
+    .cert-sheet :global(.cert-svg) { width: 297mm; height: 210mm; }
+  }
+</style>
