@@ -1,0 +1,109 @@
+---
+// Glossary term page: a short, sourced, Wikipedia-style article for one term.
+import { render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import LevelBadge from '../../components/ui/LevelBadge.astro';
+import { getGlossary, type GlossaryEntry } from '../../lib/glossary';
+import { inlineMd } from '../../lib/inline-md';
+
+export async function getStaticPaths() {
+  const { entries } = await getGlossary();
+  return entries.map((e) => ({ params: { term: e.id }, props: { entry: e } }));
+}
+interface Props { entry: GlossaryEntry; }
+const { entry } = Astro.props;
+const d = entry.data;
+const { entries, usedIn } = await getGlossary();
+const { Content } = await render(entry);
+const hasBody = !!entry.body?.trim();
+const byId = new Map(entries.map((e) => [e.id, e]));
+const related = d.related.map((s) => byId.get(s)).filter((e): e is GlossaryEntry => !!e);
+// Terms that point back to this one.
+const backlinks = entries.filter((e) => e.id !== entry.id && e.data.related.includes(entry.id) && !d.related.includes(e.id));
+const lessons = usedIn.get(entry.id) ?? [];
+const i = entries.findIndex((e) => e.id === entry.id);
+const prev = entries[i - 1];
+const next = entries[i + 1];
+const typeLabel: Record<string, string> = { paper: 'Paper', docs: 'Docs', book: 'Book', video: 'Video', dataset: 'Dataset', wikipedia: 'Wikipedia', article: 'Article', course: 'Course', code: 'Code' };
+---
+<BaseLayout title={`${d.term} (glossary)`} description={d.short} active="glossary">
+  <main id="main" class="gt">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/glossary/">Glossary</a></li>
+        <li><a href={`/glossary/#${entry.id}`}>{d.term[0].toUpperCase()}</a></li>
+        <li><span aria-current="page">{d.term}</span></li>
+      </ol>
+    </nav>
+    <article class="gt-article" data-pagefind-body data-pagefind-meta="type:Glossary">
+      <p class="hatnote" data-pagefind-ignore>This is a glossary entry. For the full explanation, read {lessons.length ? <a href={lessons[0].url}>{lessons[0].title}</a> : <a href="/course/">the course</a>}.</p>
+      <header class="gt-head">
+        <h1 data-pagefind-meta="title">{d.term}</h1>
+        <p class="gt-meta">
+          {d.level && <LevelBadge level={d.level} />}
+          {d.aliases.length > 0 && <span>Also called <em>{d.aliases.join(', ')}</em></span>}
+        </p>
+      </header>
+      <div class="prose gt-body">
+        <p class="gt-lead"><span set:html={inlineMd(d.short)} /><sup class="cite"><a href="#gref-1">[1]</a></sup></p>
+        {hasBody && <Content />}
+
+        {related.length > 0 && (
+          <>
+            <h2 id="related">Related terms</h2>
+            <ul class="gt-related">
+              {related.map((r) => <li><a href={`/glossary/${r.id}/`}>{r.data.term}</a> <span class="muted" set:html={`: ${inlineMd(r.data.short)}`} /></li>)}
+            </ul>
+          </>
+        )}
+        {lessons.length > 0 && (
+          <>
+            <h2 id="used-in">Used in lessons</h2>
+            <ul>{lessons.map((l) => <li><a href={l.url}>{l.title}</a></li>)}</ul>
+          </>
+        )}
+        {backlinks.length > 0 && (
+          <>
+            <h2 id="see-also">See also</h2>
+            <ul>{backlinks.map((b) => <li><a href={`/glossary/${b.id}/`}>{b.data.term}</a></li>)}</ul>
+          </>
+        )}
+
+        <h2 id="references">References</h2>
+        <ol class="gt-refs">
+          {d.sources.map((s, n) => (
+            <li id={`gref-${n + 1}`}>
+              {s.author && <>{s.author}. </>}
+              <a href={s.url}>{s.title}</a>.
+              {s.publisher && <> {s.publisher}{s.year ? `, ${s.year}` : ''}.</>}
+              {s.type && <span class="gt-ref-type"> {typeLabel[s.type] ?? s.type}.</span>}
+              <span class="muted"> Accessed {s.accessed}.</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </article>
+    <nav class="gt-pn" aria-label="Neighbouring terms">
+      {prev ? <a href={`/glossary/${prev.id}/`}><span class="muted">← Previous term</span>{prev.data.term}</a> : <span></span>}
+      {next ? <a class="gt-next" href={`/glossary/${next.id}/`}><span class="muted">Next term →</span>{next.data.term}</a> : <span></span>}
+    </nav>
+  </main>
+</BaseLayout>
+
+<style>
+  .gt { max-width: 860px; margin: 0 auto; padding: var(--s-7) var(--gutter) 0; }
+  .hatnote { font-style: italic; color: var(--ink-2); font-size: var(--t-small); margin: 0 0 var(--s-3); padding-left: var(--s-4); border-left: 2px solid var(--line); }
+  .gt-head h1 { margin: 0 0 var(--s-2); }
+  .gt-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-3); font-size: var(--t-small); color: var(--ink-3); margin: 0 0 var(--s-5); padding-bottom: var(--s-3); border-bottom: 1px solid var(--line); }
+  .gt-lead { font-size: var(--t-lead); line-height: var(--lh-lead); }
+  .gt-lead .cite { font-size: 0.6em; }
+  .gt-related .muted :global(p) { display: inline; }
+  .gt-refs { font-size: var(--t-small); line-height: 1.6; color: var(--ink-2); }
+  .gt-refs li:target { background: var(--accent-soft); border-radius: var(--r-xs); }
+  .gt-ref-type { color: var(--ink-3); }
+  .gt-pn { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4); margin: var(--s-7) 0 0; }
+  .gt-pn a { display: flex; flex-direction: column; padding: var(--s-4) var(--s-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); text-decoration: none; color: var(--ink); font-weight: 600; font-family: var(--font-serif); font-size: 1.125rem; }
+  .gt-pn a:hover { box-shadow: var(--sh-2); }
+  .gt-pn .muted { font-family: var(--font-sans); font-size: var(--t-small); font-weight: 500; }
+  .gt-next { text-align: right; }
+</style>

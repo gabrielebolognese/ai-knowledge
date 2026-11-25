@@ -1,0 +1,18 @@
+---
+// Embeds the course order (every planned lesson) as JSON and loads the course-map script
+// (src/scripts/course-ui.ts). Include once on any page that shows path maps or "Continue".
+import { getCatalog } from '../../lib/catalog';
+const cat = await getCatalog();
+const order = cat.tracks.flatMap((t) =>
+  t.lessons.map((l) => ({
+    slug: l.slug, title: l.title, track: t.id, trackTitle: t.title, url: l.url, minutes: l.minutes,
+    n: l.n, of: t.lessons.length, optional: t.optional, kind: t.kind, written: l.written,
+  })),
+);
+// Escape "<" so a title can never close the script element.
+const json = JSON.stringify(order).replace(/</g, '\\u003c');
+---
+<script type="application/json" id="aik-course-order" set:html={json} />
+<script>
+  import '../../scripts/course-ui';
+</script>

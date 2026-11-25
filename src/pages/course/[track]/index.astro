@@ -1,0 +1,226 @@
+---
+// Track page: modules and lessons of one track, with the quick-start checklist for project tracks.
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import CourseData from '../../../components/course/CourseData.astro';
+import PathMap from '../../../components/course/PathMap.astro';
+import ProgressRing from '../../../components/ui/ProgressRing.astro';
+import LevelBadge from '../../../components/ui/LevelBadge.astro';
+import { getCatalog, fmtMinutes, REPO, type CatTrack } from '../../../lib/catalog';
+
+export async function getStaticPaths() {
+  const cat = await getCatalog();
+  return cat.tracks.map((t) => ({ params: { track: t.id }, props: { track: t } }));
+}
+interface Props { track: CatTrack; }
+const { track } = Astro.props;
+const cat = await getCatalog();
+const slugs = track.lessons.map((l) => l.slug);
+const written = track.lessons.filter((l) => l.written).length;
+const first = track.lessons[0];
+const quick = track.quickStart.map((s) => cat.bySlug.get(s)).filter((l) => !!l);
+const pathSteps = track.recommendedPath.map((id) => {
+  const t = cat.trackById.get(id);
+  if (t) return { label: t.title, href: `/course/${t.id}/`, kind: 'Track', current: t.id === track.id };
+  const l = cat.bySlug.get(id);
+  return l ? { label: l.title, href: l.url, kind: 'Lesson', current: false } : { label: id, href: undefined, kind: '', current: false };
+});
+const datasets = track.datasets.map((id) => ({ id, ...(cat.sourceRegistry[id] ?? { title: id, url: '' }) })).filter((d) => d.url);
+const skipTo = track.id === 'setup' ? cat.trackById.get('beginner')?.lessons[0] : undefined;
+const others = cat.tracks.filter((t) => t.id !== track.id);
+const kindWord = track.kind === 'project' ? 'Project track' : 'Track';
+---
+<BaseLayout title={track.title} description={track.blurb} active={track.kind === 'project' ? 'projects' : 'course'}>
+  <CourseData />
+  <main id="main" class="tp" data-pagefind-body data-pagefind-meta="type:Track">
+    <header class="tp-band">
+      <div class="tp-band__inner">
+        <div class="tp-band__text">
+          <nav class="breadcrumb" aria-label="Breadcrumb" data-pagefind-ignore>
+            <ol>
+              <li><a href="/course/">Course</a></li>
+              {track.kind === 'project' && <li><a href="/projects/">Projects</a></li>}
+              <li><span aria-current="page">{track.title}</span></li>
+            </ol>
+          </nav>
+          <p class="eyebrow tp-band__kind">{kindWord}{track.optional && ' · optional'}</p>
+          <h1 data-pagefind-meta="title">{track.title}</h1>
+          <p class="t-lead tp-band__lead">{track.blurb}</p>
+          <p class="tp-band__meta" data-pagefind-ignore>
+            <LevelBadge level={track.level} />
+            <span>{track.lessons.length} lessons · {track.modules.length} modules</span>
+            <span>about {fmtMinutes(track.minutes)}</span>
+            {written < track.lessons.length && <span>{written} written, {track.lessons.length - written} coming soon</span>}
+          </p>
+          <div class="tp-band__actions" data-continue data-scope={track.id} data-pagefind-ignore>
+            <a class="btn btn-primary btn-lg" href={first.url} data-continue-link data-testid="track-continue">
+              <span><span data-continue-label>Start</span>: <span data-continue-title>{first.title}</span></span>
+            </a>
+            <span class="tp-band__alldone">Every lesson in this track is complete.</span>
+            <button type="button" class="btn btn-lg" data-bulk-toggle={slugs.join(',')} data-bulk-name={track.title}
+              data-label-todo="Mark whole track complete" data-label-done="Unmark whole track">
+              <span data-label>Mark whole track complete</span>
+            </button>
+          </div>
+        </div>
+        <div class="tp-band__ring" data-progress-slugs={slugs.join(',')} data-pagefind-ignore>
+          <ProgressRing slugs={slugs} size={120} label={`${track.title}: share of lessons complete`} />
+          <p><span data-progress-text>0 / {slugs.length}</span> complete</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="tp-body">
+      <div class="tp-main">
+        {track.id === 'setup' && skipTo && (
+          <aside class="callout callout--tip tp-callout" role="note">
+            <p class="callout__eyebrow"><span>Already set up?</span></p>
+            <p>{track.skipNote ?? 'This track is optional.'}</p>
+            <p><a class="btn btn-sm" href={skipTo.url}>Skip to Beginner: {skipTo.title} →</a></p>
+          </aside>
+        )}
+
+        {track.kind === 'project' && (
+          <>
+            {track.outcome && (
+              <section class="tp-section">
+                <h2>What you will build</h2>
+                <p>{track.outcome}</p>
+              </section>
+            )}
+            <section class="tp-quick" aria-labelledby="quick-title" data-progress-slugs={quick.map((q) => q!.slug).join(',')}>
+              <div class="tp-quick__head">
+                <div>
+                  <p class="eyebrow tp-quick__eyebrow">Quick start</p>
+                  <h2 id="quick-title">Before you start: {quick.length} lessons this project needs</h2>
+                  <p class="muted">Already know these? Go straight to the project. Otherwise read the ones you have not ticked yet. <span class="tp-quick__count"><span data-progress-text>0 / {quick.length}</span> ready</span></p>
+                </div>
+              </div>
+              <ol class="tp-quick__list">
+                {quick.map((q) => (
+                  <li data-lesson-status={q!.slug}>
+                    <span class="tp-quick__dot" aria-hidden="true"></span>
+                    <a href={q!.url}>{q!.title}</a>
+                    <span class="muted tp-quick__where">{cat.trackById.get(q!.track)?.title}{!q!.written && ' · coming soon'}</span>
+                    <button type="button" class="tp-quick__toggle" data-lesson-toggle={q!.slug} aria-pressed="false" data-label-todo="I know this" data-label-done="Known ✓" aria-label={`Mark ${q!.title} complete`}><span data-label>I know this</span></button>
+                  </li>
+                ))}
+              </ol>
+              <div class="tp-quick__actions">
+                <a class="btn btn-primary" href={first.url}>Start the project now →</a>
+                <a class="btn" href={quick[0]?.url ?? first.url} data-first-todo={quick.map((q) => q!.slug).join(',')}>Read the first missing prerequisite</a>
+                <button type="button" class="btn btn-ghost" data-bulk-toggle={quick.map((q) => q!.slug).join(',')} data-bulk-name="Quick start"
+                  data-label-todo="Mark all as known" data-label-done="Unmark all"><span data-label>Mark all as known</span></button>
+              </div>
+            </section>
+          </>
+        )}
+
+        <section class="tp-section" aria-labelledby="lessons-title">
+          <div class="tp-lessons-head">
+            <h2 id="lessons-title">Lessons</h2>
+            <div data-pagefind-ignore>
+              <button type="button" class="btn btn-ghost btn-sm" data-expand-all>Expand all</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-collapse-all>Collapse all</button>
+            </div>
+          </div>
+          <PathMap track={track} />
+        </section>
+      </div>
+
+      <aside class="tp-side" aria-label="About this track">
+        {pathSteps.length > 0 && (
+          <section class="tp-card">
+            <h2 class="tp-card__title">Recommended path</h2>
+            <ol class="tp-path">
+              {pathSteps.map((s) => (
+                <li class:list={[s.current && 'is-current']}>
+                  {s.href ? <a href={s.href}>{s.label}</a> : <span>{s.label}</span>}
+                  <span class="muted"> {s.kind}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+        {track.codeDir && (
+          <section class="tp-card">
+            <h2 class="tp-card__title">Companion code</h2>
+            <p><a href={`${REPO}/tree/main/${track.codeDir}`}><code>{track.codeDir}</code></a></p>
+            <p class="muted">Every script runs on a laptop CPU; each has a <code>--smoke</code> mode that finishes in seconds.</p>
+          </section>
+        )}
+        {datasets.length > 0 && (
+          <section class="tp-card">
+            <h2 class="tp-card__title">Datasets</h2>
+            <ul>{datasets.map((d) => <li><a href={d.url}>{d.title}</a></li>)}</ul>
+          </section>
+        )}
+        <section class="tp-card" data-pagefind-ignore>
+          <h2 class="tp-card__title">Other tracks</h2>
+          <ul class="tp-others">
+            {others.map((t) => {
+              const s = t.lessons.map((l) => l.slug);
+              return (
+                <li data-progress-slugs={s.join(',')}>
+                  <a href={`/course/${t.id}/`}><ProgressRing slugs={s} size={24} label={`${t.title} progress`} /> <span>{t.title}</span></a>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </aside>
+    </div>
+  </main>
+</BaseLayout>
+
+<style>
+  .tp-band { background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  .tp-band__inner { max-width: var(--container-wide); margin: 0 auto; padding: var(--s-6) var(--gutter) var(--s-7); display: flex; gap: var(--s-8); align-items: center; }
+  .tp-band__text { flex: 1; min-width: 0; }
+  .tp-band__kind { color: var(--accent); margin: 0 0 var(--s-2); }
+  .tp-band h1 { max-width: 28ch; }
+  .tp-band__lead { color: var(--ink-2); max-width: 62ch; margin: var(--s-3) 0 var(--s-4); }
+  .tp-band__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-4); font-size: var(--t-small); color: var(--ink-3); margin: 0 0 var(--s-5); }
+  .tp-band__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+  .tp-band__actions [aria-pressed="true"] { border-color: var(--success); background: var(--success-soft); color: var(--success); }
+  .tp-band__alldone { display: none; font-weight: 600; color: var(--gold-text); }
+  .tp-band__actions[data-complete="true"] [data-continue-link] { display: none; }
+  .tp-band__actions[data-complete="true"] .tp-band__alldone { display: inline; }
+  .tp-band__ring { flex: none; text-align: center; }
+  .tp-band__ring p { margin: var(--s-2) 0 0; font-size: var(--t-small); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+  .tp-body { max-width: var(--container-wide); margin: 0 auto; padding: var(--s-7) var(--gutter) 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--s-8); align-items: start; }
+  .tp-main { max-width: 820px; }
+  .tp-section { margin: 0 0 var(--s-7); }
+  .tp-section h2, .tp-quick h2 { margin: 0 0 var(--s-3); }
+  .tp-callout { margin-top: 0; }
+  .tp-callout p:last-child { margin-bottom: 0; }
+  .tp-lessons-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s-3); }
+  .tp-lessons-head h2 { margin: 0; }
+
+  .tp-quick { margin: 0 0 var(--s-7); padding: var(--s-5) var(--s-6); border-radius: var(--r-lg); background: var(--accent-soft); }
+  .tp-quick__eyebrow { color: var(--accent); margin: 0 0 var(--s-1); }
+  .tp-quick h2 { font-size: 1.375rem; line-height: 1.9rem; }
+  .tp-quick__count { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tp-quick__list { list-style: none; margin: var(--s-4) 0; padding: 0; display: grid; gap: var(--s-1); }
+  .tp-quick__list li { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); background: var(--surface); }
+  .tp-quick__list a { font-weight: 600; font-size: var(--t-ui); }
+  .tp-quick__where { font-size: var(--t-small); flex: 1; }
+  .tp-quick__dot { flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); }
+  .tp-quick__list li[data-done="true"] .tp-quick__dot { background: var(--success); border-color: var(--success); }
+  .tp-quick__toggle { flex: none; min-height: 32px; padding: 0 var(--s-3); border-radius: var(--r-pill); border: 1px solid var(--line-strong); background: var(--surface); font-size: var(--t-small); font-weight: 600; color: var(--ink-2); cursor: pointer; }
+  .tp-quick__toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .tp-quick__toggle[aria-pressed="true"] { border-color: var(--success); background: var(--success-soft); color: var(--success); }
+  .tp-quick__actions { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+  .tp-quick__actions [aria-pressed="true"] { color: var(--success); }
+
+  .tp-side { position: sticky; top: calc(var(--topbar-h) + var(--s-5)); display: grid; gap: var(--s-4); }
+  .tp-card { padding: var(--s-4) var(--s-5); background: var(--surface); border-radius: var(--r-md); box-shadow: var(--sh-1); font-size: var(--t-small); line-height: var(--lh-small); }
+  .tp-card__title { font-family: var(--font-sans); font-size: var(--t-micro); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; color: var(--ink-3); margin: 0 0 var(--s-2); }
+  .tp-card p { margin: 0 0 var(--s-2); }
+  .tp-card ul, .tp-card ol { margin: 0; padding-left: 1.2em; }
+  .tp-card li { margin: 4px 0; }
+  .tp-path li.is-current { font-weight: 600; }
+  .tp-others { list-style: none; padding: 0 !important; }
+  .tp-others a { display: flex; align-items: center; gap: var(--s-2); text-decoration: none; color: var(--ink-2); padding: 3px 0; }
+  .tp-others a:hover { color: var(--accent); }
+</style>

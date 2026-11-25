@@ -1,5 +1,8 @@
 ---
 import Wordmark from './Wordmark.astro';
+import ProgressRing from './ProgressRing.astro';
+import SearchPalette from './SearchPalette.astro';
+import { getCatalog } from '../../lib/catalog';
 interface Props { active?: string; }
 const { active = '' } = Astro.props;
 const links = [
@@ -9,6 +12,8 @@ const links = [
   { href: '/glossary/', label: 'Glossary', key: 'glossary' },
   { href: '/certificate/', label: 'Certificate', key: 'certificate' },
 ];
+const cat = await getCatalog();
+const allSlugs = cat.all.map((l) => l.slug);
 ---
 <header class="topbar" data-topbar>
   <div class="topbar__inner">
@@ -20,9 +25,21 @@ const links = [
         ))}
       </ul>
     </nav>
-    <p class="topbar__note">Progress is saved in this browser only</p>
+    <div class="topbar__right">
+      <button type="button" class="topbar__search" data-search-open aria-haspopup="dialog" aria-label="Search the course (press / )">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M12.6 12.6 17 17" /></svg>
+        <span>Search lessons and terms</span>
+        <kbd aria-hidden="true">/</kbd>
+      </button>
+      <a class="topbar__progress" href="/course/" data-progress-slugs={allSlugs.join(',')} data-testid="header-progress"
+        title="Your overall progress, saved in this browser only">
+        <ProgressRing slugs={allSlugs} size={28} label="Overall course progress" />
+        <span class="topbar__pct"><span data-progress-pct>0%</span><span class="topbar__pct-label">complete</span></span>
+      </a>
+    </div>
   </div>
 </header>
+<SearchPalette />
 <script>
   const bar = document.querySelector<HTMLElement>('[data-topbar]');
   const onScroll = () => bar?.classList.toggle('is-scrolled', window.scrollY > 8);
@@ -38,7 +55,7 @@ const links = [
     transition: border-color var(--d-fast);
   }
   .topbar.is-scrolled { border-bottom-color: var(--line); }
-  .topbar__inner { max-width: var(--container-wide); margin: 0 auto; padding: 0 var(--gutter); height: 100%; display: flex; align-items: center; gap: var(--s-7); }
+  .topbar__inner { max-width: var(--container-wide); margin: 0 auto; padding: 0 var(--gutter); height: 100%; display: flex; align-items: center; gap: var(--s-6); }
   nav ul { display: flex; gap: var(--s-1); list-style: none; margin: 0; padding: 0; }
   nav a {
     display: inline-flex; align-items: center; min-height: 40px; padding: 0 var(--s-3);
@@ -47,5 +64,19 @@ const links = [
   }
   nav a:hover { background: var(--surface-2); color: var(--ink); }
   nav a[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
-  .topbar__note { margin: 0 0 0 auto; font-size: var(--t-small); color: var(--ink-3); }
+  .topbar__right { margin-left: auto; display: flex; align-items: center; gap: var(--s-4); }
+  .topbar__search {
+    display: inline-flex; align-items: center; gap: var(--s-2); min-height: 38px; min-width: 240px; padding: 0 var(--s-2) 0 var(--s-3);
+    border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--ink-3);
+    font-size: var(--t-small); cursor: pointer; transition: border-color var(--d-fast), box-shadow var(--d-fast);
+  }
+  .topbar__search:hover { border-color: var(--line-strong); box-shadow: var(--sh-1); }
+  .topbar__search svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; flex: none; }
+  .topbar__search span { flex: 1; text-align: left; }
+  .topbar__search kbd { font-size: var(--t-micro); min-width: 22px; text-align: center; }
+  .topbar__progress { display: inline-flex; align-items: center; gap: var(--s-2); text-decoration: none; color: var(--ink); padding: 4px var(--s-2) 4px 4px; border-radius: var(--r-pill); }
+  .topbar__progress:hover { background: var(--surface-2); }
+  .topbar__pct { display: flex; flex-direction: column; line-height: 1.05; font-weight: 600; font-size: var(--t-small); font-variant-numeric: tabular-nums; }
+  .topbar__pct-label { font-weight: 500; font-size: var(--t-micro); color: var(--ink-3); }
+  @media (max-width: 1279px) { .topbar__search { min-width: 0; } .topbar__search span { display: none; } }
 </style>

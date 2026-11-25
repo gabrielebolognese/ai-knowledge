@@ -60,7 +60,7 @@ const fmtLevel = { beginner: 'Beginner', intermediate: 'Intermediate', advanced:
           <ProgressRing slugs={trackSlugs} size={40} label={`${meta.title} track progress`} />
           <div>
             <p class="eyebrow muted">{meta.kind === 'project' ? 'Project' : 'Track'}</p>
-            <a class="rail-title" href={`/course/#${d.track}`}>{meta.title}</a>
+            <a class="rail-title" href={`/course/${d.track}/`}>{meta.title}</a>
             <p class="rail-count" data-progress-slugs={trackSlugs.join(',')}><span data-progress-text>0 / {trackSlugs.length}</span> complete</p>
           </div>
         </div>
@@ -87,17 +87,17 @@ const fmtLevel = { beginner: 'Beginner', intermediate: 'Intermediate', advanced:
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <ol>
           <li><a href="/course/">Course</a></li>
-          <li><a href={`/course/#${d.track}`}>{meta.title}</a></li>
+          <li><a href={`/course/${d.track}/`}>{meta.title}</a></li>
           {module && module.title !== meta.title && <li><span>{module.title}</span></li>}
           <li><span aria-current="page">{d.title}</span></li>
         </ol>
       </nav>
 
-      <article class="lesson" data-pagefind-body data-lesson={d.slug}>
+      <article class="lesson" data-pagefind-body data-pagefind-meta="type:Lesson" data-lesson={d.slug}>
         {d.hatnote && <p class="hatnote">{d.hatnote}</p>}
         <header class="lesson-head">
           <h1 data-pagefind-meta="title">{d.title}</h1>
-          <p class="lesson-meta">
+          <p class="lesson-meta" data-pagefind-ignore>
             <LevelBadge level={d.level} />
             <span>{d.minutes} min read</span>
             {track && <span>Lesson {index + 1} of {track.lessons.length}</span>}

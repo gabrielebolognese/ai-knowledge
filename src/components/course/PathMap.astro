@@ -1,0 +1,188 @@
+---
+/**
+ * Path map (brief C1) for one track: module groups, each a vertical line of lesson nodes.
+ * Every node is a plain link (no locked state that blocks you); upcoming nodes only LOOK
+ * locked. Each node has a one-click "Mark done" toggle and each module a "Mark module complete"
+ * bulk toggle. States are filled in on the client by src/scripts/course-ui.ts and
+ * src/scripts/progress-ui.ts. Requires <CourseData /> once on the page.
+ */
+import ProgressRing from '../ui/ProgressRing.astro';
+import { type CatTrack, LEVEL_WORD } from '../../lib/catalog';
+
+interface Props {
+  track: CatTrack;
+  /** Dashboard mode: show the track header row (ring, title, link to the track page). */
+  header?: boolean;
+  headingLevel?: 2 | 3;
+  /** Start with the module lists folded (the header, counts and bulk buttons stay visible). */
+  collapsed?: boolean;
+}
+const { track, header = false, headingLevel = 2, collapsed = false } = Astro.props;
+const H = `h${headingLevel}` as 'h2' | 'h3';
+const MH = `h${headingLevel + 1}` as 'h3' | 'h4';
+const trackSlugs = track.lessons.map((l) => l.slug);
+const showModuleTitles = track.modules.length > 1 || track.modules[0]?.title !== track.title;
+---
+<section class="pm" id={header ? track.id : undefined} data-track-section={track.id} aria-labelledby={`pm-${track.id}`}>
+  {header ? (
+    <header class="pm__head" data-progress-slugs={trackSlugs.join(',')}>
+      <ProgressRing slugs={trackSlugs} size={56} label={`${track.title}: share of lessons complete`} />
+      <div class="pm__head-text">
+        <p class="eyebrow pm__kind">{track.kind === 'project' ? 'Project track' : 'Track'}{track.optional && ' · optional'}</p>
+        <H id={`pm-${track.id}`} class="pm__title"><a href={`/course/${track.id}/`}>{track.title}</a></H>
+        <p class="pm__count"><span data-progress-text>0 / {trackSlugs.length}</span> lessons · {track.modules.length} modules</p>
+      </div>
+      <button type="button" class="btn btn-sm pm__bulk" data-bulk-toggle={trackSlugs.join(',')} data-bulk-name={track.title}
+        data-label-todo="Mark track complete" data-label-done="Unmark track" aria-label={`Mark every lesson in ${track.title} complete, or unmark them`}>
+        <span data-label>Mark track complete</span>
+      </button>
+    </header>
+  ) : (
+    <H id={`pm-${track.id}`} class="sr-only">{track.title}: lessons</H>
+  )}
+
+  <div class="pm__modules" data-track-map={track.id}>
+    {track.modules.map((m, mi) => {
+      const slugs = m.lessons.map((l) => l.slug);
+      const listId = `pm-list-${track.id}-${m.id}`;
+      return (
+        <div class="pm-mod" data-module={m.id} data-progress-slugs={slugs.join(',')}>
+          {showModuleTitles && (
+            <div class="pm-mod__head">
+              <button type="button" class="pm-mod__toggle" data-module-collapse aria-expanded={collapsed ? 'false' : 'true'} aria-controls={listId}>
+                <svg class="pm-mod__chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 6.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span class="pm-mod__num">Module {mi + 1}</span>
+                <MH class="pm-mod__title">{m.title}</MH>
+              </button>
+              <span class="pm-mod__count" data-pagefind-ignore><span data-progress-text>0 / {slugs.length}</span><span class="pm-mod__done-word"> · complete</span></span>
+              <button type="button" data-pagefind-ignore class="btn btn-ghost btn-sm pm-mod__bulk" data-bulk-toggle={slugs.join(',')} data-bulk-name={m.title}
+                data-label-todo="Mark module complete" data-label-done="Unmark module" aria-label={`Mark all ${slugs.length} lessons of ${m.title} complete, or unmark them`}>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 10.5l3 3 6-6.5M9.5 13.5l1 1 6-6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <span data-label>Mark module complete</span>
+              </button>
+            </div>
+          )}
+          <ol class="pm-nodes" id={listId} hidden={showModuleTitles && collapsed}>
+            {m.lessons.map((l, li) => (
+              <li class:list={['node', li === 0 && 'node--start', li === m.lessons.length - 1 && 'node--end']} data-node={l.slug} data-level={l.level}
+                data-written={String(l.written)} data-state="later" data-lesson-status={l.slug}>
+                <a class="node__link" href={l.url} title={l.summary || undefined}>
+                  <span class="node__dot" aria-hidden="true">
+                    <span class="node__num">{l.n}</span>
+                    <svg class="node__check" viewBox="0 0 24 24"><path d="M6.5 12.4l3.6 3.6 7.4-7.8" /></svg>
+                  </span>
+                  <span class="node__text">
+                    <span class="node__title">{l.title}</span>
+                    <span class="node__meta" data-pagefind-ignore>
+                      {l.minutes} min · {LEVEL_WORD[l.level]}
+                      {!l.written && <span class="node__soon">Coming soon</span>}
+                      <span class="node__lock" aria-hidden="true"><svg viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5" /><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7" /></svg>Open any time</span>
+                    </span>
+                  </span>
+                  <span class="node__chip" aria-hidden="true" data-pagefind-ignore>Continue →</span>
+                  <span class="sr-only" data-node-state data-pagefind-ignore>(not started)</span>
+                </a>
+                <button type="button" data-pagefind-ignore class="node__toggle" data-lesson-toggle={l.slug} aria-pressed="false"
+                  data-label-todo="Mark done" data-label-done="Done" aria-label={`Completed: ${l.title}`}>
+                  <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" /><path d="M6.6 10.3l2.3 2.3 4.6-4.9" /></svg>
+                  <span data-label>Mark done</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+      );
+    })}
+  </div>
+</section>
+
+<style>
+  .pm { margin: 0 0 var(--s-7); scroll-margin-top: calc(var(--topbar-h) + 88px); }
+  .pm__head { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-4) var(--s-5); background: var(--surface); border-radius: var(--r-md); box-shadow: var(--sh-1); margin-bottom: var(--s-4); }
+  .pm__head-text { flex: 1; min-width: 0; }
+  .pm__kind { margin: 0; color: var(--ink-3); }
+  .pm__title { font-size: 1.5rem; line-height: 2rem; margin: 0; }
+  .pm__title a { color: var(--ink); text-decoration: none; }
+  .pm__title a:hover { color: var(--accent); }
+  .pm__count { margin: 0; font-size: var(--t-small); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .pm__bulk[aria-pressed="true"] { border-color: var(--success); color: var(--success); background: var(--success-soft); }
+
+  .pm-mod { margin: 0 0 var(--s-3); }
+  .pm-mod__head { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) 0 var(--s-2); border-bottom: 1px solid var(--line); margin: 0 0 var(--s-2); position: relative; }
+  .pm-mod[data-complete="true"] .pm-mod__head { border-bottom-color: var(--gold-2); }
+  .pm-mod__toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s-2); background: none; border: 0; padding: var(--s-1) 0; cursor: pointer; text-align: left; border-radius: var(--r-xs); }
+  .pm-mod__chev { width: 16px; height: 16px; flex: none; color: var(--ink-3); transition: transform var(--d-base) var(--ease-out); }
+  .pm-mod__toggle[aria-expanded="false"] .pm-mod__chev { transform: rotate(-90deg); }
+  .pm-mod__num { font-size: var(--t-micro); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; color: var(--ink-3); flex: none; }
+  .pm-mod__title { font-family: var(--font-sans); font-size: var(--t-ui); line-height: var(--lh-ui); font-weight: 600; margin: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pm-mod__count { font-size: var(--t-small); color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
+  .pm-mod__done-word { display: none; }
+  .pm-mod[data-complete="true"] .pm-mod__count { color: var(--gold-text); font-weight: 600; }
+  .pm-mod[data-complete="true"] .pm-mod__done-word { display: inline; }
+  .pm-mod__bulk { flex: none; }
+  .pm-mod__bulk svg { width: 18px; height: 18px; }
+  .pm-mod__bulk[aria-pressed="true"] { color: var(--success); }
+
+  .pm-nodes { list-style: none; margin: 0; padding: 0; }
+  .node { position: relative; display: flex; align-items: center; gap: var(--s-3); }
+  /* connector */
+  .node::before { content: ""; position: absolute; left: 21px; top: 0; bottom: 0; width: 3px; background: var(--line); }
+  .node--start::before { top: 50%; }
+  .node--end::before { bottom: 50%; }
+  .node--start.node--end::before { display: none; }
+  .node[data-state="done"]::before { background: var(--accent); }
+  .node__link {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s-4); padding: 6px var(--s-3) 6px 0;
+    border-radius: var(--r-sm); text-decoration: none; color: var(--ink); position: relative;
+    transition: background-color var(--d-fast);
+  }
+  .node__link:hover { background: var(--surface); box-shadow: var(--sh-1); }
+  .node__dot {
+    position: relative; z-index: 1; flex: none; width: 45px; height: 45px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--surface); border: 2px solid var(--line-strong); color: var(--ink-2);
+    font-weight: 600; font-size: var(--t-small); font-variant-numeric: tabular-nums;
+    transition: transform var(--d-base) var(--ease-out), background-color var(--d-base), border-color var(--d-base);
+  }
+  .node__link:hover .node__dot { transform: translateY(-2px); box-shadow: var(--sh-2); }
+  .node__check { position: absolute; inset: 0; margin: auto; width: 24px; height: 24px; fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 20; stroke-dashoffset: 20; transition: stroke-dashoffset var(--d-slow) var(--ease-out); }
+  .node__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .node__title { font-size: var(--t-ui); line-height: var(--lh-ui); font-weight: 600; }
+  .node__meta { font-size: var(--t-small); line-height: var(--lh-small); color: var(--ink-3); display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+  .node__soon { font-size: var(--t-micro); line-height: var(--lh-micro); font-weight: 600; color: var(--ink-3); border: 1px dashed var(--line-strong); border-radius: var(--r-pill); padding: 1px 8px; }
+  .node__lock { display: none; align-items: center; gap: 4px; }
+  .node__lock svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+  .node__chip { display: none; flex: none; font-size: var(--t-small); font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: var(--r-pill); padding: 4px 12px; }
+
+  /* states */
+  .node[data-state="done"] .node__dot { background: var(--accent-soft); border-color: var(--accent); }
+  .node[data-state="done"] .node__num { opacity: 0; }
+  .node[data-state="done"] .node__check { stroke-dashoffset: 0; }
+  .node[data-state="next"] .node__dot { background: var(--accent); border-color: var(--accent); color: var(--ink-inverse); box-shadow: 0 0 0 6px var(--accent-soft); }
+  .node[data-state="later"] .node__dot { background: var(--surface-2); border-color: var(--line); color: var(--ink-3); }
+  .node[data-state="later"] .node__title { color: var(--ink-2); font-weight: 500; }
+  .node[data-state="later"] .node__lock { display: inline-flex; }
+  .node__link[aria-current="step"] { background: var(--accent-soft); }
+  .node__link[aria-current="step"] .node__chip { display: inline-block; }
+  .node__link[aria-current="step"] .node__dot { animation: node-halo 1.2s var(--ease-out) 1; }
+  @keyframes node-halo { 0% { box-shadow: 0 0 0 0 rgb(51 64 201 / 0.35); } 100% { box-shadow: 0 0 0 10px var(--accent-soft); } }
+
+  .node__toggle {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; min-width: 112px; padding: 0 var(--s-3);
+    border-radius: var(--r-pill); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2);
+    font-size: var(--t-small); font-weight: 600; cursor: pointer;
+    transition: background-color var(--d-base), color var(--d-base), border-color var(--d-base), transform var(--d-fast);
+  }
+  .node__toggle:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .node__toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .node__toggle svg path { opacity: 0.35; }
+  .node__toggle[aria-pressed="true"] { background: var(--success-soft); border-color: var(--success); color: var(--success); }
+  .node__toggle[aria-pressed="true"] svg circle { fill: var(--success); stroke: var(--success); }
+  .node__toggle[aria-pressed="true"] svg path { stroke: var(--success-soft); opacity: 1; stroke-width: 2; }
+  .node__toggle[aria-pressed="true"]:hover [data-label] { visibility: hidden; position: relative; }
+  .node__toggle[aria-pressed="true"]:hover [data-label]::after { content: "Undo"; visibility: visible; position: absolute; left: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .node__link[aria-current="step"] .node__dot { animation: none; }
+    .node__check, .node__dot, .pm-mod__chev { transition: none; }
+  }
+</style>

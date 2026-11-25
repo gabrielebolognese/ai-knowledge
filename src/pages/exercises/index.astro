@@ -1,0 +1,258 @@
+---
+// Exercise library (brief §5.5): every exercise from every written lesson, in course order,
+// with filters (track, level, type, difficulty, done / not done), text search and URL-reflected state.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Exercise from '../../components/mdx/Exercise.astro';
+import { getCatalog } from '../../lib/catalog';
+
+const cat = await getCatalog();
+const TYPE_LABEL = { mcq: 'Quiz', numeric: 'Numeric', short: 'Short answer', reveal: 'Think it through' } as const;
+const DIFF_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' } as const;
+const LEVEL_LABEL = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' } as const;
+
+const groups = cat.tracks
+  .map((t) => ({
+    track: t,
+    items: t.lessons
+      .filter((l) => l.written && l.entry)
+      .flatMap((l) =>
+        l.entry!.data.exercises.map((ex) => ({
+          ex,
+          lesson: { title: l.title, url: l.url },
+          level: l.level,
+          search: [ex.title, ex.prompt, l.title, t.title, ...(ex.concepts ?? [])].filter(Boolean).join(' ').toLowerCase().replace(/[$`*_\\]/g, ''),
+        })),
+      ),
+  }))
+  .filter((g) => g.items.length);
+const total = groups.reduce((s, g) => s + g.items.length, 0);
+const count = (fn: (x: (typeof groups)[number]['items'][number]) => boolean) => groups.reduce((s, g) => s + g.items.filter(fn).length, 0);
+---
+<BaseLayout title="Exercise library" active="exercises" description="All the practice in the AI Knowledge course in one place: filter by track, level, type and difficulty, search, and track what you have done.">
+  <div class="lib">
+    <aside class="lib-filters" aria-label="Filter exercises">
+      <form class="lib-form" data-lib-form>
+        <label class="lib-search">
+          <span class="sr-only">Search exercises</span>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M12.6 12.6 17 17" /></svg>
+          <input type="search" name="q" placeholder="Search exercises" autocomplete="off" data-lib-q />
+        </label>
+
+        <label class="lib-field">
+          <span class="lib-legend">Track</span>
+          <select name="track" data-lib-track>
+            <option value="">All tracks</option>
+            {groups.map((g) => <option value={g.track.id}>{g.track.title} ({g.items.length})</option>)}
+          </select>
+        </label>
+
+        <fieldset class="lib-fieldset">
+          <legend class="lib-legend">Status</legend>
+          <div class="lib-seg">
+            <label><input type="radio" name="status" value="" checked /> <span>All</span></label>
+            <label><input type="radio" name="status" value="todo" /> <span>To do</span></label>
+            <label><input type="radio" name="status" value="done" /> <span>Done</span></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="lib-fieldset">
+          <legend class="lib-legend">Level</legend>
+          {Object.entries(LEVEL_LABEL).map(([v, label]) => (
+            <label class="lib-check"><input type="checkbox" name="level" value={v} /> <span>{label}</span><span class="lib-n">{count((x) => x.level === v)}</span></label>
+          ))}
+        </fieldset>
+
+        <fieldset class="lib-fieldset">
+          <legend class="lib-legend">Type</legend>
+          {Object.entries(TYPE_LABEL).map(([v, label]) => (
+            <label class="lib-check"><input type="checkbox" name="type" value={v} /> <span>{label}</span><span class="lib-n">{count((x) => x.ex.type === v)}</span></label>
+          ))}
+        </fieldset>
+
+        <fieldset class="lib-fieldset">
+          <legend class="lib-legend">Difficulty</legend>
+          {Object.entries(DIFF_LABEL).map(([v, label]) => (
+            <label class="lib-check"><input type="checkbox" name="difficulty" value={v} /> <span>{label}</span><span class="lib-n">{count((x) => x.ex.difficulty === v)}</span></label>
+          ))}
+        </fieldset>
+
+        <button type="reset" class="btn btn-sm lib-clear" data-lib-clear>Clear filters</button>
+      </form>
+    </aside>
+
+    <main id="main" class="lib-main">
+      <header class="lib-head">
+        <p class="eyebrow muted">Practice</p>
+        <h1>Exercise library</h1>
+        <p class="t-lead lib-lead">All the practice in the course, in one place. Self-check, never graded: answers are always available. Tick <em>Done</em> to track it; the mark is the same one you see in the lesson.</p>
+      </header>
+      <div class="lib-bar" role="status" aria-live="polite">
+        <p class="lib-count" data-lib-count>Showing {total} of {total} exercises</p>
+        <div class="lib-done" data-lib-done-wrap>
+          <span class="lib-done__bar" aria-hidden="true"><span></span></span>
+          <span data-lib-done>0 / {total} done</span>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" data-lib-mark-shown>Mark shown as done</button>
+      </div>
+
+      {groups.map((g) => (
+        <section class="lib-group" data-lib-group={g.track.id} aria-labelledby={`lib-${g.track.id}`}>
+          <h2 id={`lib-${g.track.id}`} class="lib-group__title">{g.track.title} <span class="muted">{g.items.length}</span></h2>
+          <div class="lib-items">
+            {g.items.map((x) => (
+              <article class="lib-item" data-lib-item={x.ex.id} data-track={g.track.id} data-level={x.level} data-type={x.ex.type}
+                data-difficulty={x.ex.difficulty} data-search={x.search}>
+                <p class="lib-item__lesson">
+                  <span class={`lib-dot lib-dot--${x.level}`} aria-hidden="true"></span>
+                  <span class="sr-only">{LEVEL_LABEL[x.level]} · </span>
+                  <span class="muted">From the lesson</span> <a href={x.lesson.url} data-lib-lesson>{x.lesson.title}</a>
+                </p>
+                <Exercise exercise={x.ex as any} lesson={x.lesson} />
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
+      <div class="lib-empty" data-lib-empty hidden>
+        <p>No exercise matches these filters.</p>
+        <button type="button" class="btn btn-sm" data-lib-clear-empty>Clear filters</button>
+      </div>
+    </main>
+  </div>
+</BaseLayout>
+
+<script>
+  import { subscribe, getState, setExercises } from '../../lib/progress';
+  import { showToast } from '../../lib/toast';
+
+  const form = document.querySelector<HTMLFormElement>('[data-lib-form]')!;
+  const items = [...document.querySelectorAll<HTMLElement>('[data-lib-item]')];
+  const groups = [...document.querySelectorAll<HTMLElement>('[data-lib-group]')];
+  const countEl = document.querySelector<HTMLElement>('[data-lib-count]')!;
+  const doneEl = document.querySelector<HTMLElement>('[data-lib-done]')!;
+  const doneWrap = document.querySelector<HTMLElement>('[data-lib-done-wrap]')!;
+  const empty = document.querySelector<HTMLElement>('[data-lib-empty]')!;
+  const KEYS = ['q', 'track', 'status', 'level', 'type', 'difficulty'];
+
+  function readForm() {
+    const fd = new FormData(form);
+    return {
+      q: String(fd.get('q') || '').trim().toLowerCase(),
+      track: String(fd.get('track') || ''),
+      status: String(fd.get('status') || ''),
+      level: fd.getAll('level').map(String),
+      type: fd.getAll('type').map(String),
+      difficulty: fd.getAll('difficulty').map(String),
+    };
+  }
+
+  function writeForm(p: URLSearchParams) {
+    (form.elements.namedItem('q') as HTMLInputElement).value = p.get('q') || '';
+    (form.elements.namedItem('track') as HTMLSelectElement).value = p.get('track') || '';
+    form.querySelectorAll<HTMLInputElement>('input[name="status"]').forEach((r) => (r.checked = r.value === (p.get('status') || '')));
+    for (const k of ['level', 'type', 'difficulty']) {
+      const vals = (p.get(k) || '').split(',').filter(Boolean);
+      form.querySelectorAll<HTMLInputElement>(`input[name="${k}"]`).forEach((c) => (c.checked = vals.includes(c.value)));
+    }
+  }
+
+  function syncUrl(f: ReturnType<typeof readForm>) {
+    const url = new URL(location.href);
+    KEYS.forEach((k) => url.searchParams.delete(k));
+    if (f.q) url.searchParams.set('q', f.q);
+    if (f.track) url.searchParams.set('track', f.track);
+    if (f.status) url.searchParams.set('status', f.status);
+    for (const k of ['level', 'type', 'difficulty'] as const) if (f[k].length) url.searchParams.set(k, f[k].join(','));
+    history.replaceState(null, '', url);
+  }
+
+  function apply() {
+    const f = readForm();
+    const state = getState();
+    const words = f.q.split(/\s+/).filter(Boolean);
+    let shown = 0;
+    for (const it of items) {
+      const done = !!state.exercises[it.dataset.libItem!]?.done;
+      const ok =
+        (!f.track || it.dataset.track === f.track) &&
+        (!f.level.length || f.level.includes(it.dataset.level!)) &&
+        (!f.type.length || f.type.includes(it.dataset.type!)) &&
+        (!f.difficulty.length || f.difficulty.includes(it.dataset.difficulty!)) &&
+        (!f.status || (f.status === 'done' ? done : !done)) &&
+        words.every((w) => it.dataset.search!.includes(w));
+      it.hidden = !ok;
+      if (ok) shown++;
+    }
+    groups.forEach((g) => (g.hidden = !g.querySelector('[data-lib-item]:not([hidden])')));
+    empty.hidden = shown > 0;
+    countEl.textContent = `Showing ${shown} of ${items.length} exercises`;
+    const doneTotal = items.filter((it) => state.exercises[it.dataset.libItem!]?.done).length;
+    doneEl.textContent = `${doneTotal} / ${items.length} done`;
+    doneWrap.style.setProperty('--pct', String(items.length ? Math.round((doneTotal / items.length) * 100) : 0));
+    syncUrl(f);
+  }
+
+  writeForm(new URLSearchParams(location.search));
+  form.addEventListener('input', apply);
+  form.addEventListener('change', apply);
+  form.addEventListener('submit', (e) => e.preventDefault());
+  form.addEventListener('reset', () => setTimeout(apply, 0));
+  document.querySelector('[data-lib-clear-empty]')?.addEventListener('click', () => form.reset());
+  document.querySelector('[data-lib-mark-shown]')?.addEventListener('click', () => {
+    const ids = items.filter((it) => !it.hidden).map((it) => it.dataset.libItem!);
+    if (!ids.length) return;
+    const allDone = ids.every((id) => getState().exercises[id]?.done);
+    setExercises(ids, !allDone);
+    showToast(allDone ? `${ids.length} exercises marked not done` : `${ids.length} exercises marked done`);
+  });
+  // Re-filter whenever progress changes (a "Done" tick can move an item out of "To do").
+  subscribe(() => apply());
+</script>
+
+<style>
+  .lib { max-width: var(--container-wide); margin: 0 auto; padding: var(--s-7) var(--gutter) 0; display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: var(--s-8); align-items: start; }
+  .lib-filters { position: sticky; top: calc(var(--topbar-h) + var(--s-5)); max-height: calc(100vh - var(--topbar-h) - var(--s-6)); overflow-y: auto; padding: 2px; }
+  .lib-form { display: grid; gap: var(--s-4); min-width: 0; }
+  .lib-filters, .lib-main { min-width: 0; }
+  .lib-search { display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-3); min-height: 42px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); }
+  .lib-search:focus-within { box-shadow: var(--focus); }
+  .lib-search svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--ink-3); stroke-width: 1.7; stroke-linecap: round; }
+  .lib-search input { flex: 1; width: 100%; min-width: 0; border: 0; background: none; min-height: 40px; outline: none; font-size: var(--t-ui); }
+  .lib-field { display: grid; gap: var(--s-1); }
+  .lib-field select { width: 100%; min-height: 40px; padding: 0 var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); font-size: var(--t-ui); }
+  .lib-fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .lib-legend { font-size: var(--t-micro); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; color: var(--ink-3); padding: 0; margin-bottom: var(--s-1); }
+  .lib-check { display: flex; align-items: center; gap: var(--s-2); font-size: var(--t-ui); padding: 3px var(--s-1); border-radius: var(--r-xs); cursor: pointer; }
+  .lib-check:hover { background: var(--surface-2); }
+  .lib-check input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .lib-n { margin-left: auto; font-size: var(--t-small); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .lib-seg { display: flex; padding: 3px; background: var(--surface-2); border-radius: var(--r-pill); }
+  .lib-seg label { flex: 1; position: relative; text-align: center; cursor: pointer; }
+  .lib-seg input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+  .lib-seg span { display: block; padding: 5px 0; border-radius: var(--r-pill); font-size: var(--t-small); font-weight: 600; color: var(--ink-2); }
+  .lib-seg input:checked + span { background: var(--surface); color: var(--ink); box-shadow: var(--sh-1); }
+  .lib-seg input:focus-visible + span { box-shadow: var(--focus); }
+  .lib-clear { justify-self: start; }
+
+  .lib-head h1 { margin: var(--s-1) 0 var(--s-3); }
+  .lib-lead { color: var(--ink-2); max-width: 64ch; }
+  .lib-bar { display: flex; align-items: center; gap: var(--s-5); padding: var(--s-3) 0; margin: var(--s-4) 0 var(--s-2); border-bottom: 1px solid var(--line); position: sticky; top: var(--topbar-h); z-index: 2; background: rgb(250 247 242 / 0.94); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  .lib-count { margin: 0; font-weight: 600; font-size: var(--t-ui); flex: 1; }
+  .lib-done { display: flex; align-items: center; gap: var(--s-2); font-size: var(--t-small); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .lib-done__bar { width: 96px; height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+  .lib-done__bar span { display: block; height: 100%; width: calc(var(--pct, 0) * 1%); background: var(--success); transition: width var(--d-slow) var(--ease-out); }
+
+  .lib-group { margin: var(--s-6) 0 0; }
+  .lib-group__title { font-size: 1.5rem; line-height: 2rem; margin: 0 0 var(--s-3); }
+  .lib-group__title .muted { font-family: var(--font-sans); font-size: var(--t-small); font-weight: 500; }
+  .lib-items { display: grid; gap: var(--s-4); }
+  .lib-item { max-width: 860px; }
+  .lib-item__lesson { display: flex; align-items: center; gap: var(--s-2); margin: 0 0 var(--s-1); font-size: var(--t-small); padding-left: var(--s-1); }
+  .lib-item__lesson a { color: var(--ink-2); text-decoration: none; font-weight: 600; }
+  .lib-item__lesson a:hover { color: var(--link); text-decoration: underline; }
+  .lib-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .lib-dot--beginner { background: var(--lvl-beginner); }
+  .lib-dot--intermediate { background: var(--lvl-intermediate); border-radius: 1px; transform: rotate(45deg); }
+  .lib-dot--advanced { background: var(--lvl-advanced); border-radius: 0; clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
+  .lib-empty { text-align: center; padding: var(--s-8) 0; color: var(--ink-2); }
+</style>

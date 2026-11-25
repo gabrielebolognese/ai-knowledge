@@ -1,16 +1,32 @@
 ---
 import { getCollection, render } from 'astro:content';
 import LessonLayout from '../../../layouts/LessonLayout.astro';
+import PlannedLesson from '../../../components/course/PlannedLesson.astro';
 import { mdxComponents } from '../../../components/mdx';
+import { getCatalog } from '../../../lib/catalog';
 
 export async function getStaticPaths() {
   const lessons = await getCollection('lessons');
-  return lessons.map((entry) => ({ params: { track: entry.data.track, slug: entry.data.slug }, props: { entry } }));
+  const written = lessons.map((entry) => ({ params: { track: entry.data.track, slug: entry.data.slug }, props: { entry, planned: undefined } }));
+  // Lessons planned in curriculum.json but not written yet: a "coming soon" page built from
+  // the curriculum entry, so every node on the course map opens a real page.
+  const writtenSlugs = new Set(lessons.map((l) => l.data.slug));
+  const cat = await getCatalog();
+  const planned = cat.all
+    .filter((l) => !writtenSlugs.has(l.slug))
+    .map((l) => ({ params: { track: l.track, slug: l.slug }, props: { entry: undefined, planned: l } }));
+  return [...written, ...planned];
 }
 
-const { entry } = Astro.props;
-const { Content, headings, remarkPluginFrontmatter: fm } = await render(entry);
+const { entry, planned } = Astro.props;
+let rendered: Awaited<ReturnType<typeof render>> | null = null;
+if (entry) rendered = await render(entry);
 ---
-<LessonLayout entry={entry} headings={headings} citeOrder={fm.citeOrder} citeCounts={fm.citeCounts} inlineExercises={fm.inlineExercises}>
-  <Content components={mdxComponents} />
-</LessonLayout>
+{entry && rendered ? (
+  <LessonLayout entry={entry} headings={rendered.headings} citeOrder={rendered.remarkPluginFrontmatter.citeOrder}
+    citeCounts={rendered.remarkPluginFrontmatter.citeCounts} inlineExercises={rendered.remarkPluginFrontmatter.inlineExercises}>
+    <rendered.Content components={mdxComponents} />
+  </LessonLayout>
+) : (
+  <PlannedLesson lesson={planned!} />
+)}

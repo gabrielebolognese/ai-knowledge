@@ -4,6 +4,9 @@
  *
  *   [data-lesson-toggle="<slug>"]        button: toggles lesson completion (aria-pressed reflects it)
  *   [data-lesson-status="<slug>"]        element: gets data-done="true|false"
+ *   [data-bulk-toggle="a,b,c"]           button: marks all listed lessons complete, or unmarks them all
+ *                                         when every one is already done (module / track "mark all");
+ *                                         optional data-bulk-name="Module title" for the toast
  *   [data-exercise-toggle="<id>"]        checkbox or button: toggles an exercise "done" mark
  *   [data-exercise-status="<id>"]        element: gets data-done
  *   [data-progress-slugs="a,b,c"]        element: gets data-done-count, data-total, --pct; children
@@ -15,6 +18,7 @@
 import {
   subscribe,
   toggleLesson,
+  setLessons,
   toggleExercise,
   setExercise,
   setName,
@@ -30,6 +34,14 @@ function render(state: ProgressState) {
     el.dataset.done = String(done);
     const label = el.querySelector<HTMLElement>('[data-label]');
     if (label) label.textContent = done ? el.dataset.labelDone || 'Completed · Undo' : el.dataset.labelTodo || 'Mark lesson complete';
+  });
+  document.querySelectorAll<HTMLElement>('[data-bulk-toggle]').forEach((el) => {
+    const slugs = bulkSlugs(el);
+    const done = slugs.length > 0 && slugs.every((s) => state.lessons[s]?.done);
+    el.setAttribute('aria-pressed', String(done));
+    el.dataset.done = String(done);
+    const label = el.querySelector<HTMLElement>('[data-label]');
+    if (label) label.textContent = done ? el.dataset.labelDone || 'Unmark all' : el.dataset.labelTodo || 'Mark all complete';
   });
   document.querySelectorAll<HTMLElement>('[data-lesson-status]').forEach((el) => {
     el.dataset.done = String(!!state.lessons[el.dataset.lessonStatus!]?.done);
@@ -65,6 +77,21 @@ function render(state: ProgressState) {
   });
 }
 
+function bulkSlugs(el: HTMLElement) {
+  return (el.dataset.bulkToggle || '').split(',').filter(Boolean);
+}
+
+function onBulkToggle(el: HTMLElement) {
+  const slugs = bulkSlugs(el);
+  if (!slugs.length) return;
+  const allDone = el.dataset.done === 'true';
+  setLessons(slugs, !allDone);
+  const name = el.dataset.bulkName || 'Group';
+  const msg = allDone ? `${name}: ${slugs.length} lessons marked not complete` : `${name} complete: ${slugs.length} lessons marked done`;
+  showToast(msg);
+  document.getElementById('progress-live')?.replaceChildren(msg);
+}
+
 function onLessonToggle(el: HTMLElement) {
   const slug = el.dataset.lessonToggle!;
   const done = toggleLesson(slug);
@@ -74,6 +101,12 @@ function onLessonToggle(el: HTMLElement) {
 
 document.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
+  const bulk = target.closest<HTMLElement>('[data-bulk-toggle]');
+  if (bulk) {
+    e.preventDefault();
+    onBulkToggle(bulk);
+    return;
+  }
   const lesson = target.closest<HTMLElement>('[data-lesson-toggle]');
   if (lesson) {
     e.preventDefault();

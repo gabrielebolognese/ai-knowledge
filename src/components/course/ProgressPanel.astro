@@ -1,0 +1,149 @@
+---
+/**
+ * Data panel (brief C12): export progress as a JSON file, import a JSON file (replace or merge),
+ * reset with a two-step confirmation (type the word "reset"). Everything stays in this browser.
+ */
+---
+<section class="pp" aria-labelledby="pp-title" data-progress-panel>
+  <h2 id="pp-title" class="pp__title">Your data</h2>
+  <p class="pp__note">Progress lives only in this browser (<code>localStorage</code>). Export it to move to another browser or keep a backup.</p>
+  <div class="pp__actions">
+    <button type="button" class="btn btn-sm" data-pp-export>
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9M6.5 8.5 10 12l3.5-3.5M4 14.5v1.5h12v-1.5" /></svg>
+      Export JSON
+    </button>
+    <label class="btn btn-sm pp__import">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 12V3M6.5 6.5 10 3l3.5 3.5M4 14.5v1.5h12v-1.5" /></svg>
+      Import JSON
+      <input type="file" accept="application/json,.json" class="sr-only" data-pp-file />
+    </label>
+    <button type="button" class="btn btn-sm pp__reset" data-pp-reset>
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10a6 6 0 1 0 1.8-4.3M4 3.5v3h3" /></svg>
+      Reset…
+    </button>
+  </div>
+  <p class="pp__status" role="status" data-pp-status></p>
+
+  <dialog class="pp-dialog" data-pp-import-dialog aria-labelledby="pp-import-title">
+    <form method="dialog">
+      <h3 id="pp-import-title">Import progress?</h3>
+      <p data-pp-import-summary></p>
+      <p class="muted">Replace overwrites what is saved now. Merge keeps the most recent mark for each lesson and exercise.</p>
+      <div class="pp-dialog__actions">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn" value="merge" data-pp-merge>Merge</button>
+        <button class="btn btn-primary" value="replace" data-pp-replace>Replace</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="pp-dialog" data-pp-reset-dialog aria-labelledby="pp-reset-title">
+    <form method="dialog">
+      <h3 id="pp-reset-title">Reset all progress?</h3>
+      <p>This clears every completed lesson, exercise mark and the name on your certificate in this browser. It cannot be undone, so export first if you might want it back.</p>
+      <label class="pp-dialog__confirm">Type <strong>reset</strong> to confirm
+        <input type="text" autocomplete="off" spellcheck="false" data-pp-reset-input />
+      </label>
+      <div class="pp-dialog__actions">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn pp__danger" value="reset" data-pp-reset-confirm disabled>Reset progress</button>
+      </div>
+    </form>
+  </dialog>
+</section>
+
+<script>
+  import { exportJSON, importJSON, reset, migrate } from '../../lib/progress';
+  import { showToast } from '../../lib/toast';
+
+  document.querySelectorAll<HTMLElement>('[data-progress-panel]').forEach((root) => {
+    const status = root.querySelector<HTMLElement>('[data-pp-status]')!;
+    const say = (msg: string) => {
+      status.textContent = msg;
+      showToast(msg);
+    };
+
+    root.querySelector('[data-pp-export]')!.addEventListener('click', () => {
+      const blob = new Blob([exportJSON()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `ai-knowledge-progress-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      say('Progress exported as a JSON file');
+    });
+
+    const file = root.querySelector<HTMLInputElement>('[data-pp-file]')!;
+    const importDialog = root.querySelector<HTMLDialogElement>('[data-pp-import-dialog]')!;
+    let pending = '';
+    file.addEventListener('change', async () => {
+      const f = file.files?.[0];
+      file.value = '';
+      if (!f) return;
+      const text = await f.text();
+      try {
+        const parsed = migrate(JSON.parse(text));
+        const lessons = Object.values(parsed.lessons).filter((m) => m.done).length;
+        const exercises = Object.values(parsed.exercises).filter((m) => m.done).length;
+        pending = text;
+        root.querySelector('[data-pp-import-summary]')!.textContent =
+          `The file "${f.name}" has ${lessons} completed lesson${lessons === 1 ? '' : 's'} and ${exercises} completed exercise${exercises === 1 ? '' : 's'}${parsed.name ? `, for ${parsed.name}` : ''}.`;
+        importDialog.showModal();
+      } catch {
+        say('That file is not a valid progress export (JSON could not be read)');
+      }
+    });
+    importDialog.addEventListener('close', () => {
+      const v = importDialog.returnValue;
+      if ((v === 'replace' || v === 'merge') && pending) {
+        const s = importJSON(pending, v);
+        const n = Object.values(s.lessons).filter((m) => m.done).length;
+        say(`Progress imported (${v}): ${n} lessons complete`);
+      }
+      pending = '';
+      importDialog.returnValue = '';
+    });
+
+    const resetDialog = root.querySelector<HTMLDialogElement>('[data-pp-reset-dialog]')!;
+    const input = root.querySelector<HTMLInputElement>('[data-pp-reset-input]')!;
+    const confirmBtn = root.querySelector<HTMLButtonElement>('[data-pp-reset-confirm]')!;
+    root.querySelector('[data-pp-reset]')!.addEventListener('click', () => {
+      input.value = '';
+      confirmBtn.disabled = true;
+      resetDialog.showModal();
+      input.focus();
+    });
+    input.addEventListener('input', () => (confirmBtn.disabled = input.value.trim().toLowerCase() !== 'reset'));
+    resetDialog.addEventListener('close', () => {
+      if (resetDialog.returnValue === 'reset' && input.value.trim().toLowerCase() === 'reset') {
+        reset();
+        say('Progress reset: this browser has no saved progress now');
+      }
+      resetDialog.returnValue = '';
+    });
+  });
+</script>
+
+<style>
+  .pp__title { font-family: var(--font-sans); font-size: var(--t-ui); font-weight: 600; margin: 0 0 var(--s-1); }
+  .pp__note { font-size: var(--t-small); line-height: var(--lh-small); color: var(--ink-3); margin: 0 0 var(--s-3); }
+  .pp__note code { font-size: 0.92em; }
+  .pp__actions { display: flex; flex-direction: column; gap: var(--s-2); }
+  .pp__actions .btn { justify-content: flex-start; width: 100%; }
+  .pp__actions svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .pp__import { cursor: pointer; }
+  .pp__import:focus-within { box-shadow: var(--focus); }
+  .pp__reset { color: var(--danger); }
+  .pp__status { font-size: var(--t-small); color: var(--ink-3); margin: var(--s-2) 0 0; min-height: 1.25rem; }
+  .pp-dialog { border: 0; border-radius: var(--r-md); box-shadow: var(--sh-3); padding: var(--s-6); max-width: 480px; background: var(--surface); color: var(--ink); }
+  .pp-dialog::backdrop { background: rgb(27 26 23 / 0.35); }
+  .pp-dialog h3 { margin: 0 0 var(--s-3); }
+  .pp-dialog p { font-size: var(--t-ui); line-height: 1.6; }
+  .pp-dialog__confirm { display: flex; flex-direction: column; gap: var(--s-2); font-size: var(--t-ui); }
+  .pp-dialog__confirm input { min-height: 40px; padding: 0 var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); }
+  .pp-dialog__actions { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-5); }
+  .pp__danger { background: var(--danger); border-color: var(--danger); color: var(--ink-inverse); }
+  .pp__danger:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+</style>

@@ -1,0 +1,125 @@
+---
+/**
+ * "Coming soon" page for a lesson that is planned in src/data/curriculum.json but not written
+ * yet. Shows what it will cover, what to read first and the sources it will cite, and keeps
+ * the mark-complete toggle (a learner who already knows the topic can still tick it off).
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import LevelBadge from '../ui/LevelBadge.astro';
+import MarkComplete from '../ui/MarkComplete.astro';
+import ProgressRing from '../ui/ProgressRing.astro';
+import { getCatalog, type CatLesson } from '../../lib/catalog';
+
+interface Props { lesson: CatLesson; }
+const { lesson: l } = Astro.props;
+const cat = await getCatalog();
+const track = cat.trackById.get(l.track)!;
+const i = track.lessons.findIndex((x) => x.slug === l.slug);
+const prev = track.lessons[i - 1];
+const next = track.lessons[i + 1];
+const prereqs = l.prerequisites.map((s) => cat.bySlug.get(s)).filter((x): x is CatLesson => !!x);
+const sources = l.sources.map((s) => ({ ...s, title: cat.sourceRegistry[s.id]?.title ?? s.url, publisher: cat.sourceRegistry[s.id]?.publisher }));
+const trackSlugs = track.lessons.map((x) => x.slug);
+---
+<BaseLayout title={`${l.title} (coming soon)`} description={`Planned lesson: ${l.summary}`} active="course">
+  <div class="planned" data-last-visited={JSON.stringify({ slug: l.slug, track: l.track, title: l.title })}>
+    <nav class="planned__rail" aria-label={`${track.title} track outline`}>
+      <div class="planned__sticky">
+        <div class="planned__rail-head">
+          <ProgressRing slugs={trackSlugs} size={40} label={`${track.title} track progress`} />
+          <a href={`/course/${track.id}/`}>{track.title}</a>
+        </div>
+        <ol>
+          {track.lessons.map((x) => (
+            <li data-lesson-status={x.slug}>
+              <a href={x.url} aria-current={x.slug === l.slug ? 'page' : undefined}>
+                <span class="planned__dot" aria-hidden="true"></span>{x.title}{!x.written && <span class="sr-only"> (coming soon)</span>}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </nav>
+    <main id="main" class="planned__main">
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="/course/">Course</a></li>
+          <li><a href={`/course/${track.id}/`}>{track.title}</a></li>
+          <li><span>{l.moduleTitle}</span></li>
+          <li><span aria-current="page">{l.title}</span></li>
+        </ol>
+      </nav>
+      <p class="planned__badge"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 16.5 15.5 5l-1-1L3 15.5ZM12 4.5l3.5 3.5" /></svg>Coming soon: this lesson is planned and being written</p>
+      <h1>{l.title}</h1>
+      <p class="planned__meta">
+        <LevelBadge level={l.level} />
+        <span>About {l.minutes} min</span>
+        <span>Lesson {l.n} of {track.lessons.length} in {track.title}</span>
+        <span class="planned__status" data-lesson-status={l.slug}><span class="when-done">✓ Marked complete</span></span>
+      </p>
+
+      <div class="prose">
+        <h2>What this lesson will cover</h2>
+        <ul>{l.goals.map((g) => <li>{g}</li>)}</ul>
+
+        {prereqs.length > 0 && (
+          <>
+            <h2>Read these first</h2>
+            <ul>{prereqs.map((p) => <li><a href={p.url}>{p.title}</a>{!p.written && <span class="muted"> (coming soon)</span>}</li>)}</ul>
+          </>
+        )}
+
+        {sources.length > 0 && (
+          <>
+            <h2>Sources it will cite</h2>
+            <p class="muted">You can start reading these now.</p>
+            <ol class="planned__sources">
+              {sources.map((s) => <li><a href={s.url}>{s.title}</a>{s.publisher && <span class="muted">. {s.publisher}</span>}</li>)}
+            </ol>
+          </>
+        )}
+      </div>
+
+      <section class="planned__cta" aria-label="Lesson completion">
+        <div>
+          <p class="planned__cta-title">Already know this?</p>
+          <p class="muted">You can still mark it complete; it counts toward your progress like any other lesson.</p>
+        </div>
+        <MarkComplete slug={l.slug} primary />
+      </section>
+
+      <nav class="planned__pn" aria-label="Previous and next lesson">
+        {prev ? <a href={prev.url}><span class="muted">← Previous</span>{prev.title}</a> : <span></span>}
+        {next ? <a class="planned__next" href={next.url}><span class="muted">Next →</span>{next.title}</a> : <a class="planned__next" href={`/course/${track.id}/`}><span class="muted">Back to</span>{track.title}</a>}
+      </nav>
+    </main>
+  </div>
+</BaseLayout>
+
+<style>
+  .planned { max-width: var(--container-wide); margin: 0 auto; padding: var(--s-6) var(--gutter) 0; display: grid; grid-template-columns: var(--rail-left) minmax(0, 1fr); gap: var(--s-8); }
+  .planned__sticky { position: sticky; top: calc(var(--topbar-h) + var(--s-5)); max-height: calc(100vh - var(--topbar-h) - var(--s-6)); overflow-y: auto; }
+  .planned__rail-head { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-3); font-weight: 600; font-size: var(--t-ui); }
+  .planned__rail-head a { color: var(--ink); text-decoration: none; }
+  .planned__rail ol { list-style: none; margin: 0; padding: 0; }
+  .planned__rail li a { display: flex; gap: var(--s-2); align-items: baseline; padding: 5px var(--s-2); border-radius: var(--r-xs); font-size: var(--t-small); line-height: var(--lh-small); color: var(--ink-2); text-decoration: none; }
+  .planned__rail li a:hover { background: var(--surface-2); }
+  .planned__rail li a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .planned__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--line-strong); transform: translateY(-1px); }
+  .planned__rail li[data-done="true"] .planned__dot { background: var(--success); border-color: var(--success); }
+  .planned__main { max-width: 760px; padding-bottom: var(--s-8); }
+  .planned__badge { display: inline-flex; align-items: center; gap: var(--s-2); margin: var(--s-5) 0 var(--s-3); padding: 4px 12px; border-radius: var(--r-pill); background: var(--warn-soft); color: var(--warn); font-size: var(--t-small); font-weight: 600; }
+  .planned__badge svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .planned__meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-4); color: var(--ink-3); font-size: var(--t-small); margin: var(--s-3) 0 var(--s-6); }
+  .planned__status .when-done { display: none; color: var(--success); font-weight: 600; }
+  .planned__status[data-done="true"] .when-done { display: inline; }
+  .planned__sources { font-size: var(--t-ui); }
+  .planned__cta { display: flex; align-items: center; justify-content: space-between; gap: var(--s-5); margin: var(--s-7) 0 var(--s-6); padding: var(--s-5) var(--s-6); background: var(--surface); border-radius: var(--r-md); box-shadow: var(--sh-1); }
+  .planned__cta p { margin: 0; }
+  .planned__cta-title { font-weight: 600; }
+  .planned__pn { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4); }
+  .planned__pn a { display: flex; flex-direction: column; padding: var(--s-4) var(--s-5); border: 1px solid var(--line); border-radius: var(--r-md); text-decoration: none; color: var(--ink); font-weight: 600; font-size: var(--t-ui); background: var(--surface); }
+  .planned__pn a:hover { box-shadow: var(--sh-2); }
+  .planned__pn span.muted { font-weight: 500; font-size: var(--t-small); }
+  .planned__next { text-align: right; }
+</style>

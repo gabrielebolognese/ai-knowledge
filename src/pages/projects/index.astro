@@ -1,0 +1,120 @@
+---
+// Project hub: the six projects, each with its quick-start prerequisites and a "start now" option.
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CourseData from '../../components/course/CourseData.astro';
+import ProgressRing from '../../components/ui/ProgressRing.astro';
+import LevelBadge from '../../components/ui/LevelBadge.astro';
+import ProjectArt from '../../components/landing/ProjectArt.astro';
+import { getCatalog, fmtMinutes, PROJECTS, REPO } from '../../lib/catalog';
+
+const cat = await getCatalog();
+const cards = PROJECTS.map((p) => {
+  const t = cat.trackById.get(p.track);
+  if (!t) throw new Error(`curriculum.json has no track ${p.track}`);
+  const mods = 'module' in p ? t.modules.filter((m) => m.id === p.module) : t.modules;
+  if (!mods.length) throw new Error(`curriculum.json: ${p.track} has no module ${'module' in p ? p.module : ''}`);
+  const lessons = mods.flatMap((m) => m.lessons);
+  // Letters build on the digits module: its quick start includes the digits lessons it needs.
+  const extra = 'module' in p && p.module === 'letters' ? [...new Set(lessons.flatMap((l) => l.prerequisites))].filter((s) => cat.bySlug.get(s)?.track === p.track && !lessons.some((l) => l.slug === s)) : [];
+  const quick = [...t.quickStart, ...extra].map((s) => cat.bySlug.get(s)!).filter(Boolean);
+  return { ...p, t, lessons, quick, minutes: lessons.reduce((s, l) => s + l.minutes, 0), first: lessons[0] };
+});
+---
+<BaseLayout title="Projects" active="projects" description="Six hands-on deep learning projects: digits, letters, doodles, small text, code autocompletion and a neural-network chess engine.">
+  <CourseData />
+  <main id="main" class="pj">
+    <header class="pj-head">
+      <p class="eyebrow muted">Projects</p>
+      <h1>Build six real neural networks</h1>
+      <p class="t-lead pj-head__lead">Each project is a short track with companion code that runs on a laptop. Jump in directly: every card lists the lessons it needs first, and you can tick off the ones you already know.</p>
+    </header>
+
+    <ul class="pj-grid">
+      {cards.map((c) => {
+        const slugs = c.lessons.map((l) => l.slug);
+        const q = c.quick.map((l) => l.slug);
+        return (
+          <li class="pj-card" data-project={c.key} data-progress-slugs={slugs.join(',')}>
+            <div class="pj-card__art"><ProjectArt kind={c.art} /></div>
+            <div class="pj-card__body">
+              <div class="pj-card__top">
+                <div>
+                  <p class="pj-card__meta"><LevelBadge level={c.t.level} /> <span>{c.lessons.length} lessons · {fmtMinutes(c.minutes)}</span></p>
+                  <h2 class="pj-card__title"><a href={`/course/${c.t.id}/`}>{c.title}</a></h2>
+                </div>
+                <div class="pj-card__ring">
+                  <ProgressRing slugs={slugs} size={48} label={`${c.title}: share of lessons complete`} showText={false} />
+                  <span data-progress-text>0 / {slugs.length}</span>
+                </div>
+              </div>
+              <p class="pj-card__tagline">{c.tagline}</p>
+
+              <details class="pj-quick" data-progress-slugs={q.join(',')}>
+                <summary>
+                  <span class="pj-quick__label">Before you start</span>
+                  <span class="pj-quick__count"><span data-progress-text>0 / {q.length}</span> prerequisites done</span>
+                  <span class="pj-quick__bar" aria-hidden="true"><span></span></span>
+                </summary>
+                <ol class="pj-quick__list">
+                  {c.quick.map((l) => (
+                    <li data-lesson-status={l.slug}>
+                      <span class="pj-quick__dot" aria-hidden="true"></span>
+                      <a href={l.url}>{l.title}</a>
+                      <button type="button" class="pj-quick__toggle" data-lesson-toggle={l.slug} aria-pressed="false"
+                        data-label-todo="I know this" data-label-done="Known ✓" aria-label={`Mark ${l.title} complete`}><span data-label>I know this</span></button>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+
+              <div class="pj-card__actions">
+                <a class="btn btn-primary" href={c.first.url} data-testid={`start-${c.key}`}>Start now →</a>
+                <a class="btn" href={c.quick[0]?.url ?? c.first.url} data-first-todo={q.join(',')}>Prerequisites first</a>
+              </div>
+              {c.t.codeDir && <p class="pj-card__code">Code: <a href={`${REPO}/tree/main/${c.t.codeDir}`}><code>{c.t.codeDir}</code></a></p>}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  </main>
+</BaseLayout>
+
+<style>
+  .pj { max-width: var(--container-wide); margin: 0 auto; padding: var(--s-7) var(--gutter) 0; }
+  .pj-head { max-width: 760px; margin-bottom: var(--s-7); }
+  .pj-head h1 { margin: var(--s-1) 0 var(--s-3); }
+  .pj-head__lead { color: var(--ink-2); }
+  .pj-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-5); }
+  .pj-card { display: flex; flex-direction: column; background: var(--surface); border-radius: var(--r-md); box-shadow: var(--sh-1); overflow: hidden; transition: box-shadow var(--d-base) var(--ease-out); }
+  .pj-card:hover { box-shadow: var(--sh-2); }
+  .pj-card[data-complete="true"] { box-shadow: inset 0 0 0 1px var(--gold-2), var(--sh-1); }
+  .pj-card__art { border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .pj-card__art :global(svg) { width: 100%; height: auto; display: block; }
+  .pj-card__body { padding: var(--s-5); display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .pj-card__top { display: flex; justify-content: space-between; gap: var(--s-3); }
+  .pj-card__meta { display: flex; align-items: center; gap: var(--s-3); margin: 0 0 var(--s-2); font-size: var(--t-small); color: var(--ink-3); }
+  .pj-card__title { font-size: 1.5rem; line-height: 2rem; margin: 0 0 var(--s-2); }
+  .pj-card__title a { color: var(--ink); text-decoration: none; }
+  .pj-card__title a:hover { color: var(--accent); }
+  .pj-card__ring { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: var(--t-micro); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .pj-card__tagline { font-size: var(--t-ui); line-height: 1.6; color: var(--ink-2); margin: 0 0 var(--s-4); }
+
+  .pj-quick { border: 1px solid var(--line); border-radius: var(--r-sm); margin: 0 0 var(--s-4); }
+  .pj-quick summary { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-3); cursor: pointer; font-size: var(--t-small); }
+  .pj-quick__label { font-weight: 600; }
+  .pj-quick__count { color: var(--ink-3); font-variant-numeric: tabular-nums; flex: 1; }
+  .pj-quick__bar { flex: 0 0 64px; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+  .pj-quick__bar span { display: block; height: 100%; width: calc(var(--pct, 0) * 1%); background: var(--success); transition: width var(--d-slow) var(--ease-out); }
+  .pj-quick__list { list-style: none; margin: 0; padding: 0 var(--s-3) var(--s-3); display: grid; gap: 2px; }
+  .pj-quick__list li { display: flex; align-items: center; gap: var(--s-2); font-size: var(--t-small); line-height: var(--lh-small); padding: 3px 0; }
+  .pj-quick__list a { flex: 1; min-width: 0; }
+  .pj-quick__dot { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--line-strong); }
+  .pj-quick__list li[data-done="true"] .pj-quick__dot { background: var(--success); border-color: var(--success); }
+  .pj-quick__toggle { flex: none; min-height: 28px; padding: 0 var(--s-2); border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--surface); font-size: var(--t-micro); font-weight: 600; color: var(--ink-2); cursor: pointer; }
+  .pj-quick__toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .pj-quick__toggle[aria-pressed="true"] { border-color: var(--success); background: var(--success-soft); color: var(--success); }
+
+  .pj-card__actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: auto; }
+  .pj-card__code { margin: var(--s-3) 0 0; font-size: var(--t-micro); color: var(--ink-3); }
+</style>

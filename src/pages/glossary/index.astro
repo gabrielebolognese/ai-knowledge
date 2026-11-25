@@ -1,31 +1,140 @@
 ---
-// Placeholder glossary from the scaffold step (keeps <Term> links working).
-// The glossary/search step replaces this file.
-import { getCollection } from 'astro:content';
+// Glossary index (brief §5.6): alphabetical, wiki-style, with an A-Z jump bar, search and level filter.
+// Each entry keeps the anchor #<slug> (used by <Term> links) and links to its own page /glossary/<slug>/.
 import BaseLayout from '../../layouts/BaseLayout.astro';
-const entries = (await getCollection('glossary')).sort((a, b) => a.data.term.localeCompare(b.data.term));
+import LevelBadge from '../../components/ui/LevelBadge.astro';
+import { getGlossary, letterOf } from '../../lib/glossary';
+import { inlineMd } from '../../lib/inline-md';
+
+const { entries, usedIn } = await getGlossary();
+const byLetter = new Map<string, typeof entries>();
+for (const e of entries) {
+  const k = letterOf(e.data.term);
+  if (!byLetter.has(k)) byLetter.set(k, []);
+  byLetter.get(k)!.push(e);
+}
+const letters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].filter((l) => l !== '#' || byLetter.has('#'));
 ---
-<BaseLayout title="Glossary" active="glossary">
-  <main id="main" class="container glossary">
-    <h1>Glossary</h1>
-    <dl>
-      {entries.map((e) => (
-        <div id={e.id} class="glossary__entry">
-          <dt>{e.data.term}</dt>
-          <dd>
-            <p>{e.data.short}</p>
-            <p class="muted">Sources: {e.data.sources.map((s, i) => <>{i > 0 && ', '}<a href={s.url}>{s.title}</a></>)}</p>
-          </dd>
+<BaseLayout title="Glossary" active="glossary" description="Every technical term used in the AI Knowledge course, explained in plain words with sources.">
+  <main id="main" class="gl">
+    <header class="gl-head">
+      <p class="eyebrow muted">Reference</p>
+      <h1>Glossary</h1>
+      <p class="t-lead gl-lead">{entries.length} terms used in the course, each in one or two plain sentences with its sources. Terms in lessons link here.</p>
+      <div class="gl-tools">
+        <label class="gl-search">
+          <span class="sr-only">Filter terms</span>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M12.6 12.6 17 17" /></svg>
+          <input type="search" placeholder="Filter terms" autocomplete="off" data-gl-q />
+        </label>
+        <div class="gl-levels" role="group" aria-label="Filter by level" data-gl-levels>
+          <button type="button" aria-pressed="true" data-value="">All</button>
+          <button type="button" aria-pressed="false" data-value="beginner">Beginner</button>
+          <button type="button" aria-pressed="false" data-value="intermediate">Intermediate</button>
+          <button type="button" aria-pressed="false" data-value="advanced">Advanced</button>
         </div>
+      </div>
+    </header>
+
+    <nav class="gl-az" aria-label="Jump to letter">
+      <ol>
+        {letters.map((l) => (
+          <li>{byLetter.has(l) ? <a href={`#letter-${l === '#' ? 'num' : l}`} data-gl-letter={l}>{l}</a> : <span aria-disabled="true">{l}</span>}</li>
+        ))}
+      </ol>
+    </nav>
+
+    <div class="gl-list">
+      {[...byLetter.entries()].map(([letter, list]) => (
+        <section class="gl-letter" id={`letter-${letter === '#' ? 'num' : letter}`} data-gl-section aria-labelledby={`h-${letter === '#' ? 'num' : letter}`}>
+          <h2 id={`h-${letter === '#' ? 'num' : letter}`} class="gl-letter__h">{letter}</h2>
+          <dl>
+            {list.map((e) => {
+              const n = usedIn.get(e.id)?.length ?? 0;
+              return (
+                <div class="gl-entry" id={e.id} data-gl-entry data-level={e.data.level ?? ''}
+                  data-search={[e.data.term, ...e.data.aliases, e.data.short].join(' ').toLowerCase()}>
+                  <dt>
+                    <a class="gl-entry__term" href={`/glossary/${e.id}/`}>{e.data.term}</a>
+                    {e.data.aliases.length > 0 && <span class="gl-entry__aka">also {e.data.aliases.join(', ')}</span>}
+                    {e.data.level && <LevelBadge level={e.data.level} />}
+                  </dt>
+                  <dd>
+                    <p set:html={inlineMd(e.data.short)} />
+                    <p class="gl-entry__more">
+                      <a href={`/glossary/${e.id}/`}>Read the entry →</a>
+                      {n > 0 && <span class="muted"> · used in {n} lesson{n === 1 ? '' : 's'}</span>}
+                      <span class="muted"> · {e.data.sources.length} source{e.data.sources.length === 1 ? '' : 's'}</span>
+                    </p>
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </section>
       ))}
-    </dl>
+      <p class="gl-empty" data-gl-empty hidden>No term matches. Try the site search (press <kbd>/</kbd>).</p>
+    </div>
   </main>
 </BaseLayout>
+
+<script>
+  const q = document.querySelector<HTMLInputElement>('[data-gl-q]')!;
+  const levels = document.querySelector<HTMLElement>('[data-gl-levels]')!;
+  let level = '';
+  function apply() {
+    const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    document.querySelectorAll<HTMLElement>('[data-gl-entry]').forEach((e) => {
+      const ok = (!level || e.dataset.level === level) && words.every((w) => e.dataset.search!.includes(w));
+      e.hidden = !ok;
+      if (ok) shown++;
+    });
+    document.querySelectorAll<HTMLElement>('[data-gl-section]').forEach((s) => (s.hidden = !s.querySelector('[data-gl-entry]:not([hidden])')));
+    document.querySelector<HTMLElement>('[data-gl-empty]')!.hidden = shown > 0;
+  }
+  q.addEventListener('input', apply);
+  levels.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-value]');
+    if (!b) return;
+    level = b.dataset.value || '';
+    levels.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    apply();
+  });
+</script>
+
 <style>
-  .glossary { padding-top: var(--s-7); max-width: 860px; }
-  .glossary__entry { padding: var(--s-4) 0; border-bottom: 1px solid var(--line); scroll-margin-top: calc(var(--topbar-h) + var(--s-5)); }
-  .glossary__entry:target { background: var(--accent-soft); }
-  .glossary dt { font-family: var(--font-serif); font-size: 1.375rem; font-weight: 500; }
-  .glossary dd { margin: var(--s-2) 0 0; }
-  .glossary dd p { margin: 0 0 var(--s-1); }
+  .gl { max-width: 1040px; margin: 0 auto; padding: var(--s-7) var(--gutter) 0; }
+  .gl-head h1 { margin: var(--s-1) 0 var(--s-3); }
+  .gl-lead { color: var(--ink-2); max-width: 62ch; }
+  .gl-tools { display: flex; align-items: center; gap: var(--s-4); margin-top: var(--s-5); }
+  .gl-search { flex: 0 1 340px; display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-3); min-height: 42px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); }
+  .gl-search:focus-within { box-shadow: var(--focus); }
+  .gl-search svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--ink-3); stroke-width: 1.7; stroke-linecap: round; }
+  .gl-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; min-height: 40px; font-size: var(--t-ui); }
+  .gl-levels { display: inline-flex; padding: 3px; background: var(--surface-2); border-radius: var(--r-pill); }
+  .gl-levels button { min-height: 34px; padding: 0 var(--s-4); border: 0; border-radius: var(--r-pill); background: none; font-size: var(--t-small); font-weight: 600; color: var(--ink-2); cursor: pointer; }
+  .gl-levels button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-1); }
+
+  .gl-az { position: sticky; top: var(--topbar-h); z-index: 2; margin: var(--s-6) 0 0; padding: var(--s-2) 0; background: rgb(250 247 242 / 0.94); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .gl-az ol { display: flex; flex-wrap: wrap; gap: 2px; list-style: none; margin: 0; padding: 0; }
+  .gl-az a, .gl-az span { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-xs); font-weight: 600; font-size: var(--t-small); text-decoration: none; }
+  .gl-az a { color: var(--accent); }
+  .gl-az a:hover { background: var(--accent-soft); }
+  .gl-az span { color: var(--line-strong); opacity: 0.6; }
+
+  .gl-list { max-width: 760px; }
+  .gl-letter { scroll-margin-top: calc(var(--topbar-h) + 64px); }
+  .gl-letter__h { font-size: 2.25rem; line-height: 1; margin: var(--s-7) 0 var(--s-2); color: var(--ink-3); }
+  .gl-letter dl { margin: 0; }
+  .gl-entry { padding: var(--s-4) var(--s-3); margin: 0 calc(-1 * var(--s-3)); border-bottom: 1px solid var(--line); border-radius: var(--r-xs); scroll-margin-top: calc(var(--topbar-h) + 72px); }
+  .gl-entry:target { background: var(--accent-soft); }
+  .gl-entry dt { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s-3); }
+  .gl-entry__term { font-family: var(--font-serif); font-size: 1.375rem; font-weight: 500; color: var(--ink); text-decoration: none; }
+  .gl-entry__term:hover { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; }
+  .gl-entry__aka { font-size: var(--t-small); color: var(--ink-3); font-style: italic; }
+  .gl-entry dd { margin: var(--s-2) 0 0; }
+  .gl-entry dd p { margin: 0 0 var(--s-1); color: var(--ink-2); }
+  .gl-entry__more { font-size: var(--t-small); }
+  .gl-empty { padding: var(--s-7) 0; color: var(--ink-2); }
 </style>

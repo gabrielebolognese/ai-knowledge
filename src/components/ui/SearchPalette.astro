@@ -1,0 +1,153 @@
+---
+/**
+ * Site-wide search palette (brief C12). Opens from the header button, "/" or Ctrl/Cmd+K.
+ * Fully local: queries the static Pagefind index built into dist/pagefind/ by `npm run build`.
+ * Results are grouped by page type (Lessons, Tracks, Glossary) using data-pagefind-meta="type:…".
+ */
+---
+<dialog class="sp" data-search-dialog aria-label="Search the course">
+  <div class="sp__box">
+    <div class="sp__field">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M12.6 12.6 17 17" /></svg>
+      <input type="search" placeholder="Search lessons, tracks and glossary terms" autocomplete="off" spellcheck="false"
+        aria-label="Search" aria-controls="sp-results" data-search-input />
+      <kbd aria-hidden="true">Esc</kbd>
+    </div>
+    <div class="sp__results" id="sp-results" role="listbox" aria-label="Search results" data-search-results>
+      <p class="sp__hint">Type to search <span class="muted">· ↑ ↓ to move, Enter to open</span></p>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  type PFResult = { id: string; data: () => Promise<{ url: string; excerpt: string; meta: Record<string, string> }> };
+  type PF = { init?: () => Promise<void>; options?: (o: object) => Promise<void>; debouncedSearch: (q: string, o?: object, ms?: number) => Promise<{ results: PFResult[] } | null> };
+
+  const dialog = document.querySelector<HTMLDialogElement>('[data-search-dialog]');
+  const input = document.querySelector<HTMLInputElement>('[data-search-input]');
+  const box = document.querySelector<HTMLElement>('[data-search-results]');
+  let pf: PF | null = null;
+  let pfFailed = false;
+  let active = -1;
+
+  async function loadPagefind(): Promise<PF | null> {
+    if (pf || pfFailed) return pf;
+    try {
+      const url = '/pagefind/pagefind.js';
+      pf = (await import(/* @vite-ignore */ url)) as PF;
+      await pf.options?.({ excerptLength: 18 });
+      await pf.init?.();
+    } catch {
+      pfFailed = true;
+      pf = null;
+    }
+    return pf;
+  }
+
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const GROUPS = ['Lesson', 'Track', 'Glossary'];
+  const GROUP_TITLE: Record<string, string> = { Lesson: 'Lessons', Track: 'Tracks', Glossary: 'Glossary' };
+
+  function items() {
+    return [...(box?.querySelectorAll<HTMLAnchorElement>('a.sp__item') ?? [])];
+  }
+  function setActive(i: number) {
+    const list = items();
+    if (!list.length) return;
+    active = (i + list.length) % list.length;
+    list.forEach((a, j) => a.setAttribute('aria-selected', String(j === active)));
+    list[active].scrollIntoView({ block: 'nearest' });
+  }
+
+  async function run(q: string) {
+    if (!box) return;
+    if (!q.trim()) {
+      box.innerHTML = '<p class="sp__hint">Type to search <span class="muted">· ↑ ↓ to move, Enter to open</span></p>';
+      return;
+    }
+    const p = await loadPagefind();
+    if (!p) {
+      box.innerHTML = '<p class="sp__hint">The search index is created by <code>npm run build</code>; it is not available in this preview.</p>';
+      return;
+    }
+    const res = await p.debouncedSearch(q, {}, 120);
+    if (!res) return; // superseded by a newer query
+    const data = await Promise.all(res.results.slice(0, 12).map((r) => r.data()));
+    if (input && input.value !== q) return;
+    if (!data.length) {
+      box.innerHTML = `<p class="sp__hint">No results for “${esc(q)}”. Try a shorter word, or browse the <a href="/glossary/">glossary</a>.</p>`;
+      return;
+    }
+    const grouped = new Map<string, typeof data>();
+    for (const d of data) {
+      const g = GROUPS.includes(d.meta.type) ? d.meta.type : 'Lesson';
+      if (!grouped.has(g)) grouped.set(g, []);
+      grouped.get(g)!.push(d);
+    }
+    let html = '';
+    for (const g of GROUPS) {
+      const list = grouped.get(g);
+      if (!list) continue;
+      html += `<p class="sp__group">${GROUP_TITLE[g]}</p>`;
+      for (const d of list) {
+        html += `<a class="sp__item" role="option" aria-selected="false" href="${esc(d.url)}"><span class="sp__title">${esc(d.meta.title || d.url)}</span><span class="sp__excerpt">${d.excerpt}</span></a>`;
+      }
+    }
+    box.innerHTML = html;
+    active = -1;
+    setActive(0);
+  }
+
+  function open() {
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    input?.focus();
+    input?.select();
+    loadPagefind();
+  }
+
+  document.querySelectorAll('[data-search-open]').forEach((b) => b.addEventListener('click', open));
+  document.addEventListener('keydown', (e) => {
+    const t = e.target as HTMLElement;
+    const typing = t.closest('input, textarea, select, [contenteditable="true"]');
+    if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      open();
+    } else if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      open();
+    }
+  });
+  input?.addEventListener('input', () => run(input.value));
+  input?.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(active + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(active - 1); }
+    else if (e.key === 'Enter') {
+      const a = items()[active];
+      if (a) { e.preventDefault(); location.href = a.href; }
+    }
+  });
+  dialog?.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
+</script>
+
+<style>
+  .sp { width: min(680px, calc(100vw - 48px)); max-height: min(640px, calc(100vh - 120px)); margin: 12vh auto auto; padding: 0; border: 0; border-radius: var(--r-md); background: var(--surface); color: var(--ink); box-shadow: var(--sh-3); overflow: hidden; }
+  .sp[open] { animation: sp-in var(--d-fast) var(--ease-out); }
+  @keyframes sp-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: none; } }
+  .sp::backdrop { background: rgb(27 26 23 / 0.3); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+  .sp__box { display: flex; flex-direction: column; max-height: inherit; }
+  .sp__field { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-5); border-bottom: 1px solid var(--line); }
+  .sp__field svg { width: 20px; height: 20px; flex: none; fill: none; stroke: var(--ink-3); stroke-width: 1.7; stroke-linecap: round; }
+  .sp__field input { flex: 1; min-height: 44px; border: 0; background: none; font-size: 1.0625rem; outline: none; }
+  .sp__field input:focus-visible { box-shadow: none; }
+  .sp__field:focus-within { box-shadow: inset 0 -2px 0 var(--accent); }
+  .sp__field input::-webkit-search-cancel-button { display: none; }
+  .sp__results { overflow-y: auto; padding: var(--s-2) var(--s-3) var(--s-3); }
+  .sp__hint { margin: var(--s-4) var(--s-3); font-size: var(--t-small); color: var(--ink-2); }
+  :global(.sp__group) { margin: var(--s-3) var(--s-3) var(--s-1); font-size: var(--t-micro); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; color: var(--ink-3); }
+  :global(.sp__item) { display: block; padding: var(--s-2) var(--s-3); border-radius: var(--r-sm); text-decoration: none; color: var(--ink); }
+  :global(.sp__item[aria-selected="true"]), :global(.sp__item:hover) { background: var(--accent-soft); }
+  :global(.sp__title) { display: block; font-weight: 600; font-size: var(--t-ui); }
+  :global(.sp__excerpt) { display: block; font-size: var(--t-small); line-height: var(--lh-small); color: var(--ink-2); }
+  :global(.sp__excerpt mark) { background: rgb(51 64 201 / 0.14); color: inherit; border-radius: 2px; padding: 0 1px; }
+</style>
