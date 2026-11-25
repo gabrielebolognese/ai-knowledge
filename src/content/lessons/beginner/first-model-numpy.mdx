@@ -1,0 +1,211 @@
+---
+title: "Capstone: train a classifier from scratch with NumPy"
+slug: first-model-numpy
+track: beginner
+level: beginner
+order: 140
+minutes: 30
+module: Neural networks from scratch
+summary: The whole beginner track in one script. Data, a softmax model, cross-entropy, a hand-derived gradient and gradient descent come together to train a 3-class classifier in about 70 lines of NumPy, reaching 95% accuracy on held-out points.
+hatnote: For the next step, adding a hidden layer and backpropagation, continue with the intermediate track.
+prerequisites: [gradient-descent, matrices-matmul]
+tools: [Python 3, NumPy, matplotlib (optional)]
+outcomes:
+  - Assemble data, a model, a loss and gradient descent into one training loop
+  - Train softmax regression on a small 2-D dataset in NumPy
+  - Plot the loss curve and the decision boundary and read them
+  - Measure accuracy on held-out data
+build: A softmax-regression classifier trained from scratch (code/core/beginner/softmax_regression.py)
+reviewed: 2026-11-25
+seeAlso: [loss-functions, gradient-descent, probability-softmax, matrices-matmul]
+sources:
+  - id: cs231n-linear
+    title: "Linear classification: Support Vector Machine, Softmax"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/linear-classify/
+    accessed: 2026-11-25
+    type: course
+  - id: d2l-softmax
+    title: "Dive into Deep Learning, 4.1 Softmax Regression"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_linear-classification/softmax-regression.html
+    accessed: 2026-11-25
+    type: book
+  - id: numpy-basics
+    title: "NumPy: the absolute basics for beginners"
+    publisher: NumPy documentation
+    url: https://numpy.org/doc/stable/user/absolute_beginners.html
+    accessed: 2026-11-25
+    type: docs
+  - id: goodfellow2016-ml
+    title: "Deep Learning, chapter 5: Machine Learning Basics"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/ml.html
+    accessed: 2026-11-25
+    type: book
+  - id: numpy-generator
+    title: Random Generator
+    publisher: NumPy documentation
+    url: https://numpy.org/doc/stable/reference/random/generator.html
+    accessed: 2026-11-25
+    type: docs
+  - id: mpl-backends
+    title: Backends
+    publisher: Matplotlib documentation
+    url: https://matplotlib.org/stable/users/explain/figure/backends.html
+    accessed: 2026-11-25
+    type: docs
+  - id: mlcc-accuracy
+    title: "Classification: Accuracy, recall, precision, and related metrics"
+    publisher: Google Machine Learning Crash Course
+    url: https://developers.google.com/machine-learning/crash-course/classification/accuracy-precision-recall
+    accessed: 2026-11-25
+    type: course
+furtherReading:
+  - title: "CS231n: Putting it together, a minimal neural network case study"
+    url: https://cs231n.github.io/neural-networks-case-study/
+exercises:
+  - id: capstone-param-count
+    type: numeric
+    difficulty: easy
+    title: Count the parameters
+    prompt: "The capstone model has 2 input features and 3 classes, so $W$ is $2 \\times 3$ and $b$ has 3 entries: 9 parameters. How many parameters would softmax regression have for MNIST digits, with 784 pixel features and 10 classes?"
+    answer: 7850
+    tolerance: 0
+    hint: "Weights: features × classes. Biases: one per class."
+    explanation: "$W$ is $784 \\times 10 = 7840$ numbers and $b$ has $10$, so $7840 + 10 = 7850$ parameters. Every one of them is updated by the same gradient-descent line as in the capstone."
+  - id: capstone-why-test
+    type: mcq
+    difficulty: easy
+    title: Why a held-out test set?
+    prompt: The script reports 96.3% training accuracy and 95.0% test accuracy. Why is the test number the one to trust?
+    options:
+      - Because the test set is larger
+      - Because the model never saw the test points during training, so they show how it does on new data
+      - Because test accuracy is always lower, which makes it more cautious
+      - Because training accuracy includes the loss
+    answer: 1
+    explanation: "A model can do well on examples it has already been fitted to without doing well on new ones. The 60 test points played no part in choosing the weights, so their accuracy estimates performance on unseen data. Here the two numbers are close, which says the model is not memorising its training points."
+  - id: capstone-first-gradient
+    type: short
+    difficulty: medium
+    title: The first gradient by hand
+    prompt: "With all weights and biases at zero, the model gives every class probability $1/3$. For one training point whose true class is 2, what is the gradient of the loss with respect to the three scores, $p - y$?"
+    answer: "[1/3, 1/3, −2/3], about [0.333, 0.333, −0.667]"
+    explanation: "The one-hot target is $y = [0, 0, 1]$, so $p - y = [1/3 - 0,\\; 1/3 - 0,\\; 1/3 - 1] = [0.333, 0.333, -0.667]$. Gradient descent subtracts it, so the score of the true class goes up and the other two go down."
+  - id: capstone-straight-lines
+    type: reveal
+    difficulty: medium
+    title: Why straight boundaries?
+    prompt: The decision-boundary plot shows the plane cut into three regions by straight lines. Why are the borders straight, and what would you add to the model to allow curved ones?
+    answer: Each class score is a weighted sum of the two features, and two such sums are equal along a straight line. A hidden layer with a non-linear activation (an MLP) allows curved boundaries.
+    explanation: "Class $j$ wins where its score $w_{1j} x_1 + w_{2j} x_2 + b_j$ is the largest. The border between two classes is where two scores are equal, and setting two weighted sums equal gives the equation of a straight line. Softmax regression is a network with no hidden layer; inserting a hidden layer with ReLU between input and output, as the intermediate track does, lets the borders bend."
+---
+
+This capstone builds a complete **classifier** from scratch: it generates data, defines a model, measures its error with cross-entropy, works out the gradient by hand and improves the model with gradient descent, all in about 70 lines of [NumPy](https://numpy.org/).<Cite id="numpy-basics" /> The model is <Term slug="softmax-regression" />, the simplest multi-class classifier, and every piece of it was introduced in an earlier lesson of this track.<Cite id="d2l-softmax" />
+
+## The task
+
+The script creates 300 points in a flat plane, 100 for each of three classes. Each class is a cloud of points scattered around its own centre: one at the top, one at the bottom left and one at the bottom right.<Cite id="numpy-generator" /> Each point has two **features** (its $x_1$ and $x_2$ coordinates) and one **label** (0, 1 or 2).
+
+The data is shuffled and split: 240 points for training and 60 held back for testing. The model never sees the test points while it learns, so they show how well it handles new data.<Cite id="goodfellow2016-ml" /> A fixed random seed makes every run print exactly the same numbers.<Cite id="numpy-generator" />
+
+<CodeFile path="code/core/beginner/softmax_regression.py" lines="9-22" highlight="18,21,22" title="data, split and parameters" />
+
+## The four pieces
+
+Every training script in this course, up to the chess engine, has the same four parts.<Cite id="goodfellow2016-ml" />
+
+1. **Model.** Each class gets a score, a weighted sum of the two features plus a bias, exactly like an [artificial neuron](/course/beginner/artificial-neuron/) without an activation. With 2 features and 3 classes, the weights form a $2 \times 3$ matrix $W$, and one [matrix multiplication](/course/beginner/matrices-matmul/) scores every point at once.<Cite id="cs231n-linear" />
+2. **Probabilities.** <Term slug="softmax" /> turns the three scores into probabilities that sum to 1. The code subtracts each row's largest score first, which avoids overflow and does not change the answer.<Cite id="cs231n-linear" />
+3. **Loss.** <Term slug="cross-entropy" /> averages $-\ln$ of the probability given to the correct class, as in the [loss functions lesson](/course/beginner/loss-functions/).<Cite id="d2l-softmax" />
+4. **Update.** <Term slug="gradient-descent" /> moves every weight a small step against its slope, with a <Term slug="learning-rate" /> of 0.1.
+
+<Analogy breaks="A real referee understands the game; the model only nudges nine numbers, with no idea what the points mean.">
+Think of three teams sharing a field, and a referee who draws the borders between their areas. After each round the referee looks at every player standing in the wrong area and moves the borders slightly towards fixing those mistakes. After a few hundred rounds the borders barely move any more.
+</Analogy>
+
+## The gradient, derived by hand
+
+The heart of the script is one remarkable fact: for softmax followed by cross-entropy, the slope of the loss with respect to each score is just **probability minus target**, $p - y$, where $y$ is the <Term slug="one-hot-encoding">one-hot</Term> label.<Cite id="d2l-softmax" /> The chain rule then passes this back to the weights. Here is the very first update for a single point $x = [1, 2]$ whose true class is 2, starting from all-zero parameters:
+
+<MathSteps
+  title="One training step for one point"
+  legend={[
+    { symbol: 'x', meaning: 'the point\'s two features, here [1, 2]' },
+    { symbol: 'p', meaning: 'predicted probabilities for the 3 classes' },
+    { symbol: 'y', meaning: 'one-hot target, here [0, 0, 1]' },
+    { symbol: 'W, b', meaning: 'weights (2 × 3) and biases (3)' },
+    { symbol: '\\eta', meaning: 'learning rate, here 0.1' },
+  ]}
+>
+  <Step tex="s = [0, 0, 0] \;\Rightarrow\; p = [\tfrac13, \tfrac13, \tfrac13], \quad L = -\ln\tfrac13 = \hl{1.099}" words="All weights are zero, so every score is 0 and softmax spreads the probability evenly. The loss is ln 3." />
+  <Step tex="p - y = [0.333,\; 0.333,\; \hl{-0.667}]" words="Subtract the target. The true class has a negative entry: its score should go up. The others should go down." />
+  <Step tex="\frac{\partial L}{\partial W} = \begin{bmatrix} 1 \\ 2 \end{bmatrix} [0.333,\; 0.333,\; -0.667] = \begin{bmatrix} 0.333 & 0.333 & -0.667 \\ \hl{0.667} & \hl{0.667} & \hl{-1.333} \end{bmatrix}" words="Each weight's slope is its input times the score's slope: the row for x₁ = 1 copies p − y, and the row for x₂ = 2 doubles it." />
+  <Step tex="W \leftarrow W - 0.1 \cdot \frac{\partial L}{\partial W}, \quad b \leftarrow b - 0.1\,(p - y)" words="Step every weight and bias against its slope. The bias slope is p − y itself, because each bias is added with a factor of 1." />
+  <Step tex="s = [-0.2,\; -0.2,\; \hl{0.4}] \;\Rightarrow\; p_2 = 0.477, \quad L = \hl{0.741}" words="Recompute: the true class now has the highest score, and the loss fell from 1.099 to 0.741 after a single step." />
+  <Step tex="\frac{\partial L}{\partial W} = \frac{1}{n} X^\top (P - Y)" words="For a batch of n points stacked as rows of X, the same rule becomes one matrix product, averaged over the batch. This is line 44 of the script." />
+</MathSteps>
+
+<Callout type="note">
+Deriving $p - y$ takes a page of algebra with the chain rule; d2l.ai works it out in full.<Cite id="d2l-softmax" /> For this capstone it is enough to check that it behaves sensibly: when the model is right and confident, $p \approx y$ and the update is almost zero.
+</Callout>
+
+## The training loop
+
+The loop repeats the four pieces 200 times over the whole training set. Each pass is one <Term slug="epoch" />, and because every pass uses all 240 points, this is full-batch gradient descent.<Cite id="cs231n-linear" />
+
+<CodeFile path="code/core/beginner/softmax_regression.py" lines="35-53" highlight="40,41,43,44,46,47" title="forward, loss, gradient, update" />
+
+Run it with `python code/core/beginner/softmax_regression.py`. It prints:
+
+```text
+epoch   0  loss 1.0986
+epoch  50  loss 0.1761
+epoch 100  loss 0.1342
+epoch 150  loss 0.1185
+epoch 200  loss 0.1102
+train accuracy 0.963
+test accuracy  0.950
+saved softmax_regression.png
+```
+
+## Reading the results
+
+- **The first loss is 1.0986**, which is $\ln 3$: the untrained model guesses evenly among three classes, exactly as the sanity check in the loss lesson predicts.
+- **The loss falls fast, then flattens.** Most of the improvement happens in the first 50 epochs; later epochs only fine-tune the borders.
+- **Accuracy** is 96.3% on training points and 95.0% on test points, that is 57 of the 60 unseen points.<Cite id="mlcc-accuracy" /> The two numbers are close, so the model has learned the general pattern rather than memorised its training points.<Cite id="goodfellow2016-ml" />
+
+If matplotlib is installed, the script also saves a picture. It uses matplotlib's non-interactive "Agg" backend, which draws straight to a file and needs no window.<Cite id="mpl-backends" />
+
+<Figure src="/figures/beginner/softmax-regression-capstone.png" alt="Left: a loss curve falling steeply from 1.1 to about 0.2 within 50 epochs, then flattening near 0.11. Right: three colour regions separated by straight borders meeting near the centre, with three clouds of points mostly inside their own region." caption="Output of softmax_regression.py: the training loss per epoch (left) and the learned decision boundary over all 300 points (right)." credit="Own work, generated with the course's softmax_regression.py" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" />
+
+The right panel shows the <Term slug="decision-boundary" />: the coloured regions mark which class the model would predict at each spot. The borders are **straight lines**, because each score is a weighted sum of the features. Points that sit in the overlap between two clouds land on the wrong side, and no straight border can fix that.<Cite id="cs231n-linear" />
+
+<Callout type="tip">
+Things to try: set `lr` to 1.0 or 0.001 and watch the loss; change the noise level `0.9` to 2.0 so the clouds overlap more; or move one centre and see the borders follow it.
+</Callout>
+
+## Common mistakes
+
+Most bugs in a from-scratch training loop fall into a few groups, and each one shows up as a recognisable symptom:<Cite id="cs231n-linear" />
+
+- **Shape mix-ups.** Multiplying $X$ (240 × 2) by $W$ in the wrong order, or forgetting the transpose in $X^\top (P - Y)$, raises a NumPy error or silently broadcasts into nonsense. Printing `.shape` after each line is the quickest check.<Cite id="numpy-basics" />
+- **Forgetting the average.** Without the division by $n$, the gradient grows with the batch size and a learning rate that worked for 240 points overshoots on 2,400.
+- **Adding the gradient.** Writing `W += lr * dW` climbs the loss instead of descending it, so the loss rises every epoch.
+- **Measuring on training data only.** A high training accuracy says little on its own; always report the held-out number too.<Cite id="goodfellow2016-ml" />
+
+## What comes next
+
+Softmax regression is a neural network with **no hidden layer**. It cannot draw curved borders, so it would fail on data shaped like rings or the XOR pattern.<Cite id="d2l-softmax" /> The intermediate track adds a <Term slug="hidden-layer" /> with a non-linear activation, which turns this model into a <Term slug="multilayer-perceptron" />, and replaces the hand-derived gradient with backpropagation, which works out gradients automatically for any number of layers. The loop itself stays the same.
+
+## Summary
+
+- A training script has four parts: model, probabilities, loss and update.
+- Softmax regression scores each class with a weighted sum, turns scores into probabilities with softmax, and is trained with cross-entropy.
+- The gradient with respect to the scores is $p - y$; for a batch it becomes $\frac{1}{n} X^\top (P - Y)$.
+- On the 3-cloud data the loss falls from $\ln 3 \approx 1.099$ to 0.110, with 95% test accuracy.
+- Its borders are straight lines; a hidden layer is needed for curved ones.

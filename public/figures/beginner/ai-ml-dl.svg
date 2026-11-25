@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">AI contains machine learning, which contains deep learning</title>
+  <desc id="d">Three nested ellipses. The outer one is artificial intelligence, with the example of a hand-written chess search. Inside it is machine learning, with the example of linear regression. Innermost is deep learning, with the example of a convolutional network that reads digits.</desc>
+  <rect width="640" height="400" fill="#FBFAF7"/>
+  <ellipse cx="320" cy="200" rx="300" ry="185" fill="#EEF0FB" stroke="#3340C9" stroke-width="2"/>
+  <ellipse cx="365" cy="225" rx="215" ry="140" fill="#DFE3F8" stroke="#3340C9" stroke-width="2"/>
+  <ellipse cx="405" cy="250" rx="130" ry="90" fill="#3340C9"/>
+  <text x="70" y="120" font-size="22" font-weight="700" fill="#1B1E3C">Artificial intelligence</text>
+  <text x="70" y="146" font-size="14" fill="#4A4F6A">e.g. a hand-written chess search</text>
+  <text x="180" y="172" font-size="20" font-weight="700" fill="#1B1E3C">Machine learning</text>
+  <text x="180" y="196" font-size="14" fill="#4A4F6A">e.g. fitting a straight line to data</text>
+  <text x="405" y="244" font-size="20" font-weight="700" fill="#FFFFFF" text-anchor="middle">Deep learning</text>
+  <text x="405" y="268" font-size="14" fill="#E6E8FA" text-anchor="middle">e.g. a many-layer network</text>
+  <text x="405" y="286" font-size="14" fill="#E6E8FA" text-anchor="middle">that reads digits</text>
+</svg>

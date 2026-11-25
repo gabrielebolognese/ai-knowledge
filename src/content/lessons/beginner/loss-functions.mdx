@@ -1,0 +1,254 @@
+---
+title: "Loss functions: mean squared error and cross-entropy"
+slug: loss-functions
+track: beginner
+level: beginner
+order: 120
+minutes: 20
+module: Neural networks from scratch
+summary: A loss function turns "how wrong is the model?" into one number that training can push down. This lesson computes mean squared error and cross-entropy by hand, explains when to use each, and shows how to read a loss value.
+hatnote: For how the loss is then lowered step by step, see "Gradient descent".
+prerequisites: [probability-softmax, artificial-neuron]
+tools: [Python 3, NumPy]
+outcomes:
+  - Compute mean squared error for a small batch by hand
+  - Compute cross-entropy from softmax probabilities by hand
+  - Choose MSE for regression and cross-entropy for classification, and say why
+  - "Read a loss value: what ln(10) ≈ 2.30 means for a 10-class guesser"
+build: Both losses in five lines of NumPy
+reviewed: 2026-11-25
+seeAlso: [probability-softmax, gradient-descent, first-model-numpy]
+sources:
+  - id: goodfellow2016-prob
+    title: "Deep Learning, chapter 3: Probability and Information Theory"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/prob.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-softmax
+    title: "Dive into Deep Learning, 4.1 Softmax Regression"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_linear-classification/softmax-regression.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-linear
+    title: "Linear classification: Support Vector Machine, Softmax"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/linear-classify/
+    accessed: 2026-11-25
+    type: course
+  - id: pt-crossentropy
+    title: torch.nn.CrossEntropyLoss
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html
+    accessed: 2026-11-25
+    type: docs
+  - id: mlcc-loss
+    title: "Linear regression: Loss"
+    publisher: Google Machine Learning Crash Course
+    url: https://developers.google.com/machine-learning/crash-course/linear-regression/loss
+    accessed: 2026-11-25
+    type: course
+  - id: wiki-mse
+    title: Mean squared error
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Mean_squared_error
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: karpathy-recipe
+    title: A Recipe for Training Neural Networks
+    author: Andrej Karpathy
+    year: 2019
+    url: https://karpathy.github.io/2019/04/25/recipe/
+    accessed: 2026-11-25
+    type: article
+furtherReading:
+  - title: "Wikipedia: Cross-entropy"
+    url: https://en.wikipedia.org/wiki/Cross-entropy
+exercises:
+  - id: loss-mse-batch
+    type: numeric
+    difficulty: easy
+    title: MSE of a small batch
+    prompt: "A model predicts $[1, 3, 5]$ for three houses whose true prices (in hundreds of thousands) are $[2, 3, 8]$. What is the mean squared error? Round to two decimals."
+    answer: 3.33
+    tolerance: 0.01
+    hint: "Errors first ($1 - 2$, $3 - 3$, $5 - 8$), then square each one, then average."
+    explanation: "The errors are $-1$, $0$ and $-3$. Their squares are $1$, $0$ and $9$, which add up to $10$. The mean is $10 / 3 \\approx 3.33$. Notice that the single big miss (3) supplies 9 of the 10 points."
+  - id: loss-ce-value
+    type: numeric
+    difficulty: easy
+    title: Cross-entropy from one probability
+    prompt: "A classifier gives the correct class a probability of $0.25$. What is its cross-entropy loss $-\\ln(0.25)$ for this example? Round to two decimals."
+    answer: 1.39
+    tolerance: 0.01
+    hint: "Use a calculator's `ln` key (natural log), or `math.log(0.25)` in Python, then flip the sign."
+    explanation: "$\\ln(0.25) \\approx -1.386$, so the loss is $1.386 \\approx 1.39$. Only the probability of the correct class matters; how the other 0.75 is shared out does not change this number."
+  - id: loss-choose
+    type: mcq
+    difficulty: medium
+    title: Pick the loss
+    prompt: "A chess engine's network must output a single number: how many pawns ahead White is (for example $+1.5$). Which loss fits best?"
+    options:
+      - Cross-entropy, because chess has a winner
+      - Mean squared error, because the output is a number on a scale
+      - Accuracy, because it is easiest to read
+      - No loss is needed for a single number
+    answer: 1
+    explanation: "Predicting a number on a continuous scale is regression, and mean squared error is the standard regression loss: it measures how far the number is from the target. Cross-entropy needs a probability for each of several classes. Accuracy is a metric for reporting, not a smooth loss that gradient descent can follow."
+  - id: loss-starting-value
+    type: mcq
+    difficulty: medium
+    title: Read a starting loss
+    prompt: "You start training a 4-class classifier and the very first cross-entropy loss is about $1.39$. What does that tell you?"
+    options:
+      - The model is broken; the loss should start near 0
+      - The model is already very good
+      - The model is guessing evenly among the 4 classes, which is the expected starting point
+      - The learning rate is too large
+    answer: 2
+    explanation: "A model that gives each of 4 classes probability $1/4$ has loss $-\\ln(1/4) = \\ln 4 \\approx 1.386$. Seeing this at the start means the setup is sane. A starting loss far above $\\ln 4$ would suggest the model is confidently wrong from the start, which usually points to a bug."
+---
+
+A **loss function** measures how wrong a model's predictions are and condenses the answer into a single number, where lower is better.<Cite id="mlcc-loss" /> Training a neural network means adjusting its <Term slug="weight">weights</Term> to make this number as small as possible, so the choice of loss decides what the model is pushed to get right.<Cite id="d2l-softmax" /> This lesson covers the two losses used throughout the course: **mean squared error** for predicting numbers and **cross-entropy** for choosing between classes.
+
+## What a loss is for
+
+A model makes many predictions, some good and some bad. A <Term slug="loss-function" /> scores each prediction and averages the scores over a batch, giving one number that <Term slug="gradient-descent" /> can push down.<Cite id="mlcc-loss" />
+
+A loss is different from a metric such as <Term slug="accuracy" />. Accuracy is easy to read ("95% right") but it jumps in whole steps: a tiny change in the weights usually changes no prediction, so accuracy gives no slope to follow. A good loss changes smoothly with every weight.<Cite id="cs231n-linear" />
+
+## Mean squared error
+
+<Term slug="mean-squared-error" /> (MSE) is the standard loss for **regression**, where the model outputs a number such as a price, a temperature or a chess evaluation.<Cite id="wiki-mse" /> The recipe has three steps: take each error, square it, and average.
+
+<Analogy breaks="A real dartboard scores rings by fixed bands; MSE charges a smooth, exact price for every millimetre of distance.">
+Picture a dart game where your penalty is the square of your distance from the bullseye. Missing by 1 cm costs 1 point, but missing by 3 cm costs 9, so one wild throw hurts more than several near misses.
+</Analogy>
+
+Take two predictions, $[2, 4]$, whose true values are $[3, 7]$:
+
+<MathSteps
+  title="Mean squared error for two predictions"
+  legend={[
+    { symbol: '\\hat y_i', meaning: 'prediction number i' },
+    { symbol: 'y_i', meaning: 'true value number i' },
+    { symbol: 'n', meaning: 'number of examples' },
+  ]}
+>
+  <Step tex="2 - 3 = -1, \qquad 4 - 7 = \hl{-3}" words="Subtract the target from each prediction. Both guesses are too low; the second by more." />
+  <Step tex="(-1)^2 = 1, \qquad (-3)^2 = \hl{9}" words="Square each error. The minus signs disappear, and the bigger miss now counts nine times as much." />
+  <Step tex="\frac{1 + 9}{2} = \hl{5}" words="Average the squares. The MSE of this batch is 5." />
+  <Step tex="\text{MSE} = \frac{1}{n} \hl{\sum_{i=1}^{n}} (\hat y_i - y_i)^2" words="The general formula: the sigma sign means 'add up the squared errors for every example', then divide by how many there are." example="n = 2 gives exactly the steps above." />
+</MathSteps>
+
+Squaring has two effects. Errors above and below the target both count as positive, and large errors dominate: here the miss of 3 supplies 9 of the 10 points.<Cite id="mlcc-loss" /> That makes MSE sensitive to outliers, which is sometimes wanted and sometimes not.<Cite id="wiki-mse" />
+
+### Squared versus absolute error
+
+A natural alternative is the **mean absolute error** (MAE): drop the minus signs instead of squaring. For the same two predictions it gives $(1 + 3) / 2 = 2$. The two losses rank models differently when one error is large:
+
+- MSE prefers several medium errors to one big one, so it pulls the model towards unusual examples.
+- MAE treats every unit of error the same, so a single strange data point moves the model less.
+
+MSE is the usual default because its slope shrinks smoothly as the prediction approaches the target, which makes the last steps of training gentle. MAE's slope stays the same size right up to the target, so the final steps can jitter back and forth.<Cite id="mlcc-loss" /> Both are honest measures of distance; the choice is about which mistakes matter most for the task.
+
+Note that MSE comes out in *squared* units: if prices are in thousands of euros, an MSE of 5 means 5 "thousand-euros squared". Taking its square root (the root mean squared error, about 2.24 here) brings it back to the original units, which makes it easier to report.<Cite id="wiki-mse" />
+
+## Cross-entropy
+
+For **classification**, the model outputs a probability for each class, usually by passing raw scores (<Term slug="logits" />) through <Term slug="softmax" />. <Term slug="cross-entropy">Cross-entropy</Term> looks only at the probability the model gave to the **correct** class and charges minus its natural logarithm.<Cite id="d2l-softmax" />
+
+<Analogy breaks="A weather forecaster is judged over many days; cross-entropy is computed for every single example and then averaged.">
+Think of judging a weather forecaster. On a rainy day, the one who said "90% chance of rain" deserves a small penalty and the one who said "1%" a huge one. Cross-entropy charges each forecaster according to the probability they gave to what actually happened.
+</Analogy>
+
+Suppose a 3-class model outputs logits $[2, 1, 0]$ and the true class is class 0 (the first one):
+
+<MathSteps
+  title="Cross-entropy for one example"
+  legend={[
+    { symbol: 'p_c', meaning: 'probability the model gives the correct class c' },
+    { symbol: '\\ln', meaning: 'natural logarithm' },
+    { symbol: 'y_i', meaning: 'one-hot target: 1 for the correct class, 0 otherwise' },
+  ]}
+>
+  <Step tex="\text{softmax}([2, 1, 0]) = [\hl{0.665}, 0.245, 0.090]" words="Turn the scores into probabilities that sum to 1 (as in the softmax lesson)." />
+  <Step tex="p_c = p_0 = 0.665" words="Pick out the probability of the correct class. The other two are ignored." />
+  <Step tex="L = -\ln(0.665) = \hl{0.408}" words="Take the natural log and flip its sign. Logs of numbers below 1 are negative, so the loss comes out positive." />
+  <Step tex="L = -\sum_i \hl{y_i} \ln p_i" words="The textbook form. The one-hot target is 1 only at the correct class, so the sum keeps exactly one term: the step above." example="y = [1, 0, 0] keeps only −ln p₀." />
+</MathSteps>
+
+The target written as $[1, 0, 0]$ is called <Term slug="one-hot-encoding" />. For a batch, the losses of all examples are averaged, just as in MSE.<Cite id="cs231n-linear" />
+
+### Confident mistakes are expensive
+
+Because the logarithm drops steeply near 0, cross-entropy grows without limit as the probability of the correct class shrinks:<Cite id="cs231n-linear" />
+
+| Probability given to the correct class | Loss $-\ln p$ |
+|---|---|
+| 0.99 | 0.010 |
+| 0.665 | 0.408 |
+| 0.5 | 0.693 |
+| 0.1 | 2.303 |
+| 0.01 | 4.605 |
+
+A model that is sure and right pays almost nothing; a model that is sure and wrong pays a lot. The name comes from information theory, where cross-entropy measures how badly one probability distribution matches another.<Cite id="goodfellow2016-prob" /> Minimising it is the same as making the correct labels as probable as possible under the model, a principle called maximum likelihood.<Cite id="d2l-softmax" />
+
+## Reading a loss value
+
+A useful check: before training, a classifier usually spreads its probability evenly. With $K$ classes it gives each one $1/K$, so its loss is easy to predict.<Cite id="karpathy-recipe" />
+
+<MathSteps
+  title="The loss of an even guesser"
+  legend={[{ symbol: 'K', meaning: 'number of classes' }]}
+>
+  <Step tex="p_c = \frac{1}{10} = 0.1" words="A 10-class model (for example handwritten digits) that has learned nothing gives every digit 0.1." />
+  <Step tex="L = -\ln(0.1) = \ln 10 \approx \hl{2.303}" words="Its cross-entropy is about 2.30 on every example, so also on average." />
+  <Step tex="L = -\ln\frac{1}{K} = \hl{\ln K}" words="In general, an even guesser over K classes scores ln K." example="K = 3 gives 1.099; K = 4 gives 1.386." />
+</MathSteps>
+
+If the first loss you see is close to $\ln K$, the setup is probably sound. If it is much higher, the model starts out confidently wrong, which often signals a bug. Andrej Karpathy recommends this exact check as one of the first steps in any training run.<Cite id="karpathy-recipe" /> The [capstone](/course/beginner/first-model-numpy/) starts at 1.0986, which is $\ln 3$ for its three classes.
+
+## Which loss when?
+
+- **Regression** (predict a number): MSE. It measures distance on the number line.<Cite id="mlcc-loss" />
+- **Classification** (pick a class): cross-entropy over softmax probabilities.<Cite id="d2l-softmax" />
+
+Cross-entropy is preferred for classification because it keeps a strong slope exactly when the model is confidently wrong, so training corrects big mistakes fast. Combined with softmax, its gradient with respect to the scores is simply "predicted probabilities minus the one-hot target", a result the capstone uses directly.<Cite id="d2l-softmax" />
+
+<Callout type="pitfall">
+PyTorch's `nn.CrossEntropyLoss` expects **raw logits** and applies the softmax itself. Feeding it probabilities applies softmax twice and quietly slows learning.<Cite id="pt-crossentropy" />
+</Callout>
+
+## Try it
+
+Both losses take a few lines of NumPy:
+
+```python
+import numpy as np
+
+# Mean squared error: predictions vs targets
+pred = np.array([2.0, 4.0])
+target = np.array([3.0, 7.0])
+print("MSE:", np.mean((pred - target) ** 2))
+
+# Cross-entropy: logits -> softmax -> -ln(probability of the true class)
+logits = np.array([2.0, 1.0, 0.0])
+p = np.exp(logits - logits.max())
+p = p / p.sum()
+true_class = 0
+print("p:", p.round(3), " loss:", round(-np.log(p[true_class]), 3))
+```
+
+It prints `MSE: 5.0`, then `p: [0.665 0.245 0.09 ]  loss: 0.408`, the same numbers as the worked steps. `np.log` is the natural logarithm.
+
+## Summary
+
+- A loss turns all of a model's errors into one number that training pushes down.
+- MSE squares and averages the errors; it suits regression and punishes big misses heavily.
+- Cross-entropy is $-\ln$ of the probability given to the correct class; it suits classification and punishes confident mistakes.
+- An even guesser over $K$ classes scores $\ln K$, about 2.30 for 10 classes: a quick sanity check at the start of training.

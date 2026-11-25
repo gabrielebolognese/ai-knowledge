@@ -27,3 +27,4 @@ Thumbs.db
 
 # Plots and logs written by the companion scripts
 code/**/outputs/
+softmax_regression.png

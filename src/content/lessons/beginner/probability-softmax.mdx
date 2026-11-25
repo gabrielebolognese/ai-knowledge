@@ -1,0 +1,262 @@
+---
+title: Probability and the softmax function
+slug: probability-softmax
+track: beginner
+level: beginner
+order: 90
+minutes: 20
+module: The math, piece by piece
+summary: A classifier's output is a list of probabilities. This lesson covers the probability basics a network needs (distributions that sum to 1, expected value) and builds the softmax function, which turns raw scores into probabilities, one step at a time with numbers and NumPy.
+hatnote: 'For how these probabilities are scored during training, see "Loss functions: mean squared error and cross-entropy".'
+prerequisites: [numpy-arrays, vectors-dot-product]
+tools: [Python 3, NumPy]
+outcomes:
+  - "Use basic probability: events, distributions that sum to 1, expectation"
+  - Turn raw scores (logits) into probabilities with softmax, step by step
+  - Explain why subtracting the max keeps softmax numerically stable
+  - Read the sigmoid as the two-class softmax
+build: A numerically stable softmax in NumPy
+reviewed: 2026-11-25
+seeAlso: [loss-functions, derivatives, first-model-numpy]
+sources:
+  - id: goodfellow2016-prob
+    title: "Deep Learning, chapter 3: Probability and Information Theory"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/prob.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-probability
+    title: "Dive into Deep Learning, 2.6 Probability and Statistics"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_preliminaries/probability.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-softmax
+    title: "Dive into Deep Learning, 4.1 Softmax Regression"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_linear-classification/softmax-regression.html
+    accessed: 2026-11-25
+    type: book
+  - id: khan-stats
+    title: Statistics and probability
+    publisher: Khan Academy
+    url: https://www.khanacademy.org/math/statistics-probability
+    accessed: 2026-11-25
+    type: course
+  - id: goodfellow2016-numerical
+    title: "Deep Learning, chapter 4: Numerical Computation (4.1 Overflow and Underflow)"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/numerical.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-linear
+    title: "Linear classification (softmax classifier)"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/linear-classify/
+    accessed: 2026-11-25
+    type: course
+  - id: wiki-softmax
+    title: Softmax function
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Softmax_function
+    accessed: 2026-11-25
+    type: wikipedia
+furtherReading:
+  - title: "Khan Academy: Expected value"
+    url: https://www.khanacademy.org/math/statistics-probability/random-variables-stats-library
+  - title: "Seeing Theory: a visual introduction to probability (Brown University)"
+    url: https://seeing-theory.brown.edu/
+exercises:
+  - id: softmax-expected-value
+    type: numeric
+    difficulty: easy
+    title: Expected value of a spinner
+    prompt: "A spinner lands on 1 with probability 0.5, on 2 with probability 0.3 and on 5 with probability 0.2. What is its expected value?"
+    answer: 2.1
+    tolerance: 0.001
+    hint: Multiply each outcome by its probability, then add.
+    explanation: "$1 \\cdot 0.5 + 2 \\cdot 0.3 + 5 \\cdot 0.2 = 0.5 + 0.6 + 1.0 = 2.1$. The probabilities add up to 1, so this is a proper weighted average."
+  - id: softmax-two-logits
+    type: numeric
+    difficulty: medium
+    title: Softmax of two scores
+    prompt: "A two-class model outputs logits $[2, 0]$. What probability does softmax give the first class? Use $e^2 \\approx 7.389$ and round to three decimals."
+    answer: 0.881
+    tolerance: 0.001
+    hint: "$e^0 = 1$. Divide $e^2$ by $e^2 + e^0$."
+    explanation: "$7.389 / (7.389 + 1) = 7.389 / 8.389 \\approx 0.881$. This is also $\\sigma(2)$, the sigmoid of the difference of the two logits, because two-class softmax and sigmoid are the same thing."
+  - id: softmax-shift
+    type: mcq
+    difficulty: medium
+    title: Shifting every score
+    prompt: "A model's logits are $[2, 1, 0]$. You add 5 to every logit, giving $[7, 6, 5]$. What happens to the softmax probabilities?"
+    options:
+      - They stay exactly the same
+      - Every probability goes up
+      - The largest probability gets closer to 1
+      - They no longer add up to 1
+    answer: 0
+    explanation: "Adding 5 multiplies every exponential by the same factor $e^5$, and that factor cancels when dividing by the sum. Only **differences** between logits matter. This is exactly why subtracting the maximum is a safe stability trick."
+  - id: softmax-why-exp
+    type: short
+    difficulty: medium
+    title: Why not just divide by the sum?
+    prompt: "Why does softmax exponentiate the scores first, instead of simply dividing each raw score by the sum of the scores?"
+    answer: "Raw scores can be negative or zero (and the sum can be zero), so plain division can give negative 'probabilities' or divide by zero. The exponential makes every value positive while keeping their order."
+    explanation: "Try logits $[2, -1, -1]$: their sum is 0, so plain division fails, while softmax gives about $[0.910, 0.045, 0.045]$. Exponentiating also exaggerates gaps, so a clearly higher score gets a clearly larger share."
+---
+
+The **softmax function** turns a list of raw scores into a list of <Term slug="probability">probabilities</Term>: every output is between 0 and 1, the outputs add up to 1, and a higher score always gets a higher probability.<Cite id="wiki-softmax" /> Almost every classifier in this course, from handwritten digits to chess moves, ends with a softmax, so the lesson first covers the few probability ideas it relies on.<Cite id="d2l-softmax" />
+
+## Probability in a nutshell
+
+A **probability** is a number from 0 (impossible) to 1 (certain) that says how likely an event is.<Cite id="goodfellow2016-prob" /> A few basic facts are enough for this course:
+
+- An **event** is something that may or may not happen, such as "the die shows 6" or "this image is a 7".
+- A <Term slug="probability-distribution" /> gives a probability to every possible outcome, and those probabilities **add up to 1**. For a fair die each face gets $1/6$, and $6 \times 1/6 = 1$.<Cite id="khan-stats" />
+- A classifier's output is a distribution over the classes: for one digit image it might say 0.90 for "7", 0.06 for "1" and small amounts for the rest.<Cite id="d2l-probability" />
+
+<Analogy breaks="A good forecaster's 70% days really are rainy about 70% of the time; a network's probabilities are only its confidence, and they can be badly over- or under-confident.">
+A model's output is like a weather forecast that splits 100% between rain, cloud and sun. The forecast must cover every possibility, so the shares always add up to 100%.
+</Analogy>
+
+## Expected value
+
+The <Term slug="expected-value" /> is the probability-weighted average of the outcomes: multiply each outcome by its probability and add.<Cite id="goodfellow2016-prob" />
+
+<MathSteps
+  title="Expected value of a fair die"
+  legend={[
+    { symbol: 'x_i', meaning: 'an outcome (a face of the die)' },
+    { symbol: 'p_i', meaning: 'its probability' },
+    { symbol: 'E[X]', meaning: 'the expected value' },
+  ]}
+>
+  <Step tex="1 \cdot \tfrac{1}{6} + 2 \cdot \tfrac{1}{6} + \dots + 6 \cdot \tfrac{1}{6}" words="Multiply each face by its probability, one sixth." />
+  <Step tex="= \tfrac{1 + 2 + 3 + 4 + 5 + 6}{6} = \tfrac{21}{6} = \hl{3.5}" words="Add the products. The result is 3.5, a value the die itself can never show." />
+  <Step tex="E[X] = \hl{\sum_i p_i \, x_i}" words="The general formula: a weighted sum, which is a dot product of the probabilities with the outcomes." />
+</MathSteps>
+
+The expected value matters because a training loss is an average over many examples, which is an estimate of an expected value.<Cite id="d2l-probability" />
+
+## From scores to probabilities
+
+The last layer of a classifier produces one raw score per class. These scores are called <Term slug="logits" />, and they can be any number: positive, negative or zero.<Cite id="cs231n-linear" /> They cannot be probabilities directly, because they can be negative and need not add up to 1.
+
+Softmax fixes both problems in two moves:
+
+1. apply the <Term slug="exponential-function" /> $e^z$ to each score, which makes every value positive ($e \approx 2.718$);
+2. divide each result by their total, so they add up to 1.<Cite id="d2l-softmax" />
+
+Take three classes with logits $z = [2, 1, 0]$.
+
+<MathSteps
+  title="Softmax of the logits [2, 1, 0]"
+  legend={[
+    { symbol: 'z_i', meaning: 'logit (raw score) of class i' },
+    { symbol: 'e^{z_i}', meaning: 'its exponential, always positive' },
+    { symbol: 'p_i', meaning: 'probability of class i' },
+  ]}
+>
+  <Step tex="e^2 = \hl{7.389}, \quad e^1 = 2.718, \quad e^0 = 1" words="Exponentiate each score. Every result is positive, and the order is kept." />
+  <Step tex="7.389 + 2.718 + 1 = \hl{11.107}" words="Add them up. This total becomes the denominator." />
+  <Step tex="p = \left[\tfrac{7.389}{11.107}, \tfrac{2.718}{11.107}, \tfrac{1}{11.107}\right] = \hl{[0.665, \; 0.245, \; 0.090]}" words="Divide each one by the total. The three probabilities add up to 1.000." />
+  <Step tex="\text{softmax}(z)_i = \frac{e^{z_i}}{\hl{\sum_j e^{z_j}}}" words="The general formula. The sum runs over all classes j." />
+</MathSteps>
+
+Notice that a gap of 1 in the logits became a ratio of about 2.7 in the probabilities ($0.665 / 0.245 \approx 2.7$). The exponential exaggerates differences, so the top score gets a larger share than plain division would give it.<Cite id="wiki-softmax" />
+
+<Analogy breaks="Pizza slices are cut once; softmax is recomputed for every input, and a slightly higher shout can win a much bigger slice because of the exponential.">
+Softmax is like cutting one pizza among friends in proportion to how loudly they ask, after turning each voice up exponentially. Everyone gets a slice, louder voices get far bigger slices, and the slices always make one whole pizza.
+</Analogy>
+
+## Keeping softmax stable
+
+Computers store numbers with limited range. $e^{1000}$ is far larger than the biggest floating-point number, so NumPy returns `inf`, and $\infty / \infty$ is `nan` ("not a number").<Cite id="goodfellow2016-numerical" /> Logits that large do occur in practice.
+
+The fix uses a fact you can check by hand: adding the same number to every logit does not change the softmax, because every exponential gets multiplied by the same factor, which cancels in the division.<Cite id="cs231n-linear" />
+
+<MathSteps
+  title="Subtracting the maximum"
+  legend={[
+    { symbol: 'z', meaning: 'the logits' },
+    { symbol: '\\max(z)', meaning: 'the largest logit' },
+  ]}
+>
+  <Step tex="z = [1002, 1001, 1000] \;\Rightarrow\; e^{1002} = \hl{\infty}" words="The naive version overflows and returns nan." />
+  <Step tex="z - \max(z) = [1002, 1001, 1000] - 1002 = \hl{[0, -1, -2]}" words="Subtract the largest logit. Now the biggest exponent is 0, so e to it is exactly 1." />
+  <Step tex="\text{softmax}([0, -1, -2]) = \hl{[0.665, \; 0.245, \; 0.090]}" words="Same probabilities as for [2, 1, 0], because only differences between logits matter." />
+</MathSteps>
+
+```python
+import numpy as np
+
+def softmax(z):
+    z = np.asarray(z, dtype=float)
+    e = np.exp(z - z.max())     # subtract the max for stability
+    return e / e.sum()
+
+print(softmax([2, 1, 0]).round(3))
+print(softmax([1002, 1001, 1000]).round(3))
+print(softmax(np.array([2, 1, 0]) / 2).round(3))   # temperature T = 2
+```
+
+The first two lines both print `[0.665 0.245 0.09 ]`; without the subtraction, the second would print `[nan nan nan]`. The third line is explained in the next section.
+
+## Temperature: sharper or flatter
+
+Dividing the logits by a number $T$, called the <Term slug="sampling-temperature">temperature</Term>, before the softmax controls how confident the output looks.<Cite id="wiki-softmax" />
+
+| Temperature | Logits after dividing | Probabilities |
+|---|---|---|
+| $T = 0.5$ | $[4, 2, 0]$ | $[0.867, 0.117, 0.016]$ |
+| $T = 1$ | $[2, 1, 0]$ | $[0.665, 0.245, 0.090]$ |
+| $T = 2$ | $[1, 0.5, 0]$ | $[0.506, 0.307, 0.186]$ |
+
+A low temperature sharpens the distribution towards the top class; a high temperature flattens it towards equal shares. The text-generation projects use this knob to make generated text more predictable or more varied.<Cite id="wiki-softmax" />
+
+## The sigmoid is a two-class softmax
+
+For a yes/no question a network often outputs a single score and applies the <Term slug="sigmoid" /> $\sigma(z) = 1 / (1 + e^{-z})$. That is not a separate idea: it is softmax with two classes, where the second class has logit 0.<Cite id="d2l-softmax" />
+
+<MathSteps
+  title="From two-class softmax to the sigmoid"
+  legend={[
+    { symbol: 'z', meaning: 'score for "yes"; "no" has score 0' },
+    { symbol: '\\sigma(z)', meaning: 'the sigmoid' },
+  ]}
+>
+  <Step tex="p_\text{yes} = \frac{e^{z}}{e^{z} + \hl{e^{0}}} = \frac{e^z}{e^z + 1}" words="Softmax of the two logits [z, 0]. e to the 0 is 1." />
+  <Step tex="= \frac{e^z / e^z}{(e^z + 1) / e^z} = \hl{\frac{1}{1 + e^{-z}}}" words="Divide top and bottom by e to the z. The result is exactly the sigmoid." />
+  <Step tex="z = 2: \; \frac{1}{1 + e^{-2}} = \frac{1}{1.135} \approx \hl{0.881}" words="A numeric check: the same answer as softmax of [2, 0]." />
+</MathSteps>
+
+## Log-probabilities
+
+Probabilities are often handled through their <Term slug="natural-logarithm" />, $\ln p$, for two reasons.<Cite id="goodfellow2016-prob" />
+
+- **Products become sums.** The probability of many independent events is the product of their probabilities, and multiplying hundreds of small numbers underflows to 0 on a computer. Adding their logarithms does not.<Cite id="goodfellow2016-numerical" />
+- **Loss functions use them.** The standard classification loss, <Term slug="cross-entropy" />, is $-\ln p$ of the correct class. For the example above, if class 0 is correct, the loss is $-\ln 0.665 \approx 0.408$.<Cite id="cs231n-linear" />
+
+```python
+import numpy as np
+p = np.full(400, 0.1)        # 400 events, each with probability 0.1
+print(np.prod(p))            # multiply them: underflows
+print(np.log(p).sum().round(2))   # add log-probabilities instead
+```
+
+This prints `0.0`, because $0.1^{400}$ is too small to store, and then `-921.03`, which is $400 \times \ln 0.1$ and is stored without trouble.
+
+## Summary
+
+- A probability distribution gives every outcome a number from 0 to 1, and the numbers add up to 1; the expected value is the probability-weighted average.
+- Softmax turns logits into a distribution: exponentiate, then divide by the total.
+- Only differences between logits matter, so subtracting the maximum logit avoids overflow without changing the result.
+- Dividing logits by a temperature makes the distribution sharper ($T < 1$) or flatter ($T > 1$).
+- The sigmoid is the two-class softmax, and log-probabilities turn fragile products into stable sums.

@@ -1,0 +1,236 @@
+---
+title: "Data, features and labels: learning as function fitting"
+slug: data-features-labels
+track: beginner
+level: beginner
+order: 20
+minutes: 15
+module: What AI is
+summary: A dataset is a table of examples, each made of input features and a label. Learning means adjusting a function's parameters until its outputs match the labels. This lesson fits a line by hand, explains train, validation and test sets, and separates classification from regression.
+hatnote: For the history and the big picture, see "What AI, machine learning and deep learning are".
+prerequisites: [what-is-ai]
+tools: [Python 3]
+outcomes:
+  - Describe a dataset as examples made of features and a label
+  - Explain "learning" as fitting a function f(x) ≈ y with adjustable parameters
+  - Explain why data is split into train, validation and test sets
+  - Recognise classification versus regression
+build: A line fitted by trying values of its one parameter
+reviewed: 2026-11-25
+seeAlso: [what-is-ai, derivatives, loss-functions]
+sources:
+  - id: goodfellow2016-ml
+    title: "Deep Learning, chapter 5: Machine Learning Basics"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/ml.html
+    accessed: 2026-11-25
+    type: book
+  - id: mlcc
+    title: Machine Learning Crash Course
+    publisher: Google for Developers
+    url: https://developers.google.com/machine-learning/crash-course
+    accessed: 2026-11-25
+    type: course
+  - id: wiki-supervised
+    title: Supervised learning
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Supervised_learning
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: wiki-feature
+    title: Feature (machine learning)
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Feature_(machine_learning)
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: d2l-generalization
+    title: "Dive into Deep Learning, 3.6 Generalization"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_linear-regression/generalization.html
+    accessed: 2026-11-25
+    type: book
+  - id: wiki-splits
+    title: Training, validation, and test data sets
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Training,_validation,_and_test_data_sets
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: wiki-mnist
+    title: MNIST database
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/MNIST_database
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: wiki-leakage
+    title: Leakage (machine learning)
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Leakage_(machine_learning)
+    accessed: 2026-11-25
+    type: wikipedia
+furtherReading:
+  - title: "Google MLCC: Linear regression"
+    url: https://developers.google.com/machine-learning/crash-course/linear-regression
+  - title: "Dive into Deep Learning, 3.1 Linear Regression"
+    url: https://d2l.ai/chapter_linear-regression/linear-regression.html
+exercises:
+  - id: dfl-which-task
+    type: mcq
+    difficulty: easy
+    title: Classification or regression?
+    prompt: "Which of these is a **regression** task?"
+    options:
+      - "Predicting tomorrow's temperature in °C from today's weather readings"
+      - "Deciding whether an email is spam or not spam"
+      - "Naming the digit (0-9) in a handwritten image"
+      - "Choosing which of 345 doodle categories a sketch belongs to"
+    answer: 0
+    explanation: "A temperature is a number on a continuous scale, so predicting it is **regression**. The other three pick one item from a fixed list of categories (2, 10 or 345 of them), which is **classification**."
+  - id: dfl-mse-by-hand
+    type: numeric
+    difficulty: medium
+    title: Score a guess
+    prompt: "Using the data $(1, 2), (2, 4), (3, 6)$ and the model $\\hat y = w x$, compute the mean squared error for $w = 1.5$. Round to two decimals."
+    answer: 1.17
+    tolerance: 0.01
+    hint: "Predictions are 1.5, 3 and 4.5. Subtract the labels, square, then average."
+    explanation: "Errors: $1.5 - 2 = -0.5$, $3 - 4 = -1$, $4.5 - 6 = -1.5$. Squares: $0.25$, $1$, $2.25$. Mean: $3.5 / 3 \\approx 1.17$. That is better than $w = 1$ (4.67) and worse than $w = 2$ (0)."
+  - id: dfl-why-test
+    type: short
+    difficulty: medium
+    title: Why keep a test set?
+    prompt: "A student tunes a model until it scores 99% on the test set, trying 200 different settings. Why is 99% probably too optimistic?"
+    answer: "Because the test set was used to choose the settings, so the model was indirectly fitted to it. Choices should be made on a validation set and the test set used once at the end."
+    explanation: "Each time a setting is picked because it scored well on the test set, a little information about the test set leaks into the model. After 200 tries the winner may simply suit those particular examples. A validation set absorbs this tuning, which keeps the test set an honest estimate of performance on new data."
+---
+
+In machine learning, a **dataset** is a collection of examples. Each example has input values called <Term slug="feature">features</Term> and, in <Term slug="supervised-learning" />, a desired output called the <Term slug="label" />.<Cite id="wiki-supervised" /> **Learning** then means adjusting a mathematical function until its outputs come close to the labels, a process called *fitting*.<Cite id="goodfellow2016-ml" /> This lesson shows that idea with three data points and one adjustable number.
+
+## Examples, features and labels
+
+A dataset can be pictured as a table: one row per example, one column per feature and a final column for the label.<Cite id="wiki-feature" />
+
+| Floor area (m²) | Bedrooms | Distance to centre (km) | **Price (€1000)** |
+|---|---|---|---|
+| 70 | 2 | 5.0 | **210** |
+| 120 | 4 | 12.0 | **290** |
+| 45 | 1 | 1.5 | **190** |
+
+*Illustrative numbers.* The first three columns are features; the price is the label the model should predict.
+
+Images work the same way. The <Term slug="mnist" /> dataset contains 70,000 greyscale images of handwritten digits, each 28 × 28 pixels.<Cite id="wiki-mnist" /> Each image has 784 features (one brightness value per pixel) and one label, the digit from 0 to 9.
+
+<Analogy breaks="Flashcards are studied by a person who understands them; a model only adjusts numbers to match the answers.">
+A dataset is a stack of flashcards. The front of each card shows the features, the back shows the label, and training is practising until the guesses match the backs.
+</Analogy>
+
+### Where labels come from
+
+Labels are usually produced by people. MNIST's digits were written by US Census Bureau employees and high-school students, and each image's digit was recorded at collection time.<Cite id="wiki-mnist" /> Labelling is slow and costly, so some projects avoid it. A text model, for example, can use each next character as the label for the characters before it, so the raw text labels itself. The project tracks on small text models and code autocompletion use exactly this trick.<Cite id="wiki-supervised" />
+
+Features do not have to be chosen by hand either. Older systems relied on carefully designed features, such as counts of edges in an image. Deep networks take raw pixels or characters and learn useful features in their hidden layers, which is a large part of why they work so well.<Cite id="wiki-feature" />
+
+## Learning as function fitting
+
+A **model** is a function with adjustable numbers inside it, called <Term slug="parameter">parameters</Term>. Writing the features as $x$ and the label as $y$, the goal is a function $f$ whose prediction $\hat y = f(x)$ ("y-hat") is close to $y$ for every example.<Cite id="goodfellow2016-ml" />
+
+To judge "close", the model needs a score of wrongness, called a <Term slug="loss-function">loss</Term>. A common one is the **mean squared error**: subtract each label from its prediction, square the result, and average.<Cite id="mlcc" />
+
+Here is the whole process with three examples, $(1, 2)$, $(2, 4)$ and $(3, 6)$, and the simplest model there is: $\hat y = w \cdot x$, with one parameter $w$.
+
+<MathSteps
+  title="Fitting y-hat = w x by trying two values of w"
+  legend={[
+    { symbol: 'x', meaning: 'the feature (input)' },
+    { symbol: 'y', meaning: 'the label (correct answer)' },
+    { symbol: '\\hat y', meaning: 'the model\'s prediction' },
+    { symbol: 'w', meaning: 'the parameter we adjust' },
+    { symbol: 'n', meaning: 'the number of examples' },
+  ]}
+>
+  <Step tex="w = 1:\quad \hl{\hat y} = 1, 2, 3" words="Try w = 1. Multiply each x by 1 to get the predictions." />
+  <Step tex="\hl{\hat y - y} = 1-2,\ 2-4,\ 3-6 = -1, -2, -3" words="Subtract the labels to get the errors. All three predictions are too low." />
+  <Step tex="\frac{(-1)^2 + (-2)^2 + (-3)^2}{3} = \frac{1 + 4 + 9}{3} \approx \hl{4.67}" words="Square each error (so negatives do not cancel positives) and take the average. This is the loss for w = 1." />
+  <Step tex="w = 2:\quad \hat y = 2, 4, 6,\quad \text{errors } 0, 0, 0,\quad \text{loss} = \hl{0}" words="Try w = 2. Every prediction matches its label, so the loss is zero: this w fits the data perfectly." />
+  <Step tex="\text{MSE}(w) = \hl{\frac{1}{n}\sum_{i=1}^{n} (w x_i - y_i)^2}" words="The general formula. The sigma means 'add up the squared error of every example i from 1 to n', and dividing by n takes the average." example="n = 3 and w = 1 gives (1 + 4 + 9) / 3 ≈ 4.67, as above." />
+</MathSteps>
+
+<Figure src="/figures/beginner/fit-line.svg" alt="Three points at (1,2), (2,4) and (3,6). A dashed line for w = 1 passes below them; a solid line for w = 2 passes through all three." caption="Two candidate lines. The parameter w sets the slope; w = 2 has zero loss." credit="Own work" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" />
+
+**Learning** means finding a good $w$ automatically instead of by trial. Real models do this with <Term slug="gradient-descent" />, which later lessons build step by step, and they have thousands or millions of parameters instead of one.<Cite id="goodfellow2016-ml" />
+
+<Analogy breaks="A radio has one knob you can hear working; a network has millions of knobs that are turned together by an algorithm, not by ear.">
+A parameter is like the tuning knob on a radio. The loss is the amount of static, and learning is turning the knob until the static is as low as possible.
+</Analogy>
+
+The search can be written in a few lines of plain Python:
+
+```python
+xs = [1, 2, 3]          # features
+ys = [2, 4, 6]          # labels
+
+def mse(w):
+    errors = [w * x - y for x, y in zip(xs, ys)]
+    return sum(e ** 2 for e in errors) / len(errors)
+
+for w in [1, 1.5, 2, 2.5]:
+    print(f"w = {w}: mean squared error = {mse(w):.3f}")
+
+best = min([w / 10 for w in range(0, 41)], key=mse)
+print("best w on a 0.1 grid:", best)
+```
+
+It prints losses of `4.667`, `1.167`, `0.000` and `1.167`, then `best w on a 0.1 grid: 2.0`. Trying every value works for one parameter but becomes impossible for millions, which is why the course spends several lessons on [slopes and derivatives](/course/beginner/derivatives/).
+
+<Exercise id="dfl-mse-by-hand" />
+
+## Classification and regression
+
+Supervised tasks come in two main kinds, depending on the type of label.<Cite id="wiki-supervised" />
+
+- <Term slug="regression">Regression</Term>: the label is a number on a scale, such as a price, a temperature or a chess position's evaluation.
+- <Term slug="classification">Classification</Term>: the label is one of a fixed set of categories, such as the digits 0-9, the letters A-Z or "spam / not spam".
+
+The distinction matters because it decides the model's output and its loss: regression usually uses mean squared error, while classification uses probabilities and <Term slug="cross-entropy" />, covered in [Loss functions](/course/beginner/loss-functions/).<Cite id="goodfellow2016-ml" />
+
+## Training, validation and test sets
+
+A model that scores well on the examples it learned from has not proved anything yet. What matters is how well it does on new data, an ability called **generalisation**.<Cite id="d2l-generalization" /> To measure it, the data is split into three parts before training starts:<Cite id="wiki-splits" />
+
+- **Training set** (often 70-80%): the examples used to fit the parameters.
+- **Validation set** (often 10-15%): used to compare models and choose settings such as the model's size.
+- **Test set** (often 10-15%): used once, at the end, to report final performance.
+
+The percentages are common rules of thumb, not fixed rules. MNIST, for example, ships with a fixed split of 60,000 training and 10,000 test images.<Cite id="wiki-mnist" />
+
+```python
+import random
+
+examples = list(range(1000))      # stand-ins for 1,000 labelled examples
+random.seed(0)
+random.shuffle(examples)          # shuffle first, so each part is a fair sample
+
+train = examples[:800]
+val = examples[800:900]
+test = examples[900:]
+print(len(train), len(val), len(test))   # 800 100 100
+```
+
+<Analogy breaks="Students can understand the material; a model that memorises gets no credit for 'understanding' on new questions.">
+The training set is the homework, the validation set is the mock exam used to decide how to study, and the test set is the real exam, taken once.
+</Analogy>
+
+A model that does very well on training data and badly on new data is <Term slug="overfitting">overfitting</Term>: it has memorised the examples instead of learning the pattern.<Cite id="d2l-generalization" />
+
+<Callout type="pitfall">
+**Data leakage.** If information from the test set reaches training, for example the same image appears in both sets or the test score is used to pick settings, the reported score will be too optimistic.<Cite id="wiki-leakage" /> Split first, then never look at the test set until the end.
+</Callout>
+
+## Summary
+
+- A dataset is a set of examples; each has **features** (inputs) and, in supervised learning, a **label** (the answer).
+- A model is a function with **parameters**; learning means adjusting them so predictions match labels, as measured by a **loss** such as mean squared error.
+- **Regression** predicts numbers; **classification** picks a category.
+- Data is split into **training**, **validation** and **test** sets so that performance on new data can be measured honestly.

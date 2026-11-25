@@ -1,0 +1,278 @@
+---
+title: The perceptron and activation functions
+slug: perceptron-activations
+track: beginner
+level: beginner
+order: 110
+minutes: 20
+module: Neural networks from scratch
+summary: The perceptron was the first neuron that learned its own weights. This lesson runs its learning rule by hand, shows why XOR needs a hidden layer, and compares the step, sigmoid, tanh and ReLU activations by shape, range and slope.
+hatnote: For how a single neuron computes its output, see "The artificial neuron".
+prerequisites: [artificial-neuron, derivatives]
+tools: [Python 3, NumPy]
+outcomes:
+  - Run the perceptron learning rule by hand on a tiny dataset
+  - Explain linear separability and why XOR needs a hidden layer
+  - Compare step, sigmoid, tanh and ReLU (shape, range, derivative)
+  - Explain why a non-linear activation is required for depth to help
+build: A perceptron that learns OR, and a table of activation slopes, in NumPy
+reviewed: 2026-11-25
+seeAlso: [artificial-neuron, loss-functions, gradient-descent]
+sources:
+  - id: rosenblatt1958
+    title: "The perceptron: a probabilistic model for information storage and organization in the brain"
+    author: Frank Rosenblatt
+    publisher: Psychological Review 65(6)
+    year: 1958
+    url: https://doi.org/10.1037/h0042519
+    accessed: 2026-11-25
+    type: paper
+  - id: wiki-perceptron
+    title: Perceptron
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Perceptron
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: wiki-perceptrons-book
+    title: Perceptrons (book)
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Perceptrons_(book)
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: goodfellow2016-mlp
+    title: "Deep Learning, chapter 6: Deep Feedforward Networks"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/mlp.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-nn1
+    title: "Neural Networks Part 1: Setting up the Architecture"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-1/
+    accessed: 2026-11-25
+    type: course
+  - id: d2l-mlp
+    title: "Dive into Deep Learning, 5.1 Multilayer Perceptrons"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/mlp.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-numstab
+    title: "Dive into Deep Learning, 5.4 Numerical Stability and Initialization"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_multilayer-perceptrons/numerical-stability-and-init.html
+    accessed: 2026-11-25
+    type: book
+  - id: nair2010
+    title: Rectified Linear Units Improve Restricted Boltzmann Machines
+    author: Vinod Nair, Geoffrey Hinton
+    publisher: Proceedings of ICML 2010
+    year: 2010
+    url: https://www.cs.toronto.edu/~hinton/absps/reluICML.pdf
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "3Blue1Brown: But what is a neural network?"
+    url: https://www.3blue1brown.com/lessons/neural-networks
+  - title: "TensorFlow Playground: train a tiny network in the browser"
+    url: https://playground.tensorflow.org/
+exercises:
+  - id: perc-one-update
+    type: numeric
+    difficulty: easy
+    title: One perceptron update
+    prompt: "A perceptron has weights $w = [1, -1]$, bias $b = 0$ and learning rate $\\eta = 0.5$. It sees the input $x = [1, 1]$ with label $y = 1$. Its step activation outputs 1 only if $z > 0$. What is the new first weight $w_1$ after the update?"
+    answer: 1.5
+    tolerance: 0.001
+    hint: "First compute $z = 1 \\cdot 1 + (-1) \\cdot 1 + 0$ and the prediction. Then use $w_1 \\leftarrow w_1 + \\eta (y - \\hat y) x_1$."
+    explanation: "$z = 1 - 1 + 0 = 0$, which is not greater than 0, so $\\hat y = 0$. The error is $y - \\hat y = 1$. The update adds $\\eta \\cdot 1 \\cdot x_1 = 0.5 \\cdot 1 = 0.5$, so $w_1 = 1 + 0.5 = 1.5$ (and $w_2 = -0.5$, $b = 0.5$)."
+  - id: perc-which-pattern
+    type: mcq
+    difficulty: easy
+    title: What one perceptron cannot do
+    prompt: "Each pattern below takes two inputs that are 0 or 1. Which one can a single perceptron **not** learn?"
+    options: ["AND (1 only when both inputs are 1)", "OR (1 when at least one input is 1)", "NAND (0 only when both inputs are 1)", "XOR (1 when exactly one input is 1)"]
+    answer: 3
+    explanation: "AND, OR and NAND are each separated by one straight line, so the perceptron rule finds weights for them. XOR puts $(0,1)$ and $(1,0)$ on one side and $(0,0)$ and $(1,1)$ on the other, diagonally opposite, and no single line can split them. A hidden layer is needed."
+  - id: perc-why-relu
+    type: mcq
+    difficulty: medium
+    title: Why ReLU in hidden layers?
+    prompt: Why did ReLU replace the sigmoid as the usual activation for hidden layers?
+    options:
+      - Its output is always between 0 and 1, like a probability
+      - Its slope is 1 for every positive input, so gradients do not shrink as they pass back through many layers
+      - It is a straight line, so the network stays linear and simple
+      - It never outputs zero, so no neuron is ever silent
+    answer: 1
+    explanation: "The sigmoid's slope is at most 0.25, so gradients shrink every time they pass back through a sigmoid layer. ReLU's slope is exactly 1 for positive inputs, which keeps them from vanishing, and it is cheap to compute. It is not a straight line overall (it bends at 0), which is what keeps the network non-linear. It does output zero for negative inputs."
+  - id: perc-vanishing
+    type: numeric
+    difficulty: medium
+    title: How fast does a gradient vanish?
+    prompt: "In the best case each sigmoid layer multiplies the gradient by its largest slope, $0.25$. What factor is left after 5 sigmoid layers? Give a decimal."
+    answer: 0.000977
+    tolerance: 0.00001
+    hint: "Multiply 0.25 by itself five times: $0.25^5$."
+    explanation: "$0.25^5 = 0.25 \\cdot 0.25 \\cdot 0.25 \\cdot 0.25 \\cdot 0.25 \\approx 0.000977$, about one thousandth. Even in the best case the first layer receives a thousand times weaker signal than the last, which is why deep sigmoid networks learn slowly."
+---
+
+The **perceptron** is a single <Term slug="artificial-neuron">artificial neuron</Term> with a step activation that learns its own <Term slug="weight">weights</Term> from labelled examples, introduced by Frank Rosenblatt in 1958.<Cite id="rosenblatt1958" /> Its limits, and the fix for them, explain two ideas that every modern network relies on: stacking neurons in layers and using a smooth, non-linear <Term slug="activation-function">activation function</Term>.<Cite id="goodfellow2016-mlp" />
+
+## The perceptron learning rule
+
+A <Term slug="perceptron" /> outputs 1 when its weighted sum $z$ is above 0 and 0 otherwise. Rosenblatt's rule says how to change the weights after each example:<Cite id="wiki-perceptron" />
+
+- If the prediction $\hat y$ ("y-hat") is right, change nothing.
+- If it said 0 but the answer was 1, **add** the input to the weights, so $z$ grows next time.
+- If it said 1 but the answer was 0, **subtract** the input, so $z$ shrinks.
+
+One formula covers all three cases, because the error $y - \hat y$ is 0, +1 or −1. A small number $\eta$ ("eta"), the <Term slug="learning-rate" />, scales each change.
+
+<Analogy breaks="A student can reason about why an answer was wrong; the perceptron only shifts numbers by a fixed rule and never looks at its mistakes as a whole.">
+Think of a student who marks their own quiz and adjusts only after a wrong answer: guessed too low, lean higher next time; guessed too high, lean lower. Correct answers leave their habits alone.
+</Analogy>
+
+### A full run by hand
+
+Teach a perceptron logical **OR** (output 1 if at least one input is 1). Start with $w = [0, 0]$, $b = 0$ and $\eta = 1$, and show it the four examples in order. The first mistake comes at input $(0, 1)$:
+
+<MathSteps
+  title="Perceptron updates while learning OR"
+  legend={[
+    { symbol: 'x', meaning: 'input, here two numbers that are 0 or 1' },
+    { symbol: 'y', meaning: 'correct label' },
+    { symbol: '\\hat y', meaning: 'the perceptron\'s prediction' },
+    { symbol: '\\eta', meaning: 'learning rate' },
+  ]}
+>
+  <Step tex="z = 0 \cdot 0 + 0 \cdot 1 + 0 = 0 \;\Rightarrow\; \hat y = 0" words="Input (0, 1) has label 1. The sum is 0, which is not above 0, so the perceptron says 0: wrong." />
+  <Step tex="y - \hat y = 1 - 0 = \hl{1}" words="The error is +1: the output was too low." />
+  <Step tex="w = [0, 0] + 1 \cdot 1 \cdot [0, 1] = \hl{[0, 1]}, \quad b = 0 + 1 = 1" words="Add the input to the weights and add 1 to the bias." />
+  <Step tex="z = 0 \cdot 0 + 1 \cdot 0 + 1 = 1 \;\Rightarrow\; \hat y = 1,\; y - \hat y = \hl{-1}" words="Second pass, input (0, 0) with label 0: now the output is too high." />
+  <Step tex="w = [0, 1] - 1 \cdot [0, 0] = [0, 1], \quad b = 1 - 1 = \hl{0}" words="The input is all zeros, so only the bias changes." />
+  <Step tex="w \leftarrow w + \hl{\eta\,(y - \hat y)}\,x, \qquad b \leftarrow b + \eta\,(y - \hat y)" words="The general rule. Two more corrections follow, and the run ends at w = [1, 1], b = 0, which gets all four examples right." />
+</MathSteps>
+
+Rosenblatt's analysis and later proofs show that this rule always stops making mistakes after a finite number of updates **if** some straight line separates the two classes.<Cite id="wiki-perceptron" /> The NumPy version below replays the same run:
+
+```python
+import numpy as np
+
+X = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
+y = np.array([0, 1, 1, 1])          # OR
+w, b, eta = np.zeros(2), 0.0, 1.0
+
+for epoch in range(5):
+    mistakes = 0
+    for xi, yi in zip(X, y):
+        y_hat = 1 if w @ xi + b > 0 else 0
+        w += eta * (yi - y_hat) * xi        # changes only when wrong
+        b += eta * (yi - y_hat)
+        mistakes += int(yi != y_hat)
+    print(epoch, w, b, mistakes)
+```
+
+It prints 1, 2 and 1 mistakes in the first three passes (each pass is one <Term slug="epoch" />), then 0 mistakes with `w = [1. 1.]` and `b = 0.0`.
+
+Three details of this run are worth noticing:
+
+- **The answer is not unique.** Many lines separate the classes, and the rule stops at the first one it reaches. Started from $w = [2, 2]$ and $b = -1$, for example, it makes no mistakes on OR and never changes those weights at all.
+- **Zero inputs teach only the bias.** At input $(0, 0)$ the update multiplies the error by zeros, so only $b$ moves. This is one reason a neuron needs a bias at all.
+- **The rule never measures "how wrong".** The error is always 0, +1 or −1, so a near miss and a wild miss cause the same change. Later lessons replace this with a smooth loss whose slope grows with the size of the mistake.<Cite id="goodfellow2016-mlp" />
+
+## Linear separability and XOR
+
+A perceptron switches from 0 to 1 along the line where $z = 0$, its <Term slug="decision-boundary" />. Data whose classes can be split by one such line is called <Term slug="linear-separability">linearly separable</Term>.<Cite id="wiki-perceptron" /> AND, OR and NAND are; **XOR** ("exclusive or": 1 when exactly one input is 1) is not, because its two "on" corners sit diagonally opposite each other.
+
+In 1969 Marvin Minsky and Seymour Papert set out this and related limits in their book *Perceptrons*. It is often blamed for a long drop in funding for neural-network research, although historians still debate how large its role was.<Cite id="wiki-perceptrons-book" /> The <Term slug="xor-problem" /> disappears once a <Term slug="hidden-layer" /> sits between input and output: two hidden neurons compute OR and NAND, and an output neuron takes the AND of them.<Cite id="d2l-mlp" />
+
+<MathSteps
+  title="A two-layer network computing XOR (hand-set weights, step activation)"
+  legend={[
+    { symbol: 'h_1', meaning: 'hidden neuron 1 (OR): w = [1, 1], b = −0.5' },
+    { symbol: 'h_2', meaning: 'hidden neuron 2 (NAND): w = [−1, −1], b = 1.5' },
+    { symbol: 'o', meaning: 'output neuron (AND of h₁, h₂): w = [1, 1], b = −1.5' },
+  ]}
+>
+  <Step tex="x = (1, 0):\; h_1: 1 + 0 - 0.5 = 0.5 \Rightarrow 1, \quad h_2: -1 - 0 + 1.5 = 0.5 \Rightarrow 1" words="Exactly one input is on. Both hidden neurons fire." />
+  <Step tex="o: 1 + 1 - 1.5 = \hl{0.5} \Rightarrow 1" words="The output neuron sees two 1s and fires: XOR(1, 0) = 1. Correct." />
+  <Step tex="x = (1, 1):\; h_1: 1.5 \Rightarrow 1, \quad h_2: -2 + 1.5 = -0.5 \Rightarrow 0" words="Both inputs are on. OR fires, NAND stays silent." />
+  <Step tex="o: 1 + 0 - 1.5 = \hl{-0.5} \Rightarrow 0" words="Only one hidden neuron fired, so the output is 0: XOR(1, 1) = 0. Correct." />
+</MathSteps>
+
+The hidden layer re-describes each input in new terms (OR and NAND), and in those terms the classes become separable by a straight line. Stacking such layers gives a <Term slug="multilayer-perceptron" />.<Cite id="goodfellow2016-mlp" />
+
+## Why the activation must bend
+
+Layers only help if something non-linear happens between them. Without an activation, two layers collapse into one:<Cite id="d2l-mlp" />
+
+<MathSteps
+  title="Two linear layers are just one linear layer"
+  legend={[
+    { symbol: 'x', meaning: 'input' },
+    { symbol: 'h', meaning: 'output of layer 1' },
+  ]}
+>
+  <Step tex="h = 2x, \qquad \text{output} = 3h" words="Layer 1 doubles the input; layer 2 triples what it receives. No activation." />
+  <Step tex="\text{output} = 3 \cdot \hl{2x} = 6x" words="Substitute: the pair is a single layer that multiplies by 6. Depth bought nothing." />
+  <Step tex="W_2 (W_1 x) = \hl{(W_2 W_1)}\, x" words="The same holds for whole weight matrices: their product is one matrix." />
+</MathSteps>
+
+A bend such as ReLU's corner at 0 breaks this collapse, which is what lets deeper networks draw curved boundaries.<Cite id="goodfellow2016-mlp" />
+
+## Four activations compared
+
+Training by <Term slug="gradient-descent" /> needs the activation's slope (its <Term slug="derivative" />). The step function's slope is 0 everywhere except at the jump, where it is undefined, so it gives gradient descent nothing to follow; that is why modern networks use smooth or piecewise-linear activations instead.<Cite id="cs231n-nn1" />
+
+| Activation | Formula | Output range | Slope | Notes |
+|---|---|---|---|---|
+| Step | 1 if $z > 0$, else 0 | 0 or 1 | 0 (undefined at 0) | Original perceptron; cannot be trained by gradients |
+| <Term slug="sigmoid">Sigmoid</Term> | $1/(1+e^{-z})$ | 0 to 1 | $\sigma(z)(1-\sigma(z))$, at most 0.25 | Flattens for large $\lvert z \rvert$ |
+| <Term slug="tanh">Tanh</Term> | $\tanh z$ | −1 to 1 | $1 - \tanh^2 z$, at most 1 | Zero-centred, still flattens |
+| <Term slug="relu">ReLU</Term> | $\max(0, z)$ | 0 and up | 1 if $z > 0$, else 0 | Cheap; default for hidden layers |
+
+Nair and Hinton reported in 2010 that rectified units trained well,<Cite id="nair2010" /> and the CS231n notes recommend ReLU as the default while warning that a unit can "die" if its input stays negative, since its slope is then 0.<Cite id="cs231n-nn1" /> This short script prints the values and slopes at $z = -2, 0, 2$:
+
+```python
+import numpy as np
+
+z = np.array([-2.0, 0.0, 2.0])
+sig = 1 / (1 + np.exp(-z))
+print("sigmoid ", sig.round(3), " slope", (sig * (1 - sig)).round(3))
+print("tanh    ", np.tanh(z).round(3), " slope", (1 - np.tanh(z) ** 2).round(3))
+print("relu    ", np.maximum(0, z), " slope", (z > 0).astype(float))
+```
+
+Output: sigmoid `[0.119 0.5 0.881]` with slopes `[0.105 0.25 0.105]`; tanh `[-0.964 0. 0.964]` with slopes `[0.071 1. 0.071]`; ReLU `[0. 0. 2.]` with slopes `[0. 0. 1.]`.
+
+## Preview: vanishing gradients
+
+During training, the slope of each layer is multiplied into the signal that flows back to earlier layers, a fact the next lessons make precise with the chain rule.<Cite id="d2l-numstab" /> If every factor is small, the product shrinks quickly:
+
+<MathSteps
+  title="How sigmoid slopes shrink a gradient"
+  legend={[{ symbol: "\\sigma'(z)", meaning: 'slope of the sigmoid at z' }]}
+>
+  <Step tex="\sigma(0) = 0.5, \quad \sigma'(0) = 0.5 \cdot (1 - 0.5) = \hl{0.25}" words="The sigmoid is steepest at 0, and even there its slope is only a quarter." />
+  <Step tex="0.25 \cdot 0.25 = 0.0625" words="Two sigmoid layers: the signal is already down to about 6%." />
+  <Step tex="0.25^{10} \approx \hl{9.5 \times 10^{-7}}" words="Ten layers: less than a millionth survives, even in the best case." />
+</MathSteps>
+
+This is the <Term slug="vanishing-gradient" /> problem: the first layers of a deep sigmoid network barely learn.<Cite id="d2l-numstab" /> ReLU's slope of exactly 1 for positive inputs is one reason deep networks became trainable.<Cite id="cs231n-nn1" />
+
+<Callout type="pitfall">
+"A perceptron is a modern neural network layer." Not quite: the perceptron uses a step function and its own update rule. Today's "multilayer perceptrons" keep the layered structure but use smooth activations and gradient descent.
+</Callout>
+
+## Summary
+
+- The perceptron rule $w \leftarrow w + \eta (y - \hat y) x$ changes the weights only after a mistake, and it succeeds whenever the classes are linearly separable.
+- XOR is not linearly separable; one hidden layer (OR and NAND feeding an AND) solves it.
+- Without a non-linear activation, stacked layers collapse into a single linear layer.
+- Sigmoid and tanh flatten out and have small slopes; ReLU keeps a slope of 1 for positive inputs and is the default for hidden layers.
+- Multiplying many small slopes makes gradients vanish in deep networks.

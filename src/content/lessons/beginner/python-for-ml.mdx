@@ -1,0 +1,306 @@
+---
+title: The Python you need for machine learning
+slug: python-for-ml
+track: beginner
+level: beginner
+order: 30
+minutes: 25
+module: Python and NumPy for ML
+summary: Only the Python this course actually uses. Variables, lists, dictionaries, loops and functions; recursion, which the chess engine needs; classes, which every PyTorch model is built from; and how to read a traceback when something breaks.
+hatnote: To install Python first, see the optional setup track. If you already write Python, skip to "NumPy arrays, shapes and broadcasting".
+prerequisites: []
+tools: [Python 3]
+outcomes:
+  - Use variables, lists, dictionaries, loops and functions
+  - Write a recursive function and trace it (used again by the chess engine)
+  - Define a small class with __init__ and a method (used again by nn.Module)
+  - Read a traceback and fix the error it points to
+build: A loss function, a recursive tree walk and a Neuron class
+reviewed: 2026-11-25
+seeAlso: [numpy-arrays, artificial-neuron]
+sources:
+  - id: python-tutorial
+    title: The Python Tutorial
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/tutorial/index.html
+    accessed: 2026-11-25
+    type: docs
+  - id: python-controlflow
+    title: "The Python Tutorial: 4. More Control Flow Tools"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/tutorial/controlflow.html
+    accessed: 2026-11-25
+    type: docs
+  - id: python-datastructures
+    title: "The Python Tutorial: 5. Data Structures"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/tutorial/datastructures.html
+    accessed: 2026-11-25
+    type: docs
+  - id: python-inputoutput
+    title: "The Python Tutorial: 7. Input and Output (formatted string literals)"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/tutorial/inputoutput.html
+    accessed: 2026-11-25
+    type: docs
+  - id: python-errors
+    title: "The Python Tutorial: 8. Errors and Exceptions"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/tutorial/errors.html
+    accessed: 2026-11-25
+    type: docs
+  - id: python-classes
+    title: "The Python Tutorial: 9. Classes"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/tutorial/classes.html
+    accessed: 2026-11-25
+    type: docs
+  - id: cs231n-python
+    title: Python Numpy Tutorial (with Jupyter and Colab)
+    author: Justin Johnson
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/python-numpy-tutorial/
+    accessed: 2026-11-25
+    type: course
+  - id: wiki-recursion
+    title: Recursion (computer science)
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Recursion_(computer_science)
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: pt-module
+    title: torch.nn.Module
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "Python for Everybody (free book and course)"
+    url: https://www.py4e.com/
+  - title: "Real Python: Recursion in Python"
+    url: https://realpython.com/python-recursion/
+exercises:
+  - id: py-list-index
+    type: mcq
+    difficulty: easy
+    title: Indexing a list
+    prompt: "After `scores = [0.2, 0.9, 0.4]`, what does `scores[-1]` give?"
+    options: ["0.4", "0.2", "An IndexError", "0.9"]
+    answer: 0
+    explanation: "Negative indexes count from the end: `-1` is the last item, `0.4`. `scores[0]` would give `0.2`. Only an index past either end, such as `scores[3]`, raises an `IndexError`."
+  - id: py-factorial-four
+    type: numeric
+    difficulty: easy
+    title: Trace a recursion
+    prompt: "Using the lesson's `factorial` function, what does `factorial(4)` return?"
+    answer: 24
+    tolerance: 0
+    hint: "factorial(4) = 4 × factorial(3), and factorial(3) is 6."
+    explanation: "The calls go down to the base case: `factorial(0)` returns 1. On the way back up: $1 \\cdot 1 = 1$, $2 \\cdot 1 = 2$, $3 \\cdot 2 = 6$, $4 \\cdot 6 = 24$."
+  - id: py-fix-traceback
+    type: short
+    difficulty: medium
+    title: Read the traceback
+    prompt: "A traceback ends with `KeyError: 'eight'` and points at the line `print(label_names['eight'])`, where `label_names = {0: 'zero', 1: 'one', 7: 'seven'}`. What is wrong, and what is one fix?"
+    answer: "The dictionary has no key 'eight' (its keys are the integers 0, 1 and 7). Look up an existing key, add the key first, or use label_names.get(8, 'unknown')."
+    explanation: "Read the last line first: `KeyError` means a dictionary lookup used a key that is not there. The keys are integers, and the string `'eight'` is not one of them. `dict.get(key, default)` returns the default instead of raising an error."
+  - id: py-why-self
+    type: reveal
+    difficulty: medium
+    title: What is self for?
+    prompt: "In the `Neuron` class, `forward` uses `self.weights`. Why not just write `weights`?"
+    answer: "Because each Neuron object has its own weights. self is the particular object the method was called on, so self.weights reads that object's weights."
+    explanation: "Two neurons `a = Neuron([1, 2], 0)` and `b = Neuron([3, 4], 1)` share the same code but store different numbers. When you call `a.forward(x)`, Python passes `a` in as `self`, so the method uses `a`'s weights. A PyTorch model works the same way: its layers are stored as attributes in `__init__` and used through `self` in `forward`."
+---
+
+**Python** is the main programming language of machine learning: <Term slug="pytorch" />, NumPy and most research code are written in it, and its syntax reads almost like plain English.<Cite id="cs231n-python" /> This lesson covers only the parts of the language the course uses, each with a short example you can run. People who already write Python can skip ahead to [NumPy arrays](/course/beginner/numpy-arrays/).
+
+## Running code
+
+Python code can be run in two ways. A **script** is a `.py` file run from a <Term slug="terminal" /> with `python file.py`; the companion code in this course works that way. A <Term slug="jupyter-notebook">notebook</Term> runs code in cells and shows each result underneath, which suits experiments.<Cite id="python-tutorial" /> Every snippet below works in either. If Python is not installed yet, the optional [setup track](/course/setup/) walks through it, or a free online notebook works without installing anything.
+
+## Values, lists and dictionaries
+
+A **variable** is a name for a value. Python works out the type itself: whole numbers (`int`), decimals (`float`) and text (`str`).<Cite id="python-tutorial" />
+
+```python
+learning_rate = 0.1          # a float
+epochs = 3                   # an int
+name = "digits"              # a string
+print(f"Training {name} for {epochs} epochs at lr={learning_rate}")
+# Training digits for 3 epochs at lr=0.1
+```
+
+The `f` before the quotes makes an **f-string**: anything inside braces is replaced by its value.<Cite id="python-inputoutput" />
+
+Two containers do most of the work:<Cite id="python-datastructures" />
+
+- A **list** holds items in order. Positions start at **0**, and negative positions count from the end.
+- A <Term slug="python-dictionary">dictionary</Term> (`dict`) maps keys to values, such as class numbers to class names.
+
+```python
+scores = [0.2, 0.9, 0.4]
+print(scores[0], scores[-1], len(scores))   # 0.2 0.4 3
+scores.append(0.7)                          # now [0.2, 0.9, 0.4, 0.7]
+
+label_names = {0: "zero", 1: "one", 7: "seven"}
+print(label_names[7])                       # seven
+```
+
+<Exercise id="py-list-index" />
+
+## Loops, conditions and comprehensions
+
+A `for` loop repeats a block once per item, and `if` runs a block only when a condition is true. Python marks blocks by **indentation** (four spaces), not by brackets.<Cite id="python-controlflow" />
+
+```python
+for i, s in enumerate(scores):      # enumerate gives (position, item)
+    if s > 0.5:
+        print(i, "high", s)
+# 1 high 0.9
+# 3 high 0.7
+
+squares = [x * x for x in range(5)]
+print(squares)                      # [0, 1, 4, 9, 16]
+```
+
+The last line is a <Term slug="list-comprehension" />: a loop that builds a list in one expression. `range(5)` produces 0, 1, 2, 3, 4, stopping *before* 5.<Cite id="python-datastructures" />
+
+## Functions
+
+A **function** packages code under a name, takes inputs (arguments) and gives back a result with `return`. Arguments can have **default values**, which callers may leave out.<Cite id="python-controlflow" /> Here is the mean squared error from [the previous lesson](/course/beginner/data-features-labels/) as a function:
+
+```python
+def mse(predictions, labels, verbose=False):
+    errors = [p - y for p, y in zip(predictions, labels)]
+    loss = sum(e * e for e in errors) / len(errors)
+    if verbose:
+        print("errors:", errors)
+    return loss
+
+print(mse([2, 4], [3, 7]))                 # 5.0
+print(mse([2, 4], [3, 7], verbose=True))   # errors: [-1, -3]  then 5.0
+```
+
+`zip` walks through two lists side by side, pairing the first items, then the second items, and so on.
+
+## Recursion
+
+A function is **recursive** when it calls itself on a smaller version of the same problem. Every recursive function needs a **base case**, a version small enough to answer directly, or it would call itself forever.<Cite id="wiki-recursion" /> The factorial of 3, written $3!$, is $3 \cdot 2 \cdot 1 = 6$, and it can be defined in terms of a smaller factorial:
+
+```python
+def factorial(n):
+    if n == 0:                     # base case: stop here
+        return 1
+    return n * factorial(n - 1)    # recursive case: a smaller copy of the problem
+
+print(factorial(3))   # 6
+print(factorial(5))   # 120
+```
+
+<MathSteps
+  title="Tracing factorial(3)"
+  legend={[
+    { symbol: 'n', meaning: 'the input number' },
+    { symbol: 'n!', meaning: 'n factorial: n × (n − 1) × … × 1' },
+  ]}
+>
+  <Step tex="\text{factorial}(3) = 3 \cdot \hl{\text{factorial}(2)}" words="3 is not 0, so the function needs factorial(2) before it can answer. It waits." />
+  <Step tex="\text{factorial}(2) = 2 \cdot \hl{\text{factorial}(1)}, \quad \text{factorial}(1) = 1 \cdot \hl{\text{factorial}(0)}" words="The same happens twice more. Three calls are now waiting, each for the one below it." />
+  <Step tex="\text{factorial}(0) = \hl{1}" words="The base case answers directly. Nothing calls itself any more." />
+  <Step tex="1 \cdot 1 = 1, \quad 2 \cdot 1 = 2, \quad 3 \cdot 2 = \hl{6}" words="The waiting calls finish in reverse order, each multiplying by the answer it received." />
+  <Step tex="n! = \hl{n \cdot (n-1)!}, \quad 0! = 1" words="The general rule: a recursive case that shrinks the problem, plus a base case that stops it." example="n = 5 gives 5 × 24 = 120." />
+</MathSteps>
+
+<Analogy breaks="Real dolls are all different objects; recursive calls run the same code with different numbers.">
+Recursion works like opening Russian dolls: each doll holds a smaller one, until the smallest, solid doll (the base case) stops the process. Then the dolls are put back together from the inside out.
+</Analogy>
+
+The same pattern walks a **tree**, a structure where each item can have children. A chess engine explores moves this way: each position has child positions, one per legal move, and the engine calls itself on each child.<Cite id="wiki-recursion" />
+
+```python
+tree = {"value": 1, "children": [
+    {"value": 2, "children": []},
+    {"value": 3, "children": [{"value": 4, "children": []}]},
+]}
+
+def count_nodes(node):
+    return 1 + sum(count_nodes(child) for child in node["children"])
+
+print(count_nodes(tree))  # 4
+```
+
+A node with no children is the base case: the sum over an empty list is 0, so it counts as 1.
+
+## Classes
+
+A <Term slug="python-class">class</Term> is a blueprint that bundles data with the functions that use it. Objects made from the class are its **instances**. The special method `__init__` runs when an instance is created, and `self` refers to the particular instance.<Cite id="python-classes" />
+
+```python
+class Neuron:
+    def __init__(self, weights, bias):
+        self.weights = weights          # stored on this particular neuron
+        self.bias = bias
+
+    def forward(self, inputs):
+        z = sum(w * x for w, x in zip(self.weights, inputs)) + self.bias
+        return max(0.0, z)              # ReLU
+
+n = Neuron(weights=[0.5, -1.0], bias=0.5)
+print(n.forward([1, 2]))      # 0.0
+print(n.forward([3, 0]))      # 2.0
+```
+
+<Analogy breaks="Cookies cannot change after baking; an object's attributes can be updated at any time, which is exactly what training does to weights.">
+A class is a cookie cutter and its instances are the cookies: one shape, many cookies, each with its own decoration (its own weights).
+</Analogy>
+
+This is the shape every PyTorch model takes. A model is a class that inherits from `nn.Module`, creates its layers in `__init__` and describes the computation in a method called `forward`.<Cite id="pt-module" /> The [artificial neuron](/course/beginner/artificial-neuron/) lesson explains what the neuron computes.
+
+## Imports
+
+Most tools live in **modules** that must be imported first. `import numpy as np` loads NumPy under the short name `np`, the convention used everywhere, including in this course.<Cite id="cs231n-python" />
+
+## Reading a traceback
+
+When an error stops a program, Python prints a <Term slug="traceback" />. It lists the chain of calls that led to the error, **most recent call last**, and ends with the error's type and message.<Cite id="python-errors" />
+
+```python
+scores = [0.2, 0.9, 0.4]
+
+def best_score(values):
+    return values[3]
+
+print(best_score(scores))
+```
+
+```text
+Traceback (most recent call last):
+  File "example.py", line 6, in <module>
+    print(best_score(scores))
+          ~~~~~~~~~~^^^^^^^^
+  File "example.py", line 4, in best_score
+    return values[3]
+           ~~~~~~^^^
+IndexError: list index out of range
+```
+
+Read it from the bottom up:
+
+1. **Last line**: the error type and message. `IndexError` means a position outside the list.
+2. **Lines just above**: the exact line that failed, `return values[3]` on line 4. The `^` marks point at the failing part.
+3. **Higher lines**: who called it. Here, line 6 called `best_score`.
+
+The list has three items at positions 0, 1 and 2, so position 3 does not exist. `values[-1]` or `max(values)` would fix it, depending on the intent. Other common errors are `NameError` (a misspelled name), `TypeError` (the wrong kind of value) and `KeyError` (a missing dictionary key).<Cite id="python-errors" />
+
+<Callout type="tip">
+Copy the last line of a traceback into a search engine. Almost every beginner error has been asked and answered before.
+</Callout>
+
+## Summary
+
+- Lists (positions from 0) and dictionaries (key → value) hold data; `for`, `if` and list comprehensions process it.
+- Functions take arguments, which can have defaults, and `return` a result.
+- A recursive function calls itself on a smaller problem and stops at a base case; tree search in chess works this way.
+- A class bundles data and methods; `__init__` sets up each instance and `self` refers to it, the same pattern as a PyTorch `nn.Module`.
+- Read a traceback from the bottom: error type, failing line, then the calls that led there.

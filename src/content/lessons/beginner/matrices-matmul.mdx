@@ -1,0 +1,228 @@
+---
+title: Matrices and matrix multiplication
+slug: matrices-matmul
+track: beginner
+level: beginner
+order: 60
+minutes: 20
+module: The math, piece by piece
+summary: A matrix is a grid of numbers, and matrix multiplication is many dot products computed at once. This lesson multiplies matrices entry by entry, checks shapes before multiplying, and shows that a whole layer of a neural network is one matrix multiplication plus a bias.
+hatnote: For the single dot product that every entry is made of, see "Vectors and the dot product".
+prerequisites: [vectors-dot-product]
+tools: [Python 3, NumPy]
+outcomes:
+  - Multiply a matrix by a vector and by a matrix, entry by entry
+  - Check shape compatibility (m×n)·(n×p) → (m×p) before multiplying
+  - See a layer of a network as one matrix multiplication plus a bias
+build: A two-neuron layer and a batched forward pass with NumPy's @ operator
+reviewed: 2026-11-25
+seeAlso: [vectors-dot-product, numpy-arrays, artificial-neuron]
+sources:
+  - id: goodfellow2016-linalg
+    title: "Deep Learning, chapter 2: Linear Algebra"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/linear_algebra.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-linalg
+    title: "Dive into Deep Learning, 2.3 Linear Algebra"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_preliminaries/linear-algebra.html
+    accessed: 2026-11-25
+    type: book
+  - id: numpy-matmul
+    title: numpy.matmul
+    publisher: NumPy documentation
+    url: https://numpy.org/doc/stable/reference/generated/numpy.matmul.html
+    accessed: 2026-11-25
+    type: docs
+  - id: 3b1b-linalg
+    title: Essence of linear algebra
+    author: Grant Sanderson
+    publisher: 3Blue1Brown
+    url: https://www.3blue1brown.com/topics/linear-algebra
+    accessed: 2026-11-25
+    type: video
+  - id: wiki-matmul
+    title: Matrix multiplication
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Matrix_multiplication
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: cs231n-nn1
+    title: "Neural Networks Part 1: Setting up the Architecture"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/neural-networks-1/
+    accessed: 2026-11-25
+    type: course
+furtherReading:
+  - title: "3Blue1Brown: Matrix multiplication as composition"
+    url: https://www.3blue1brown.com/lessons/matrix-multiplication
+exercises:
+  - id: matmul-one-entry
+    type: numeric
+    difficulty: easy
+    title: One entry of a product
+    prompt: "Let $A = \\begin{bmatrix}1 & 2\\\\3 & 4\\end{bmatrix}$ and $B = \\begin{bmatrix}2 & 0\\\\1 & 3\\end{bmatrix}$. What is the entry in row 2, column 1 of $AB$?"
+    answer: 10
+    tolerance: 0
+    hint: Take row 2 of A and column 1 of B, then compute their dot product.
+    explanation: "Row 2 of $A$ is $[3, 4]$ and column 1 of $B$ is $[2, 1]$. Their dot product is $3 \\cdot 2 + 4 \\cdot 1 = 6 + 4 = 10$. The full product is $AB = \\begin{bmatrix}4 & 6\\\\10 & 12\\end{bmatrix}$."
+  - id: matmul-shape-rule
+    type: mcq
+    difficulty: easy
+    title: Predict the shape
+    prompt: "A matrix of shape $(4 \\times 3)$ is multiplied by a matrix of shape $(3 \\times 5)$. What is the shape of the result?"
+    options: ["(3 × 3)", "(4 × 5)", "(5 × 4)", "The product is not defined"]
+    answer: 1
+    explanation: "The inner sizes (3 and 3) match, so the product exists. They cancel, and the outer sizes give the result: $(4 \\times 3)(3 \\times 5) \\to (4 \\times 5)$. Each of the $4 \\times 5 = 20$ entries is a dot product of length 3."
+  - id: matmul-fix-shapes
+    type: short
+    difficulty: medium
+    title: Repair a shape error
+    prompt: "NumPy refuses to compute `X @ W` where `X` has shape `(2, 3)` and `W` also has shape `(2, 3)`. Explain why, and give one change that makes a product possible, with the resulting shape."
+    answer: "The inner sizes 3 and 2 differ. Use X @ W.T: (2, 3) @ (3, 2) gives shape (2, 2)."
+    explanation: "Matrix multiplication needs the number of columns of the left matrix to equal the number of rows of the right one. Here that is 3 versus 2. Transposing `W` turns it into shape `(3, 2)`, so `X @ W.T` works and gives `(2, 2)`. This is exactly the `X @ W.T` pattern used for batches of inputs."
+---
+
+A **matrix** is a rectangular grid of numbers arranged in rows and columns. **Matrix multiplication** combines two matrices by taking the dot product of every row of the first with every column of the second.<Cite id="goodfellow2016-linalg" /> Neural-network libraries use it to compute all the neurons of a layer, for a whole batch of inputs, in a single operation, which is why graphics cards that multiply matrices quickly made deep learning practical.<Cite id="d2l-linalg" />
+
+## What a matrix is
+
+A <Term slug="matrix" /> with $m$ rows and $n$ columns is called an "$m \times n$ matrix" (say "m by n"). In NumPy it is a 2-D array with shape `(m, n)`.<Cite id="d2l-linalg" /> The entry in row $i$ and column $j$ is written $A_{ij}$; mathematicians count from 1, while NumPy counts from 0, so $A_{12}$ is `A[0, 1]` in code.
+
+Matrices appear everywhere in this course:
+
+- a table of data, one example per row and one feature per column;
+- a greyscale image, one pixel brightness per cell;
+- the <Term slug="weight">weights</Term> of a layer, one row per neuron.
+
+The last use is the one that matters most. Each row of a weight matrix is the weight <Term slug="vector" /> of one <Term slug="artificial-neuron">neuron</Term>.<Cite id="cs231n-nn1" />
+
+## Matrix times vector: several dot products at once
+
+Multiplying a matrix by a vector gives a new vector. Each entry of the result is the <Term slug="dot-product" /> of one row of the matrix with the vector.<Cite id="wiki-matmul" />
+
+<Analogy breaks="Cashiers work independently and can serve different customers; every row of the matrix is applied to the same single vector.">
+Picture several cashiers, each with their own price list (one row of the matrix), all ringing up the same basket of goods (the vector). Each cashier produces one total, and the list of totals is the result vector.
+</Analogy>
+
+Here is a layer of two neurons, each reading the same three inputs.
+
+<MathSteps
+  title="A 2×3 matrix times a 3-entry vector"
+  legend={[
+    { symbol: 'W', meaning: 'weight matrix, one row per neuron' },
+    { symbol: 'x', meaning: 'input vector [3, 4, 5]' },
+    { symbol: 'b', meaning: 'bias vector, one per neuron' },
+  ]}
+>
+  <Step tex="W = \begin{bmatrix}1 & 0 & 2\\0 & 1 & -1\end{bmatrix}, \quad x = \begin{bmatrix}3\\4\\5\end{bmatrix}" words="W has 2 rows and 3 columns; x has 3 entries. The 3 columns of W match the 3 entries of x, so the product exists." />
+  <Step tex="\text{row 1} \cdot x = 1 \cdot 3 + 0 \cdot 4 + 2 \cdot 5 = \hl{13}" words="The first neuron: the dot product of row 1 with x." />
+  <Step tex="\text{row 2} \cdot x = 0 \cdot 3 + 1 \cdot 4 + (-1) \cdot 5 = \hl{-1}" words="The second neuron: the dot product of row 2 with x." />
+  <Step tex="Wx = \begin{bmatrix}13\\-1\end{bmatrix}, \quad Wx + \hl{b} = \begin{bmatrix}13\\-1\end{bmatrix} + \begin{bmatrix}1\\0\end{bmatrix} = \begin{bmatrix}14\\-1\end{bmatrix}" words="Stack the two results and add one bias per neuron. This vector holds the weighted sums z of the whole layer." />
+  <Step tex="(Wx)_i = \hl{\sum_{j=1}^{n} W_{ij}\, x_j}" words="The general rule: entry i of the result is row i of W dotted with x." />
+</MathSteps>
+
+The activation function is then applied to each entry, exactly as in the [artificial neuron](/course/beginner/artificial-neuron/) lesson. So one layer is "matrix times input, plus bias, then activation".<Cite id="cs231n-nn1" />
+
+## The shape rule
+
+Before multiplying, check the shapes. A product $AB$ exists only when the number of columns of $A$ equals the number of rows of $B$. The two inner sizes cancel and the two outer sizes give the result.<Cite id="goodfellow2016-linalg" />
+
+<MathSteps
+  title="Checking shapes before multiplying"
+  legend={[
+    { symbol: 'm, n, p', meaning: 'numbers of rows and columns' },
+  ]}
+>
+  <Step tex="(2 \times \hl{3}) \cdot (\hl{3} \times 1)" words="The weight matrix is 2×3 and the input, written as a column, is 3×1. The inner sizes are both 3: they match." />
+  <Step tex="(\hl{2} \times 3) \cdot (3 \times \hl{1}) \to (2 \times 1)" words="The outer sizes give the result: 2 rows, 1 column, one number per neuron." />
+  <Step tex="(2 \times \hl{3}) \cdot (\hl{2} \times 3) \to \text{error}" words="Here the inner sizes are 3 and 2. They differ, so the product is not defined, and NumPy raises an error." />
+  <Step tex="(m \times \hl{n}) \cdot (\hl{n} \times p) \to (m \times p)" words="The general rule. Each of the m × p result entries is a dot product of length n." />
+</MathSteps>
+
+<Exercise id="matmul-shape-rule" />
+
+## Matrix times matrix
+
+A matrix-matrix product repeats the matrix-vector product for every column of the second matrix. Entry $C_{ij}$ of $C = AB$ is row $i$ of $A$ dotted with column $j$ of $B$.<Cite id="wiki-matmul" />
+
+<MathSteps
+  title="Multiplying two 2×2 matrices"
+  legend={[
+    { symbol: 'A, B', meaning: 'the two matrices' },
+    { symbol: 'C_{ij}', meaning: 'entry in row i, column j of C = AB' },
+  ]}
+>
+  <Step tex="A = \begin{bmatrix}1 & 2\\3 & 4\end{bmatrix}, \quad B = \begin{bmatrix}5 & 6\\7 & 8\end{bmatrix}" words="Shapes (2×2)·(2×2): the inner sizes match and the result is 2×2." />
+  <Step tex="C_{11} = 1 \cdot 5 + 2 \cdot 7 = \hl{19}" words="Row 1 of A with column 1 of B." />
+  <Step tex="C_{12} = 1 \cdot 6 + 2 \cdot 8 = \hl{22}" words="Row 1 of A with column 2 of B." />
+  <Step tex="C_{21} = 3 \cdot 5 + 4 \cdot 7 = \hl{43}, \quad C_{22} = 3 \cdot 6 + 4 \cdot 8 = \hl{50}" words="Row 2 of A with each column of B." />
+  <Step tex="C_{ij} = \hl{\sum_{k=1}^{n} A_{ik} B_{kj}}" words="The general formula: walk along row i of A and down column j of B, multiplying and adding." example="C = [[19, 22], [43, 50]]" />
+</MathSteps>
+
+<Exercise id="matmul-one-entry" />
+
+### Order matters
+
+For ordinary numbers $3 \times 5 = 5 \times 3$, but for matrices the order usually changes the answer. With the matrices above, $BA = \begin{bmatrix}23 & 34\\31 & 46\end{bmatrix}$, which differs from $AB$.<Cite id="goodfellow2016-linalg" /> Often only one order is even defined: a $(2 \times 3)$ matrix can multiply a $(3 \times 4)$ one, but not the other way round. Grant Sanderson's videos explain why: a matrix can be seen as a transformation of space, and doing two transformations in a different order gives a different result.<Cite id="3b1b-linalg" />
+
+## The transpose
+
+The <Term slug="transpose" /> of a matrix, written $A^\top$, flips it over its diagonal: row 1 becomes column 1, row 2 becomes column 2, and a $(2 \times 3)$ matrix becomes $(3 \times 2)$.<Cite id="d2l-linalg" /> In NumPy it is `A.T`. The transpose is the standard fix for a shape mismatch, and it reappears in backpropagation, where gradients flow backwards through $W^\top$.
+
+## Matrix multiplication in NumPy
+
+NumPy computes matrix products with the `@` operator or `np.matmul`.<Cite id="numpy-matmul" />
+
+```python
+import numpy as np
+
+A = np.array([[1, 2], [3, 4]])
+B = np.array([[5, 6], [7, 8]])
+print(A @ B)     # [[19 22]
+                 #  [43 50]]
+print(B @ A)     # [[23 34]
+                 #  [31 46]]   order matters
+print(A * B)     # [[ 5 12]
+                 #  [21 32]]   entry by entry: NOT matrix multiplication
+```
+
+<Callout type="pitfall">
+In NumPy and PyTorch, `*` multiplies matching positions (the element-wise product). Matrix multiplication is `@`. Mixing them up gives results of the right shape but the wrong values, so the bug is easy to miss.
+</Callout>
+
+## A layer for a whole batch
+
+Training never feeds one input at a time. Instead, a batch of inputs is stacked as the rows of a matrix $X$, and one product computes every neuron for every input.<Cite id="cs231n-nn1" /> With weights stored one row per neuron, the layer is `X @ W.T + b`: the transpose lines up the shapes, and the bias vector is added to every row by <Term slug="broadcasting" />.
+
+```python
+W = np.array([[1, 0, 2],
+              [0, 1, -1]])     # 2 neurons x 3 inputs, shape (2, 3)
+b = np.array([1, 0])           # one bias per neuron
+x = np.array([3, 4, 5])        # one input, shape (3,)
+print(W @ x + b)               # [14 -1]  the worked example
+
+X = np.array([[3, 4, 5],
+              [1, 1, 1]])      # a batch of 2 inputs, shape (2, 3)
+print(X @ W.T + b)             # [[14 -1]
+                               #  [ 4  0]]  one row per input
+```
+
+The first row of the batch result repeats the worked example; the second row is the same layer applied to the input $[1, 1, 1]$. Shapes: $(2 \times 3) \cdot (3 \times 2) \to (2 \times 2)$, one row per input and one column per neuron.<Cite id="numpy-matmul" />
+
+A real layer works the same way at a larger size. A layer reading 784 pixels with 128 neurons has a $128 \times 784$ weight matrix; for a batch of 64 images, `X @ W.T` multiplies $(64 \times 784)$ by $(784 \times 128)$ and returns $(64 \times 128)$, which is $64 \times 128 = 8192$ dot products in one call.<Cite id="d2l-linalg" />
+
+<Exercise id="matmul-fix-shapes" />
+
+## Summary
+
+- A matrix is a grid of numbers with shape $(m \times n)$; each row of a weight matrix belongs to one neuron.
+- Matrix times vector is one dot product per row; matrix times matrix is one dot product per row-column pair.
+- Shape rule: $(m \times n)(n \times p) \to (m \times p)$. Check the inner sizes first.
+- Order matters ($AB \neq BA$ in general); the transpose $A^\top$ swaps rows and columns.
+- A whole layer for a whole batch is `X @ W.T + b` in NumPy; `*` is element-wise, `@` is matrix multiplication.

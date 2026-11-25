@@ -3,12 +3,12 @@ title: Gradient descent
 slug: gradient-descent
 track: beginner
 level: beginner
-order: 20
+order: 130
 minutes: 14
 module: Neural networks from scratch
 summary: Gradient descent trains a model by repeatedly stepping its parameters against the slope of the loss. This lesson runs three steps by hand, shows why the learning rate matters, and connects it to how neural networks learn.
 hatnote: This lesson trains a single number. For what the numbers inside a network are, see "The artificial neuron".
-prerequisites: [artificial-neuron]
+prerequisites: [artificial-neuron, loss-functions, chain-rule-gradients]
 tools: [Python 3]
 outcomes:
   - Explain what a gradient tells you
@@ -16,7 +16,7 @@ outcomes:
   - Recognise a learning rate that is too small or too large
 build: A five-step gradient descent in plain Python
 reviewed: 2026-11-24
-seeAlso: [artificial-neuron]
+seeAlso: [artificial-neuron, derivatives, first-model-numpy]
 sources:
   - id: wiki-gd
     title: Gradient descent

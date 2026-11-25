@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">Three data points and two candidate lines</title>
+  <desc id="d">Points at x = 1, 2, 3 with y = 2, 4, 6. A dashed line y = x misses every point; a solid line y = 2x passes through all three.</desc>
+  <rect width="640" height="400" fill="#FBFAF7"/>
+  <!-- plot area: x 0..4 -> 80..560, y 0..8 -> 340..40 -->
+  <g stroke="#D9DBE6" stroke-width="1">
+    <line x1="80" y1="40" x2="80" y2="340"/><line x1="200" y1="40" x2="200" y2="340"/><line x1="320" y1="40" x2="320" y2="340"/><line x1="440" y1="40" x2="440" y2="340"/><line x1="560" y1="40" x2="560" y2="340"/>
+    <line x1="80" y1="340" x2="560" y2="340"/><line x1="80" y1="265" x2="560" y2="265"/><line x1="80" y1="190" x2="560" y2="190"/><line x1="80" y1="115" x2="560" y2="115"/><line x1="80" y1="40" x2="560" y2="40"/>
+  </g>
+  <g font-size="13" fill="#4A4F6A" text-anchor="middle">
+    <text x="80" y="360">0</text><text x="200" y="360">1</text><text x="320" y="360">2</text><text x="440" y="360">3</text><text x="560" y="360">4</text>
+    <text x="320" y="388">x (feature)</text>
+  </g>
+  <g font-size="13" fill="#4A4F6A" text-anchor="end">
+    <text x="70" y="344">0</text><text x="70" y="269">2</text><text x="70" y="194">4</text><text x="70" y="119">6</text><text x="70" y="44">8</text>
+  </g>
+  <text x="24" y="190" font-size="13" fill="#4A4F6A" transform="rotate(-90 24 190)" text-anchor="middle">y (label)</text>
+  <line x1="80" y1="340" x2="560" y2="190" stroke="#B4532A" stroke-width="2.5" stroke-dasharray="8 6"/>
+  <line x1="80" y1="340" x2="560" y2="40" stroke="#3340C9" stroke-width="3"/>
+  <g fill="#1B1E3C"><circle cx="200" cy="265" r="7"/><circle cx="320" cy="190" r="7"/><circle cx="440" cy="115" r="7"/></g>
+  <text x="560" y="250" font-size="15" fill="#B4532A" text-anchor="end">w = 1 (MSE 4.67)</text>
+  <text x="470" y="58" font-size="15" fill="#3340C9" text-anchor="end">w = 2 (MSE 0)</text>
+</svg>

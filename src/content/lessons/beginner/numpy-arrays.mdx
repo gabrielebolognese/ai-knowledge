@@ -1,0 +1,289 @@
+---
+title: NumPy arrays, shapes and broadcasting
+slug: numpy-arrays
+track: beginner
+level: beginner
+order: 40
+minutes: 25
+module: Python and NumPy for ML
+summary: NumPy stores numbers in arrays with a fixed shape and type and runs whole-array operations in fast compiled code. This lesson covers creating, indexing and reshaping arrays, predicting broadcast shapes step by step, and why vectorized code beats Python loops.
+hatnote: For the Python basics used here, see "The Python you need for machine learning". For what arrays of numbers mean geometrically, see "Vectors and the dot product".
+prerequisites: [python-for-ml]
+tools: [Python 3, NumPy]
+outcomes:
+  - Create arrays and read their shape and dtype
+  - Index, slice and reshape arrays without loops
+  - Predict the result shape of a broadcast operation step by step
+  - Explain why vectorized code is faster than a Python loop
+build: A handful of NumPy one-liners that replace loops, plus a loop-versus-vectorized timing test
+reviewed: 2026-11-25
+seeAlso: [python-for-ml, vectors-dot-product, matrices-matmul]
+sources:
+  - id: numpy-basics
+    title: "NumPy: the absolute basics for beginners"
+    publisher: NumPy documentation
+    url: https://numpy.org/doc/stable/user/absolute_beginners.html
+    accessed: 2026-11-25
+    type: docs
+  - id: numpy-broadcasting
+    title: "NumPy: Broadcasting"
+    publisher: NumPy documentation
+    url: https://numpy.org/doc/stable/user/basics.broadcasting.html
+    accessed: 2026-11-25
+    type: docs
+  - id: numpy-copies
+    title: "NumPy: Copies and views"
+    publisher: NumPy documentation
+    url: https://numpy.org/doc/stable/user/basics.copies.html
+    accessed: 2026-11-25
+    type: docs
+  - id: d2l-ndarray
+    title: "Dive into Deep Learning, 2.1 Data Manipulation"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_preliminaries/ndarray.html
+    accessed: 2026-11-25
+    type: book
+  - id: cs231n-python
+    title: "Python Numpy Tutorial (with Jupyter and Colab)"
+    author: Justin Johnson
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/python-numpy-tutorial/
+    accessed: 2026-11-25
+    type: course
+  - id: harris2020
+    title: Array programming with NumPy
+    author: Charles R. Harris, K. Jarrod Millman, Stéfan J. van der Walt, et al.
+    publisher: Nature 585, 357-362
+    year: 2020
+    url: https://doi.org/10.1038/s41586-020-2649-2
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "NumPy user guide: Indexing on ndarrays"
+    url: https://numpy.org/doc/stable/user/basics.indexing.html
+  - title: "NumPy quickstart"
+    url: https://numpy.org/doc/stable/user/quickstart.html
+exercises:
+  - id: nparr-shape-mcq
+    type: mcq
+    difficulty: easy
+    title: Read a shape
+    prompt: "A batch holds 32 greyscale images, each 28 pixels tall and 28 pixels wide. Which shape does the NumPy array have?"
+    options: ["(28, 28)", "(32, 28, 28)", "(32, 784, 28)", "(896, 28)"]
+    answer: 1
+    explanation: "Each image is a $28 \\times 28$ grid, and 32 of them are stacked along a new first axis, so the shape is `(32, 28, 28)`. Reshaping with `reshape(32, -1)` would give `(32, 784)`, because $28 \\times 28 = 784$."
+  - id: nparr-axis-sum
+    type: short
+    difficulty: easy
+    title: Sum along an axis
+    prompt: "For `x = np.array([[1, 2], [3, 4], [5, 6]])` (shape `(3, 2)`), write down `x.sum(axis=0)` and `x.sum(axis=1)` with their shapes."
+    answer: "x.sum(axis=0) is [9, 12] with shape (2,); x.sum(axis=1) is [3, 7, 11] with shape (3,)."
+    explanation: "`axis=0` collapses the rows, leaving one total per column: $1+3+5 = 9$ and $2+4+6 = 12$. `axis=1` collapses the columns, leaving one total per row: $1+2 = 3$, $3+4 = 7$, $5+6 = 11$. The axis you name is the one that disappears from the shape."
+  - id: nparr-broadcast-shape
+    type: short
+    difficulty: medium
+    title: Predict a broadcast
+    prompt: "Predict the shape of `a + b` when `a` has shape `(4, 1)` and `b` has shape `(3,)`. Then say whether shapes `(2, 3)` and `(2,)` can be added."
+    answer: "(4, 3). Shapes (2, 3) and (2,) cannot be added."
+    explanation: "Right-align the shapes: `(4, 1)` over `( , 3)`. Last axis: 1 and 3, so the 1 stretches to 3. First axis: 4 and nothing, so `b` is treated as having a 1 there, which stretches to 4. Result `(4, 3)`. For `(2, 3)` and `(2,)`, the last axes are 3 and 2: they differ and neither is 1, so NumPy raises a `ValueError`. Reshaping `b` to `(2, 1)` would make it work."
+  - id: nparr-view-reveal
+    type: reveal
+    difficulty: medium
+    title: The surprising slice
+    prompt: "You run `a = np.array([5, 6, 7])`, then `first_two = a[:2]` and `first_two[:] = 0`. What does `a` contain now, and how would you avoid the surprise?"
+    answer: "a is [0, 0, 7]. Use a[:2].copy() to get an independent array."
+    explanation: "A basic slice is a **view**: a new window onto the same memory, not a new copy. Writing through the view writes into `a`. Views make slicing fast and memory-free, but when you need to change data without touching the original, call `.copy()`."
+---
+
+**NumPy** is the standard Python library for working with grids of numbers. Its central object, the <Term slug="ndarray" />, stores many numbers of one type in a block of memory with a fixed **shape**, and runs operations on the whole block in fast compiled code.<Cite id="numpy-basics" /> Almost every machine-learning library, including <Term slug="pytorch">PyTorch</Term>, builds on the same ideas, so the habits from this lesson carry straight over.<Cite id="harris2020" />
+
+## Why arrays instead of lists
+
+A Python list can hold anything: numbers, strings, other lists. That flexibility costs speed, because Python checks the type of every item each time it touches it.<Cite id="cs231n-python" />
+
+A NumPy array makes two promises instead:
+
+- **One type for every element**, called the `dtype` (for example `float32`, a 32-bit decimal number).
+- **A fixed shape**: a tuple that says how many entries lie along each axis.
+
+Because of these promises, NumPy can hand a whole operation to pre-compiled C code in one go. This style of programming, where you write one operation for a whole array instead of a loop, is called <Term slug="vectorization" />.<Cite id="harris2020" />
+
+<Analogy breaks="A spreadsheet can mix text and numbers and grow a row at a time; an array holds one type and its size is fixed when it is created.">
+An array is like a spreadsheet with strict rules: every cell holds the same kind of number, and the shape is simply "how many rows, how many columns". A 3-D array is a stack of identical sheets.
+</Analogy>
+
+## Creating arrays and reading their shape
+
+`np.array` turns a nested list into an array. Three attributes describe it: `shape`, `dtype` and `ndim` (the number of axes).<Cite id="numpy-basics" />
+
+```python
+import numpy as np
+
+x = np.array([[1, 2, 3],
+              [4, 5, 6]], dtype=np.float32)
+print(x.shape)     # (2, 3): 2 rows, 3 columns
+print(x.dtype)     # float32
+print(x.ndim)      # 2
+```
+
+Shapes in this course follow a common pattern:
+
+| Data | Typical shape |
+|---|---|
+| One feature list (a <Term slug="vector" />) | `(3,)` |
+| A table, one example per row (a <Term slug="matrix" />) | `(100, 3)` |
+| One [MNIST](/course/project-digits-letters/mnist-dataset/) image | `(28, 28)` |
+| A batch of 32 images | `(32, 28, 28)` |
+
+Arrays with more than two axes are often called *tensors*.<Cite id="d2l-ndarray" /> Checking `x.shape` is the single most useful debugging habit in machine learning, because most errors are shape errors.
+
+<Exercise id="nparr-shape-mcq" />
+
+### The dtype matters
+
+NumPy picks a `dtype` from the values you give it: whole numbers become an integer type such as `int64`, and anything with a decimal point becomes `float64`.<Cite id="numpy-basics" /> Operations can change the type, and converting back can silently lose information.
+
+```python
+a = np.array([1, 2, 3])
+print(a.dtype)                     # int64 (int32 on Windows with NumPy 1.x)
+print(a / 2)                       # [0.5 1.  1.5]  division gives float64
+print(np.array([1.7, 2.2]).astype(np.int64))   # [1 2]  decimals are cut off
+print(np.zeros(3, dtype=np.float32).dtype)     # float32
+```
+
+Deep-learning code usually works in `float32`, which uses half the memory of `float64` and is what graphics cards are fastest at.<Cite id="d2l-ndarray" /> When a result looks oddly rounded, print the `dtype` next to the shape: an integer array where you expected decimals is a common cause.
+
+## Indexing, slicing and masks
+
+Indexing counts from 0. A comma separates the axes, and a colon `:` means "everything along this axis".<Cite id="numpy-basics" />
+
+```python
+print(x[0])          # [1. 2. 3.]  first row
+print(x[:, 1])       # [2. 5.]     second column
+print(x[1, 2])       # 6.0         row 1, column 2
+print(x[x > 2])      # [3. 4. 5. 6.]  boolean mask
+```
+
+The last line is a **boolean mask**: `x > 2` produces an array of `True`/`False` values of the same shape, and indexing with it keeps only the `True` positions.<Cite id="cs231n-python" />
+
+### The axis argument
+
+Functions such as `sum`, `mean` and `max` take an `axis` argument. The axis you name is the one that gets collapsed.<Cite id="d2l-ndarray" />
+
+```python
+print(x.sum(axis=0))   # [5. 7. 9.]   down each column
+print(x.sum(axis=1))   # [ 6. 15.]    across each row
+```
+
+With `axis=0` the two rows are added together, leaving one number per column. With `axis=1` each row is summed, leaving one number per row.
+
+<Exercise id="nparr-axis-sum" />
+
+## Reshaping
+
+`reshape` rearranges the same numbers into a new shape, as long as the total count stays equal. Writing `-1` for one axis tells NumPy to work that size out.<Cite id="numpy-basics" />
+
+```python
+a = np.arange(12)                  # 0, 1, ..., 11, shape (12,)
+grid = a.reshape(3, 4)             # 3 rows of 4
+print(grid.reshape(-1, 6).shape)   # (2, 6)
+
+images = np.zeros((5, 28, 28))
+rows = images.reshape(5, -1)       # flatten each image
+print(rows.shape)                  # (5, 784)
+```
+
+The last two lines are exactly how the digit project flattens images before feeding them to a simple network: $28 \times 28 = 784$ pixels per row.
+
+## Broadcasting, step by step
+
+<Term slug="broadcasting" /> is NumPy's rule for combining arrays of different shapes without copying data. It is why `x - x.mean(axis=0)` works even though the two shapes differ.<Cite id="numpy-broadcasting" />
+
+<MathSteps
+  title="Predicting the shape of a + b"
+  legend={[
+    { symbol: '(3, 1)', meaning: 'shape of a: 3 rows, 1 column' },
+    { symbol: '(1, 4)', meaning: 'shape of b: 1 row, 4 columns' },
+  ]}
+>
+  <Step tex="a = \begin{bmatrix}0\\10\\20\end{bmatrix},\quad b = \begin{bmatrix}0 & 1 & 2 & 3\end{bmatrix}" words="Start with a column of 3 numbers and a row of 4 numbers." />
+  <Step tex="\begin{matrix}(3, & \hl{1}) \\ (1, & \hl{4})\end{matrix} \;\Rightarrow\; \hl{4}" words="Write the shapes right-aligned and compare the last axis first. The sizes 1 and 4 are compatible because one of them is 1, so the result has size 4." />
+  <Step tex="\begin{matrix}(\hl{3}, & 1) \\ (\hl{1}, & 4)\end{matrix} \;\Rightarrow\; \hl{3}" words="Move one axis left. 3 and 1 are compatible too, so the result has size 3. The result shape is (3, 4)." />
+  <Step tex="a + b = \begin{bmatrix}0 & 1 & 2 & 3\\10 & 11 & 12 & 13\\20 & 21 & 22 & 23\end{bmatrix}" words="NumPy acts as if a were repeated across 4 columns and b down 3 rows, then adds entry by entry. No copies are actually made." />
+  <Step tex="\text{sizes } p, q \text{ are compatible} \iff p = q \;\text{ or }\; \hl{p = 1} \;\text{ or }\; \hl{q = 1}" words="The general rule, applied axis by axis from the right. A missing axis counts as size 1. If any pair breaks the rule, NumPy raises an error." example="(3,) and (4,): 3 ≠ 4 and neither is 1, so they cannot be added." />
+</MathSteps>
+
+<Analogy breaks="A real stamp makes physical copies; NumPy only pretends to repeat the values and never allocates the extra memory.">
+Broadcasting works like a rubber stamp. If one array has size 1 along an axis, NumPy stamps it again and again along that axis until it matches the other array.
+</Analogy>
+
+```python
+a = np.array([[0], [10], [20]])    # shape (3, 1)
+b = np.array([[0, 1, 2, 3]])       # shape (1, 4)
+print((a + b).shape)               # (3, 4)
+
+data = np.array([[2.0, 3.0, 1.0],
+                 [4.0, 1.0, 5.0]]) # shape (2, 3)
+print(data - data.mean(axis=0))    # (2, 3) minus (3,)
+# [[-1.  1. -2.]
+#  [ 1. -1.  2.]]
+```
+
+The second example centres every column on zero, a common step before training. Multiplying an array by a single number, as in `np.array([1, 2, 3]) * 10`, is the simplest case of broadcasting: the number is stretched to every position.<Cite id="numpy-broadcasting" />
+
+<Callout type="pitfall">
+Shapes `(3,)` and `(3, 1)` are not the same. The first is a flat list; the second is a column. Adding them broadcasts to a `(3, 3)` grid, which is rarely what you meant. Print the shapes when a result looks too big.
+</Callout>
+
+<Exercise id="nparr-broadcast-shape" />
+
+## Copies and views
+
+A basic slice such as `a[:2]` does not copy anything. It returns a **view**, a new window onto the same memory, so writing through it changes the original array.<Cite id="numpy-copies" />
+
+```python
+a = np.array([1, 2, 3, 4])
+view = a[:2]
+view[0] = 99
+print(a)             # [99  2  3  4]
+safe = a[:2].copy()  # an independent array
+```
+
+Views make slicing instant even on huge arrays. Use `.copy()` whenever you need to change data without affecting the source. Boolean masks, by contrast, always return a copy.<Cite id="numpy-copies" />
+
+## Why vectorized code is faster
+
+A Python loop processes one element at a time and does type checks on each step. A vectorized call such as `x.sum()` runs a tight loop in compiled C over memory that is laid out contiguously, so it avoids most of that overhead.<Cite id="harris2020" />
+
+<Analogy breaks="The scanner is a single step in reality; NumPy still loops over every element, only in fast compiled code rather than in Python.">
+A Python loop is a cashier scanning a trolley item by item. A vectorized operation is a scanner that reads the whole trolley at once.
+</Analogy>
+
+```python
+import time
+import numpy as np
+
+x = np.random.default_rng(0).random(1_000_000)
+
+t0 = time.perf_counter()
+total = 0.0
+for v in x:          # one element at a time, in Python
+    total += v
+t1 = time.perf_counter()
+fast = x.sum()       # the whole array, in compiled code
+t2 = time.perf_counter()
+print(f"loop: {t1 - t0:.3f} s   vectorized: {t2 - t1:.4f} s")
+```
+
+On a typical laptop this prints something like `loop: 0.2 s   vectorized: 0.002 s`, roughly a hundredfold difference. Exact times vary by machine, but the gap is always large. The same reasoning explains why deep-learning frameworks express a whole layer as one matrix operation, as the lesson on [matrix multiplication](/course/beginner/matrices-matmul/) shows.<Cite id="d2l-ndarray" />
+
+<Exercise id="nparr-view-reveal" />
+
+## Summary
+
+- An `ndarray` holds numbers of one `dtype` in a fixed `shape`; check `x.shape` constantly.
+- Index with `x[row, col]`, use `:` for "all", and use boolean masks to filter.
+- `axis=k` collapses axis `k`; `reshape(-1, n)` lets NumPy compute one size.
+- Broadcasting compares shapes from the right: sizes must match or one must be 1.
+- Slices are views; vectorized operations are far faster than Python loops.

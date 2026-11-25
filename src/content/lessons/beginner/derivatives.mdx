@@ -1,0 +1,241 @@
+---
+title: Slopes and derivatives
+slug: derivatives
+track: beginner
+level: beginner
+order: 70
+minutes: 20
+module: The math, piece by piece
+summary: A derivative measures how fast a function's output changes when its input is nudged, which is the slope of its graph at one point. This lesson builds the idea from rise over run, estimates slopes with a small step in Python, and introduces the few rules that deep learning needs.
+hatnote: For functions with many inputs and functions inside functions, see "The chain rule, partial derivatives and gradients".
+prerequisites: [data-features-labels]
+tools: [Python 3]
+outcomes:
+  - Explain a derivative as the slope of a function at a point
+  - Estimate a derivative numerically with a small step h
+  - Apply the power, sum and constant rules to simple functions
+build: A numerical slope estimator in plain Python
+reviewed: 2026-11-25
+seeAlso: [chain-rule-gradients, gradient-descent, loss-functions]
+sources:
+  - id: d2l-calculus
+    title: "Dive into Deep Learning, 2.4 Calculus"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_preliminaries/calculus.html
+    accessed: 2026-11-25
+    type: book
+  - id: goodfellow2016-numerical
+    title: "Deep Learning, chapter 4: Numerical Computation"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/numerical.html
+    accessed: 2026-11-25
+    type: book
+  - id: 3b1b-calculus
+    title: Essence of calculus
+    author: Grant Sanderson
+    publisher: 3Blue1Brown
+    url: https://www.3blue1brown.com/topics/calculus
+    accessed: 2026-11-25
+    type: video
+  - id: khan-calc1
+    title: Calculus 1
+    publisher: Khan Academy
+    url: https://www.khanacademy.org/math/calculus-1
+    accessed: 2026-11-25
+    type: course
+  - id: wiki-derivative
+    title: Derivative
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Derivative
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: wiki-slope
+    title: Slope
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Slope
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: cs231n-optim1
+    title: "Optimization: Stochastic Gradient Descent"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/optimization-1/
+    accessed: 2026-11-25
+    type: course
+furtherReading:
+  - title: "3Blue1Brown: The paradox of the derivative"
+    url: https://www.3blue1brown.com/lessons/derivatives
+  - title: "Khan Academy: Derivative rules"
+    url: https://www.khanacademy.org/math/calculus-1/cs1-derivatives-definition-and-basic-rules
+exercises:
+  - id: deriv-power-rule
+    type: numeric
+    difficulty: easy
+    title: Power rule at a point
+    prompt: "Use the power rule to find the slope of $f(x) = x^3$ at $x = 2$."
+    answer: 12
+    tolerance: 0
+    hint: "The power rule turns $x^3$ into $3x^2$. Then put in $x = 2$."
+    explanation: "$f'(x) = 3x^2$, so $f'(2) = 3 \\cdot 2^2 = 3 \\cdot 4 = 12$. Near $x = 2$, the output grows about 12 times as fast as the input."
+  - id: deriv-rules-combined
+    type: numeric
+    difficulty: easy
+    title: Sum and constant rules
+    prompt: "What is the slope of $f(x) = 4x^2 - 3x + 7$ at $x = 1$?"
+    answer: 5
+    tolerance: 0
+    hint: Take each term on its own. The constant 7 does not change, so its slope is 0.
+    explanation: "Term by term: $4x^2 \\to 8x$, $-3x \\to -3$, $7 \\to 0$. So $f'(x) = 8x - 3$ and $f'(1) = 8 - 3 = 5$."
+  - id: deriv-finite-difference
+    type: numeric
+    difficulty: medium
+    title: Estimate a slope with a small step
+    prompt: "Estimate the slope of $f(x) = x^2$ at $x = 5$ using $\\frac{f(x+h) - f(x)}{h}$ with $h = 0.1$."
+    answer: 10.1
+    tolerance: 0.001
+    hint: "$f(5.1) = 5.1 \\cdot 5.1 = 26.01$."
+    explanation: "$(26.01 - 25) / 0.1 = 1.01 / 0.1 = 10.1$. The exact slope is $2 \\cdot 5 = 10$; the estimate is off by exactly $h = 0.1$, and a smaller $h$ would shrink that error."
+  - id: deriv-loss-sign
+    type: mcq
+    difficulty: medium
+    title: Which way lowers the loss?
+    prompt: "A model has one weight $w$. At the current value, the slope of the loss is $L'(w) = +4$. Which small change to $w$ lowers the loss?"
+    options:
+      - Increase w
+      - Decrease w
+      - Leave w alone, the loss is already at its minimum
+      - The slope alone cannot tell you
+    answer: 1
+    explanation: "A positive slope means the loss goes **up** as $w$ goes up, so a small decrease of $w$ brings the loss down. A minimum would have slope 0. This sign reading is exactly what gradient descent uses at every step."
+---
+
+The **derivative** of a function measures how quickly its output changes when its input is nudged a tiny amount; on a graph it is the slope of the curve at one point.<Cite id="wiki-derivative" /> Deep learning depends on derivatives because training a network means asking, for every <Term slug="weight" />, "if I nudge this number, does the error go up or down, and how fast?"<Cite id="goodfellow2016-numerical" /> This lesson builds the idea from school-level slopes and needs no calculus background.
+
+## Slope as rise over run
+
+For a straight line, the **slope** is how far the line goes up (the *rise*) for each step to the right (the *run*).<Cite id="wiki-slope" /> Take the line $y = 2x + 1$:
+
+- at $x = 1$ it is at $y = 3$;
+- at $x = 3$ it is at $y = 7$;
+- rise $= 7 - 3 = 4$, run $= 3 - 1 = 2$, so the slope is $4 / 2 = 2$.
+
+Any two points on this line give the same answer, 2, because a straight line is equally steep everywhere. A positive slope means "going up", a negative slope means "going down" and a slope of 0 means flat.<Cite id="khan-calc1" />
+
+## Curves change steepness
+
+A curve such as $y = x^2$ is gentle near $x = 0$ and steep further out, so "the slope" depends on where you stand.<Cite id="d2l-calculus" /> The trick is to measure rise over run between two points that are very close together. As the second point slides towards the first, the ratio settles on one number: the derivative at that point, written $f'(x)$ ("f prime of x").<Cite id="wiki-derivative" />
+
+<Analogy breaks="A car's speed changes smoothly over time; the functions in a network can have sharp corners (like ReLU at 0) where the slope jumps.">
+A derivative is like a car's speedometer. The trip so far is the function, and the speedometer shows how fast that distance is changing right now, not the average over the whole trip.
+</Analogy>
+
+The idea goes back to Isaac Newton and Gottfried Wilhelm Leibniz, who developed calculus independently in the late 17th century.<Cite id="wiki-derivative" /> The 3Blue1Brown series [Essence of calculus](https://www.3blue1brown.com/topics/calculus) animates the same "zoom in until the curve looks straight" picture.<Cite id="3b1b-calculus" />
+
+## The slope of x² at x = 3, piece by piece
+
+Shrink the gap step by step and watch the ratio. The small gap is called $h$.
+
+<MathSteps
+  title="Zooming in on the slope of x² at x = 3"
+  legend={[
+    { symbol: 'f(x)', meaning: 'the function, here x squared' },
+    { symbol: 'h', meaning: 'a small step to the right' },
+    { symbol: "f'(x)", meaning: 'the derivative (slope) at x' },
+  ]}
+>
+  <Step tex="\frac{f(4) - f(3)}{1} = \frac{16 - 9}{1} = \hl{7}" words="A big step, h = 1. Rise over run between x = 3 and x = 4 gives 7." />
+  <Step tex="\frac{f(3.1) - f(3)}{0.1} = \frac{9.61 - 9}{0.1} = \hl{6.1}" words="A smaller step, h = 0.1. The estimate moves closer to some number." />
+  <Step tex="\frac{f(3.001) - f(3)}{0.001} = \frac{9.006001 - 9}{0.001} = \hl{6.001}" words="A tiny step, h = 0.001. The ratio is now very close to 6." />
+  <Step tex="f'(x) = \lim_{\hl{h \to 0}} \frac{f(x+h) - f(x)}{h}" words="The general definition. 'lim, h to 0' means: the value the ratio settles on as h gets as small as you like." example="For x² at x = 3 the ratio settles on 6." />
+  <Step tex="f(x) = x^2 \;\Rightarrow\; f'(x) = \hl{2x}, \quad f'(3) = 6" words="Doing this with algebra for every x gives the rule 2x. At x = 3 it confirms the 6 from the numbers." />
+</MathSteps>
+
+The ratio with a small but non-zero $h$ is called a <Term slug="finite-difference" />. It only *estimates* the derivative, but it is so easy to compute that programmers use it to check their exact formulas, a practice known as gradient checking.<Cite id="cs231n-optim1" />
+
+## Estimating a slope in Python
+
+The finite-difference recipe fits in a few lines of plain Python:
+
+```python
+def f(x):
+    return x ** 2
+
+def slope(f, x, h):
+    return (f(x + h) - f(x)) / h
+
+for h in [1, 0.1, 0.01, 0.001]:
+    print(f"h = {h:<6} slope ≈ {slope(f, 3, h):.4f}")
+```
+
+It prints `7.0000`, `6.1000`, `6.0100` and `6.0010`, the same numbers as the steps above. The error shrinks along with $h$.<Cite id="d2l-calculus" />
+
+<Callout type="pitfall">
+"Smaller h is always better." Not on a computer. Numbers are stored with limited precision, so an extremely small $h$ (such as $10^{-15}$) makes the subtraction lose almost all its digits. Values around $10^{-5}$ are a common compromise.<Cite id="goodfellow2016-numerical" />
+</Callout>
+
+## A few rules instead of limits
+
+Working out limits every time would be slow, so mathematicians collected rules that give the derivative directly.<Cite id="khan-calc1" /> These cover almost everything in this course:
+
+| Rule | Function | Derivative | Example |
+|---|---|---|---|
+| Constant | $c$ | $0$ | $7 \to 0$ |
+| Power | $x^n$ | $n x^{n-1}$ | $x^3 \to 3x^2$ |
+| Constant factor | $c \cdot f(x)$ | $c \cdot f'(x)$ | $5x^2 \to 10x$ |
+| Sum | $f(x) + g(x)$ | $f'(x) + g'(x)$ | $x^2 + x \to 2x + 1$ |
+| <Term slug="exponential-function">Exponential</Term> | $e^x$ | $e^x$ | its own slope |
+| <Term slug="natural-logarithm">Natural log</Term> | $\ln x$ | $1/x$ | at $x = 2$: $0.5$ |
+
+The number $e \approx 2.718$ is a mathematical constant like $\pi$. The function $e^x$ has the unusual property of being its own derivative, which is one reason it appears in the <Term slug="softmax" /> and <Term slug="sigmoid" /> functions later in the track.<Cite id="d2l-calculus" />
+
+<MathSteps
+  title="Using the rules on a polynomial"
+  legend={[
+    { symbol: 'f(x)', meaning: '3x² + 2x + 5' },
+    { symbol: "f'(x)", meaning: 'its derivative' },
+  ]}
+>
+  <Step tex="3x^2 \to 3 \cdot \hl{2x} = 6x" words="Power rule on x², then keep the constant factor 3." />
+  <Step tex="2x \to \hl{2}" words="x is x to the power 1, so its slope is 1, times the factor 2." />
+  <Step tex="5 \to \hl{0}" words="A constant never changes, so its slope is 0." />
+  <Step tex="f'(x) = 6x + 2, \quad f'(1) = \hl{8}" words="The sum rule adds the pieces. At x = 1 the curve rises 8 units per unit step." />
+</MathSteps>
+
+## Why a loss curve's slope matters
+
+In machine learning the function we care about is the <Term slug="loss-function" />: a number that measures how wrong a model is, which depends on the model's parameters.<Cite id="goodfellow2016-numerical" /> Take a model with one weight $w$ and the loss $L(w) = (w - 3)^2$, which is smallest at $w = 3$.
+
+<MathSteps
+  title="Reading the slope of a loss"
+  legend={[
+    { symbol: 'w', meaning: 'the weight' },
+    { symbol: 'L(w)', meaning: 'the loss for that weight' },
+  ]}
+>
+  <Step tex="L(w) = (w-3)^2 = \hl{w^2 - 6w + 9}" words="Multiply out the bracket so the rules apply term by term." />
+  <Step tex="L'(w) = \hl{2w - 6}" words="Power rule, constant factor and constant rule." />
+  <Step tex="L'(1) = 2 - 6 = \hl{-4}" words="At w = 1 the slope is negative: making w a little bigger makes the loss smaller." example="L(1) = 4, and L(1.1) = 3.61, which is lower." />
+  <Step tex="L'(3) = \hl{0}" words="At the best weight the curve is flat. Slope 0 is how we recognise the bottom." />
+</MathSteps>
+
+The sign tells you which way to move and the size tells you how steep the ground is. <Term slug="gradient-descent">Gradient descent</Term> turns this into a rule: move the weight a small step against the slope, and repeat.<Cite id="cs231n-optim1" />
+
+<Exercise id="deriv-loss-sign" />
+
+## Where slopes need care
+
+Two situations come up often in deep learning, and both are about the slope rather than the function's value.<Cite id="goodfellow2016-numerical" />
+
+- **Corners.** The <Term slug="relu">ReLU</Term> activation, $\max(0, x)$, has slope 0 to the left of 0 and slope 1 to the right. Exactly at 0 there is a sharp corner and no single slope. Libraries simply pick 0 (or 1) there, and training works fine in practice because inputs land exactly on 0 very rarely.<Cite id="d2l-calculus" />
+- **Flat stretches.** Where a function is almost flat, its slope is almost 0, so the slope gives training very little information about which way to go. The <Term slug="sigmoid" /> curve flattens out for large positive or negative inputs, which is one reason later lessons prefer ReLU in hidden layers.<Cite id="goodfellow2016-numerical" />
+
+Neither case changes the basic idea: the derivative is still "rise over run for a tiny run", wherever it exists.
+
+## Summary
+
+- A derivative $f'(x)$ is the slope of $f$ at one point: how much the output changes per tiny nudge of the input.
+- It can be estimated with a finite difference $\frac{f(x+h) - f(x)}{h}$ for a small $h$.
+- The constant, power, constant-factor and sum rules give exact derivatives quickly; $e^x$ is its own derivative and $\ln x$ has derivative $1/x$.
+- The slope of a loss tells training which way to move a weight: positive slope, decrease it; negative slope, increase it; zero, stop.

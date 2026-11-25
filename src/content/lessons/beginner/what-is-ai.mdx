@@ -1,0 +1,253 @@
+---
+title: What AI, machine learning and deep learning are
+slug: what-is-ai
+track: beginner
+level: beginner
+order: 10
+minutes: 15
+module: What AI is
+summary: AI is the broad field, machine learning is the part that learns from data, and deep learning is the part of machine learning that uses many-layered neural networks. This lesson separates the three, gives a timeline of milestones and names the three ways machines learn.
+hatnote: For what "learning from data" means in numbers, see "Data, features and labels".
+prerequisites: []
+outcomes:
+  - Tell AI, machine learning and deep learning apart with one example each
+  - Place the key milestones (1943 neuron, 1958 perceptron, 1986 backprop, 2012 AlexNet, 2017 Transformer) on a timeline
+  - "Name the three learning settings: supervised, unsupervised, reinforcement"
+  - Say what neural networks do ("learn patterns from data") without claiming they think
+reviewed: 2026-11-25
+seeAlso: [data-features-labels, artificial-neuron]
+sources:
+  - id: goodfellow2016-intro
+    title: "Deep Learning, chapter 1: Introduction"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/intro.html
+    accessed: 2026-11-25
+    type: book
+  - id: goodfellow2016-ml
+    title: "Deep Learning, chapter 5: Machine Learning Basics"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/ml.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-intro
+    title: "Dive into Deep Learning: 1. Introduction"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_introduction/index.html
+    accessed: 2026-11-25
+    type: book
+  - id: wiki-ai-history
+    title: History of artificial intelligence
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/History_of_artificial_intelligence
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: wiki-dartmouth
+    title: Dartmouth workshop
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Dartmouth_workshop
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: turing1950
+    title: Computing Machinery and Intelligence
+    author: Alan Turing
+    publisher: Mind 59(236)
+    year: 1950
+    url: https://doi.org/10.1093/mind/LIX.236.433
+    accessed: 2026-11-25
+    type: paper
+  - id: mcculloch1943
+    title: A logical calculus of the ideas immanent in nervous activity
+    author: Warren McCulloch, Walter Pitts
+    publisher: Bulletin of Mathematical Biophysics 5
+    year: 1943
+    url: https://doi.org/10.1007/BF02478259
+    accessed: 2026-11-25
+    type: paper
+  - id: rosenblatt1958
+    title: "The perceptron: a probabilistic model for information storage and organization in the brain"
+    author: Frank Rosenblatt
+    publisher: Psychological Review 65(6)
+    year: 1958
+    url: https://doi.org/10.1037/h0042519
+    accessed: 2026-11-25
+    type: paper
+  - id: samuel1959
+    title: Some Studies in Machine Learning Using the Game of Checkers
+    author: Arthur Samuel
+    publisher: IBM Journal of Research and Development 3(3)
+    year: 1959
+    url: https://doi.org/10.1147/rd.33.0210
+    accessed: 2026-11-25
+    type: paper
+  - id: wiki-ai-winter
+    title: AI winter
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/AI_winter
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: rumelhart1986
+    title: Learning representations by back-propagating errors
+    author: David Rumelhart, Geoffrey Hinton, Ronald Williams
+    publisher: Nature 323
+    year: 1986
+    url: https://doi.org/10.1038/323533a0
+    accessed: 2026-11-25
+    type: paper
+  - id: krizhevsky2012
+    title: ImageNet Classification with Deep Convolutional Neural Networks
+    author: Alex Krizhevsky, Ilya Sutskever, Geoffrey Hinton
+    publisher: Advances in Neural Information Processing Systems 25
+    year: 2012
+    url: https://papers.nips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html
+    accessed: 2026-11-25
+    type: paper
+  - id: vaswani2017
+    title: Attention Is All You Need
+    author: Ashish Vaswani et al.
+    publisher: arXiv / NeurIPS 2017
+    year: 2017
+    url: https://arxiv.org/abs/1706.03762
+    accessed: 2026-11-25
+    type: paper
+  - id: acm-turing-2018
+    title: "Fathers of the Deep Learning Revolution Receive ACM A.M. Turing Award (2018 award)"
+    publisher: Association for Computing Machinery
+    year: 2019
+    url: https://awards.acm.org/about/2018-turing
+    accessed: 2026-11-25
+    type: article
+  - id: nobel-2024
+    title: The Nobel Prize in Physics 2024
+    publisher: Nobel Prize Outreach
+    year: 2024
+    url: https://www.nobelprize.org/prizes/physics/2024/summary/
+    accessed: 2026-11-25
+    type: article
+furtherReading:
+  - title: "3Blue1Brown: But what is a neural network?"
+    url: https://www.3blue1brown.com/lessons/neural-networks
+  - title: "Google Machine Learning Crash Course: Introduction to machine learning"
+    url: https://developers.google.com/machine-learning/intro-to-ml
+exercises:
+  - id: whatai-nesting
+    type: mcq
+    difficulty: easy
+    title: Which circle?
+    prompt: "A classic chess program searches millions of moves using rules and a scoring formula that people wrote by hand. Nothing in it is learned from data. Where does it belong?"
+    options:
+      - "AI, but not machine learning"
+      - "Machine learning, but not deep learning"
+      - "Deep learning"
+      - "Not AI at all, because it does not learn"
+    answer: 0
+    hint: Machine learning needs behaviour that is learned from examples.
+    explanation: "Playing chess is a task we call intelligent, so the program is **AI**. Its rules were written, not learned, so it is **not machine learning**. Classic search engines like this were AI without learning; the course's chess project later adds a learned neural evaluator, which moves that part into deep learning."
+  - id: whatai-setting
+    type: mcq
+    difficulty: easy
+    title: Name the learning setting
+    prompt: "A program sees 60,000 images of handwritten digits, each tagged with the correct digit 0-9, and learns to name the digit in new images. Which learning setting is this?"
+    options:
+      - "Supervised learning"
+      - "Unsupervised learning"
+      - "Reinforcement learning"
+      - "Not machine learning: a person wrote the rules"
+    answer: 0
+    explanation: "Each example comes with the right answer (the **label**), so this is **supervised learning**. Unsupervised learning would get the images without the digit tags; reinforcement learning would get rewards for actions instead of correct answers."
+  - id: whatai-why-2012
+    type: reveal
+    difficulty: medium
+    title: Why 2012?
+    prompt: "The perceptron dates from 1958 and backpropagation was popularised in 1986, yet deep learning only took off after 2012. What three things changed?"
+    answer: "Much bigger labelled datasets (such as ImageNet), fast parallel hardware (GPUs), and better training techniques (such as ReLU activations and dropout)."
+    explanation: "AlexNet in 2012 combined all three: it was trained on about 1.2 million labelled ImageNet images, on two GPUs, using ReLU and dropout. The core algorithm, gradient descent with backpropagation, was decades old; what was new was enough data and compute to make deep networks work well."
+---
+
+**Artificial intelligence** (AI) is the field of computer science that builds systems able to perform tasks that would call for intelligence if a person did them, such as recognising images, understanding language or playing games.<Cite id="goodfellow2016-intro" /> **Machine learning** is the part of AI in which a program learns its behaviour from examples instead of following rules written by hand, and **deep learning** is the part of machine learning that uses <Term slug="neural-network">neural networks</Term> with many layers.<Cite id="d2l-intro" /> This course teaches deep learning from the ground up, so it helps to know where it sits.
+
+## Three nested fields
+
+The three terms are often used as if they meant the same thing, but each one sits inside the previous one.<Cite id="goodfellow2016-intro" />
+
+<Figure src="/figures/beginner/ai-ml-dl.svg" alt="Three nested ellipses: artificial intelligence on the outside, machine learning inside it, deep learning innermost." caption="Deep learning is a kind of machine learning, which is a kind of AI." credit="Own work, after Goodfellow et al. (2016), figure 1.4" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" />
+
+- **AI** is the widest circle. A chess program that searches millions of positions with rules written by people is AI, even though it learns nothing.<Cite id="wiki-ai-history" />
+- **Machine learning** covers any method that improves at a task through experience. A textbook definition says a program learns if its performance on a task, measured in some way, gets better with more experience (data).<Cite id="goodfellow2016-ml" /> Fitting a straight line to house prices is already machine learning.
+- **Deep learning** uses networks of many simple units, the <Term slug="artificial-neuron">artificial neurons</Term>, stacked in layers. Each layer turns its input into a slightly more abstract description, for example from pixels to edges, from edges to strokes and from strokes to "this is a 7".<Cite id="goodfellow2016-intro" />
+
+<Analogy breaks="Real dolls are only containers; the fields overlap in methods and people, and the borders between them are not sharp.">
+The fields are like Russian nesting dolls. AI is the biggest doll, machine learning fits inside it, and deep learning fits inside machine learning.
+</Analogy>
+
+## Rules versus learning
+
+In classic programming a person writes the rules and the computer applies them to data. In machine learning a person supplies data together with the desired answers, and an algorithm finds rules that reproduce those answers.<Cite id="d2l-intro" /> The rules it finds are not readable sentences: they are thousands or millions of numbers called <Term slug="parameter">parameters</Term>, which the next lesson explains.
+
+<Analogy breaks="A cook can read and explain a recipe; a trained network's 'recipe' is a pile of numbers that is hard to interpret.">
+Classic programming is handing the computer a recipe. Machine learning is handing it hundreds of finished dishes with their ingredient lists and letting it work out a recipe that produces them.
+</Analogy>
+
+The term "machine learning" was popularised by Arthur Samuel, whose 1959 checkers program improved by playing games against itself.<Cite id="samuel1959" />
+
+## Three ways a machine learns
+
+Machine learning is usually divided into three settings, depending on what kind of feedback the program gets.<Cite id="goodfellow2016-ml" />
+
+| Setting | What the program receives | Example in this course |
+|---|---|---|
+| <Term slug="supervised-learning">Supervised</Term> | Inputs paired with correct answers (labels) | Images of digits tagged 0-9 |
+| <Term slug="unsupervised-learning">Unsupervised</Term> (and self-supervised) | Inputs only; it finds structure itself | Predicting the next character of a text |
+| <Term slug="reinforcement-learning">Reinforcement</Term> | Rewards or penalties for its actions | A game agent rewarded for winning |
+
+Most of this course is supervised learning. The small text and code models use a self-supervised trick: the "label" for each position in a text is simply the next character, so no person has to tag anything.<Cite id="d2l-intro" />
+
+## A short timeline
+
+The ideas behind deep learning are much older than the recent headlines.<Cite id="wiki-ai-history" />
+
+| Year | Milestone |
+|---|---|
+| 1943 | Warren McCulloch and Walter Pitts describe a mathematical model of a neuron as a simple logic unit.<Cite id="mcculloch1943" /> |
+| 1950 | Alan Turing asks "Can machines think?" and proposes the imitation game, later called the Turing test.<Cite id="turing1950" /> |
+| 1956 | The Dartmouth summer workshop, proposed in 1955, gives the field the name "artificial intelligence".<Cite id="wiki-dartmouth" /> |
+| 1958 | Frank Rosenblatt's <Term slug="perceptron" /> is a neuron that learns its weights from examples.<Cite id="rosenblatt1958" /> |
+| 1970s and late 1980s | Funding collapses twice after promises are not met, periods now called "AI winters".<Cite id="wiki-ai-winter" /> |
+| 1986 | Rumelhart, Hinton and Williams show that backpropagation can train networks with hidden layers.<Cite id="rumelhart1986" /> |
+| 2012 | AlexNet, a deep network trained on GPUs, wins the ImageNet image-recognition contest with a top-5 error of 15.3%, against 26.2% for the runner-up.<Cite id="krizhevsky2012" /> |
+| 2017 | The Transformer architecture appears; it later powers large language models.<Cite id="vaswani2017" /> |
+| 2018 | Yoshua Bengio, Geoffrey Hinton and Yann LeCun receive the ACM Turing Award for their work on deep neural networks.<Cite id="acm-turing-2018" /> |
+| 2024 | John Hopfield and Geoffrey Hinton receive the Nobel Prize in Physics for foundational work that enables machine learning with artificial neural networks.<Cite id="nobel-2024" /> |
+
+The 2012 jump did not come from a brand-new algorithm. It came from three things arriving together: large labelled datasets, fast graphics processors (GPUs) and better training tricks such as the <Term slug="relu" /> activation and <Term slug="dropout" />.<Cite id="krizhevsky2012" /><Cite id="goodfellow2016-intro" />
+
+<Exercise id="whatai-why-2012" />
+
+## What neural networks do, and what they do not
+
+A neural network is a large mathematical function with adjustable numbers. Training adjusts those numbers until the function's outputs match the examples well. The result can recognise a digit or suggest the next word of code, but it does so by applying learned patterns, not by understanding the way a person does.<Cite id="goodfellow2016-intro" />
+
+<Callout type="pitfall">
+"Neural networks work like the brain." They were loosely inspired by brain cells, but an artificial neuron is only a weighted sum followed by a simple function. Modern deep learning is guided by mathematics and engineering much more than by neuroscience.<Cite id="goodfellow2016-intro" />
+</Callout>
+
+Two more points worth keeping in mind:
+
+- **AI is not only deep learning.** Search-based game engines, route planners and rule-based systems are AI without neural networks.<Cite id="wiki-ai-history" />
+- **Deep learning was not invented in 2012.** The neuron, the perceptron and backpropagation are decades old; data and computing power caught up later.<Cite id="d2l-intro" />
+
+## Where this course goes
+
+The beginner track builds the tools step by step: data and labels, just enough Python and NumPy, the maths of vectors, slopes and probabilities, and finally a working classifier written from scratch. The intermediate and advanced tracks then build the networks used in the projects: digit and doodle recognisers, small text models, a code autocompleter and a chess engine with a neural evaluator. Start with [Data, features and labels](/course/beginner/data-features-labels/).
+
+## Summary
+
+- **AI ⊃ machine learning ⊃ deep learning**: each field sits inside the one before it.
+- Machine learning finds its rules from examples; deep learning does this with many-layered neural networks.
+- The three learning settings are supervised (labelled answers), unsupervised or self-supervised (no labels) and reinforcement (rewards).
+- Key milestones: the neuron model (1943), the perceptron (1958), backpropagation (1986), AlexNet (2012) and the Transformer (2017).
+- Neural networks learn patterns from data; they are inspired by, but not models of, the brain.
