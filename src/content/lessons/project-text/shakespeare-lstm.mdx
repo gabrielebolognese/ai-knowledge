@@ -173,9 +173,9 @@ TinyShakespeare is a single file of 1,115,394 characters drawn from Shakespeare'
 
 The text is cut into 32 rows of equal length that are read side by side, and each training step takes the next 100 characters of every row. The hidden state is carried from one chunk to the next, so the network can use context from earlier chunks, but gradients stop at the chunk border. This is *truncated backpropagation through time*.
 
-<CodeFile path="code/projects/project-text/char_rnn.py" lines="134-147" highlight="136,141,142,143,145,146" title="char_rnn.py: carry the memory, cut the gradient, clip" />
+<CodeFile path="code/projects/project-text/char_rnn.py" lines="142-155" highlight="143,144,149,150,153,154" title="char_rnn.py: carry the memory, cut the gradient, clip" />
 
-Line 141 detaches the state: its values flow forward, but its computation history is dropped. Line 146 clips the gradient: if the combined size (norm) of all gradients exceeds 1.0, they are scaled down to 1.0, which prevents rare exploding steps from wrecking the weights.<Cite id="pt-clip-grad" /> Karpathy's char-rnn uses clipping for the same reason.<Cite id="char-rnn" />
+Lines 143-144 restart from the top of the text, with an empty memory, when a row runs out. Line 149 (`state = detach(state)`) detaches the state: its values flow forward, but its computation history is dropped, so line 150 hands the memory to the model while line 153 (`loss.backward()`) only backpropagates through the current 100 characters. Line 154 (`clip_grad_norm_`) clips the gradient: if the combined size (norm) of all gradients exceeds 1.0, they are scaled down to 1.0, which prevents rare exploding steps from wrecking the weights.<Cite id="pt-clip-grad" /> Karpathy's char-rnn uses clipping for the same reason.<Cite id="char-rnn" />
 
 <Exercise id="lstm-detach" />
 

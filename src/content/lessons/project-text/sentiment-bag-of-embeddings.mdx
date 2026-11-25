@@ -120,7 +120,7 @@ Iyyer et al. showed in 2015 that averaging word vectors, with a few extra layers
 
 `train_classifier.py --model bag` uses the standard loop: forward pass, cross-entropy loss over the two classes, backpropagation and an Adam update, in batches of 64 sentences.<Cite id="kingma2014" /> After every epoch it measures accuracy on the validation set carved out of the training data, and it keeps the weights of the best epoch.
 
-<CodeFile path="code/projects/project-text/train_classifier.py" lines="92-105" highlight="94,96,97,100,104,105" title="train_classifier.py: one epoch, then keep the best weights" />
+<CodeFile path="code/projects/project-text/train_classifier.py" lines="92-106" highlight="95,97,98,101,105,106" title="train_classifier.py: one epoch, then keep the best weights" />
 
 The learning rate is 0.005, higher than the usual 0.001, because each word vector is only updated in batches where that word appears; rare words would otherwise barely move in five epochs.
 
