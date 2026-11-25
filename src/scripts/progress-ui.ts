@@ -153,3 +153,6 @@ if (visit) {
 }
 
 subscribe(render);
+
+// Hydration marker: the bindings above are live (used by tests and safe to ignore otherwise).
+document.documentElement.dataset.progressReady = 'true';

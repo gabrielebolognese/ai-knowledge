@@ -207,6 +207,8 @@ const count = (fn: (x: (typeof groups)[number]['items'][number]) => boolean) => 
   });
   // Re-filter whenever progress changes (a "Done" tick can move an item out of "To do").
   subscribe(() => apply());
+  // Hydration marker: filters and marks are live.
+  document.documentElement.dataset.libReady = 'true';
 </script>
 
 <style>

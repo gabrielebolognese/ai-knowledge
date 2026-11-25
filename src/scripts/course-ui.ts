@@ -211,3 +211,6 @@ subscribe((state) => {
   renderTimeLeft(state);
   renderFirstTodo(state);
 });
+
+// Hydration marker: path maps, "Continue" and the level filter are live.
+document.documentElement.dataset.courseReady = 'true';

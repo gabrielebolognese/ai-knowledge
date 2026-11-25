@@ -13,13 +13,33 @@ const STORAGE_KEY = 'aik-progress-v1';
 const node = (page: Page, slug: string) => page.locator(`li[data-node="${slug}"]`).first();
 const nodeToggle = (page: Page, slug: string) => node(page, slug).locator(`button[data-lesson-toggle="${slug}"]`);
 const stored = (page: Page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}'), STORAGE_KEY);
+const lessonDone = async (page: Page, slug: string) => !!(await stored(page)).lessons?.[slug]?.done;
+const exerciseDone = async (page: Page, id: string) => !!(await stored(page)).exercises?.[id]?.done;
+
+// Wait until the client scripts have bound the page (html[data-*-ready] markers) before clicking,
+// so a click can never land before its handler exists.
+async function ready(page: Page) {
+  await expect(page.locator('html[data-progress-ready="true"]')).toHaveCount(1);
+  const path = new URL(page.url()).pathname;
+  if (path === '/course/') await expect(page.locator('html[data-course-ready="true"]')).toHaveCount(1);
+  if (path === '/exercises/') await expect(page.locator('html[data-lib-ready="true"]')).toHaveCount(1);
+}
+async function open(page: Page, url: string) {
+  await page.goto(url);
+  await ready(page);
+}
+async function reload(page: Page) {
+  await page.reload();
+  await ready(page);
+}
 
 test.describe('progress', () => {
   test('marking a lesson on the dashboard persists after reload and shows on the lesson page', async ({ page }) => {
-    await page.goto('/course/');
+    await open(page, '/course/');
     const toggle = nodeToggle(page, LESSON);
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     await toggle.click(); // one click
+    await expect.poll(() => lessonDone(page, LESSON)).toBe(true);
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
     await expect(node(page, LESSON)).toHaveAttribute('data-state', 'done');
     // The beginner track counter and the header ring both move.
@@ -27,23 +47,24 @@ test.describe('progress', () => {
     await expect(page.locator('.pm__head[data-progress-slugs]').filter({ has: page.locator('#pm-beginner') }).locator('[data-progress-text]').first()).toHaveText(`1 / ${total}`);
     await expect(page.locator('[data-testid="header-progress"] [data-progress-pct]')).not.toHaveText('0%');
 
-    await page.reload();
+    await reload(page);
     await expect(nodeToggle(page, LESSON)).toHaveAttribute('aria-pressed', 'true');
     await expect(node(page, LESSON)).toHaveAttribute('data-state', 'done');
 
-    await page.goto(LESSON_URL);
+    await open(page, LESSON_URL);
     await expect(page.locator('.complete-cta [data-lesson-toggle]')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.lesson-meta__status')).toHaveAttribute('data-done', 'true');
 
     // Unmark from the dashboard again: one click, also persisted.
-    await page.goto('/course/');
+    await open(page, '/course/');
     await nodeToggle(page, LESSON).click();
-    await page.reload();
+    await expect.poll(() => lessonDone(page, LESSON)).toBe(false);
+    await reload(page);
     await expect(nodeToggle(page, LESSON)).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('"Continue" points at the next lesson and every node is a link', async ({ page }) => {
-    await page.goto('/course/');
+    await open(page, '/course/');
     const first = beginner.modules[0].lessons[0];
     await expect(page.getByTestId('continue')).toHaveAttribute('href', `/course/beginner/${first.slug}/`);
     await nodeToggle(page, first.slug).click();
@@ -57,18 +78,19 @@ test.describe('progress', () => {
   });
 
   test('"Mark module complete" marks and unmarks a whole module', async ({ page }) => {
-    await page.goto('/course/');
+    await open(page, '/course/');
     const mod = beginner.modules[2]; // the math module
     const slugs: string[] = mod.lessons.map((l: any) => l.slug);
     const moduleEl = page.locator(`[data-module="${mod.id}"]`);
     const bulk = moduleEl.locator('button[data-bulk-toggle]');
     await expect(bulk).toContainText('Mark module complete');
     await bulk.click();
+    for (const s of slugs) await expect.poll(() => lessonDone(page, s)).toBe(true);
     for (const s of slugs) await expect(nodeToggle(page, s)).toHaveAttribute('aria-pressed', 'true');
     await expect(moduleEl).toHaveAttribute('data-complete', 'true');
     await expect(bulk).toContainText('Unmark module');
 
-    await page.reload();
+    await reload(page);
     for (const s of slugs) await expect(nodeToggle(page, s)).toHaveAttribute('aria-pressed', 'true');
     const state = await stored(page);
     for (const s of slugs) expect(state.lessons[s]?.done).toBe(true);
@@ -76,13 +98,16 @@ test.describe('progress', () => {
     expect(state.lessons[beginner.modules[0].lessons[0].slug]?.done ?? false).toBe(false);
 
     await page.locator(`[data-module="${mod.id}"] button[data-bulk-toggle]`).click();
+    for (const s of slugs) await expect.poll(() => lessonDone(page, s)).toBe(false);
     for (const s of slugs) await expect(nodeToggle(page, s)).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('export → reset → import restores the saved state', async ({ page }) => {
-    await page.goto('/course/');
+    await open(page, '/course/');
     await nodeToggle(page, LESSON).click();
     await nodeToggle(page, 'gradient-descent').click();
+    await expect.poll(() => lessonDone(page, 'gradient-descent')).toBe(true);
+    expect(await lessonDone(page, LESSON)).toBe(true);
     // An exercise mark and a certificate name are part of the state too.
     await page.evaluate((k) => {
       const s = JSON.parse(localStorage.getItem(k)!);
@@ -90,7 +115,7 @@ test.describe('progress', () => {
       s.name = 'Ada Lovelace';
       localStorage.setItem(k, JSON.stringify(s));
     }, STORAGE_KEY);
-    await page.reload();
+    await reload(page);
     const before = await stored(page);
     expect(before.lessons[LESSON].done).toBe(true);
 
@@ -107,8 +132,9 @@ test.describe('progress', () => {
     await page.locator('[data-pp-reset-input]').fill('reset');
     await expect(confirm).toBeEnabled();
     await confirm.click();
+    await expect.poll(async () => Object.keys((await stored(page)).lessons ?? {}).length).toBe(0);
     await expect(nodeToggle(page, LESSON)).toHaveAttribute('aria-pressed', 'false');
-    await page.reload();
+    await reload(page);
     await expect(nodeToggle(page, LESSON)).toHaveAttribute('aria-pressed', 'false');
     const empty = await stored(page);
     expect(Object.keys(empty.lessons ?? {})).toHaveLength(0);
@@ -117,8 +143,9 @@ test.describe('progress', () => {
     await page.locator('[data-pp-file]').setInputFiles(file!);
     await expect(page.locator('[data-pp-import-summary]')).toContainText('2 completed lessons');
     await page.locator('[data-pp-replace]').click();
+    await expect.poll(() => lessonDone(page, LESSON)).toBe(true);
     await expect(nodeToggle(page, LESSON)).toHaveAttribute('aria-pressed', 'true');
-    await page.reload();
+    await reload(page);
     await expect(nodeToggle(page, LESSON)).toHaveAttribute('aria-pressed', 'true');
     await expect(nodeToggle(page, 'gradient-descent')).toHaveAttribute('aria-pressed', 'true');
     const after = await stored(page);
@@ -128,7 +155,7 @@ test.describe('progress', () => {
   });
 
   test('exercise library: filters, search, mark done persists', async ({ page }) => {
-    await page.goto('/exercises/');
+    await open(page, '/exercises/');
     const items = page.locator('[data-lib-item]');
     const total = await items.count();
     expect(total).toBeGreaterThan(50);
@@ -152,6 +179,7 @@ test.describe('progress', () => {
     const first = visible.first();
     const id = (await first.getAttribute('data-lib-item'))!;
     await first.locator(`input[data-exercise-toggle="${id}"]`).check();
+    await expect.poll(() => exerciseDone(page, id)).toBe(true);
     await expect(page.locator('[data-lib-done]')).toHaveText(`1 / ${total} done`);
 
     // Status filter: "Done" shows exactly that one; "To do" hides it.
@@ -162,7 +190,7 @@ test.describe('progress', () => {
     await expect(page.locator(`[data-lib-item="${id}"]`)).toBeHidden();
 
     // Reload: filters come back from the URL and the mark persists.
-    await page.reload();
+    await reload(page);
     await page.locator('[data-lib-clear]').click();
     await expect(page.locator('[data-lib-count]')).toHaveText(`Showing ${total} of ${total} exercises`);
     await expect(page.locator(`input[data-exercise-toggle="${id}"]`)).toBeChecked();
@@ -178,7 +206,7 @@ test.describe('progress', () => {
     // The same mark shows on the lesson page.
     await page.locator('[data-lib-q]').fill('');
     const owner = await page.locator(`[data-lib-item="${id}"] [data-lib-lesson]`).getAttribute('href');
-    await page.goto(owner!);
+    await open(page, owner!);
     await expect(page.locator(`input[data-exercise-toggle="${id}"]`)).toBeChecked();
   });
 });

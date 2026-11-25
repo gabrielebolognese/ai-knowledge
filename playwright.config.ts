@@ -1,12 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 
 // Tests run against the production build (astro build + pagefind) served by `astro preview`.
-const PORT = 4329;
+// 4329 collided with another local Astro preview (the default-ish port range); use a less common one.
+const PORT = Number(process.env.AIK_TEST_PORT || 4391);
 
 export default defineConfig({
   testDir: './tests',
   timeout: 60_000,
-  fullyParallel: true,
+  // One worker: deterministic runs; every test still gets its own fresh browser context (own localStorage).
+  fullyParallel: false,
+  workers: 1,
   retries: 0,
   reporter: [['list']],
   use: {
