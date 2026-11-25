@@ -1,0 +1,218 @@
+---
+title: "Deep CNNs: from LeNet to ResNet"
+slug: deep-cnns-resnets
+track: advanced
+level: advanced
+order: 20
+minutes: 25
+module: Seeing with convolutions
+summary: Three landmark networks, LeNet-5, AlexNet and ResNet, show how CNNs grew from reading cheques to hundreds of layers. This lesson explains what each one changed, derives why residual connections keep very deep networks trainable, and adds batch normalization and global average pooling to the toolkit.
+hatnote: For the convolution arithmetic used here, see "Convolutional neural networks".
+prerequisites: [convolutional-networks, initialization-normalization]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Trace the LeNet-5 → AlexNet → ResNet story and what each changed
+  - Explain residual connections and why they make very deep networks trainable
+  - Use batch normalization and global average pooling in a CNN
+build: A residual block and a global-average-pooling head for the digits CNN
+reviewed: 2026-11-25
+seeAlso: [convolutional-networks, transfer-learning, doodle-augmentation]
+sources:
+  - id: lecun1998
+    title: Gradient-Based Learning Applied to Document Recognition
+    author: Yann LeCun, Léon Bottou, Yoshua Bengio, Patrick Haffner
+    publisher: Proceedings of the IEEE 86(11)
+    year: 1998
+    url: https://doi.org/10.1109/5.726791
+    accessed: 2026-11-25
+    type: paper
+  - id: krizhevsky2012
+    title: ImageNet Classification with Deep Convolutional Neural Networks
+    author: Alex Krizhevsky, Ilya Sutskever, Geoffrey E. Hinton
+    publisher: Advances in Neural Information Processing Systems 25 (NeurIPS 2012)
+    year: 2012
+    url: https://papers.nips.cc/paper_files/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html
+    accessed: 2026-11-25
+    type: paper
+  - id: he2015-resnet
+    title: Deep Residual Learning for Image Recognition
+    author: Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+    publisher: arXiv (CVPR 2016)
+    year: 2015
+    url: https://arxiv.org/abs/1512.03385
+    accessed: 2026-11-25
+    type: paper
+  - id: he2016-identity
+    title: Identity Mappings in Deep Residual Networks
+    author: Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+    publisher: arXiv (ECCV 2016)
+    year: 2016
+    url: https://arxiv.org/abs/1603.05027
+    accessed: 2026-11-25
+    type: paper
+  - id: ioffe2015
+    title: "Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift"
+    author: Sergey Ioffe, Christian Szegedy
+    publisher: arXiv (ICML 2015)
+    year: 2015
+    url: https://arxiv.org/abs/1502.03167
+    accessed: 2026-11-25
+    type: paper
+  - id: lin2013
+    title: Network In Network
+    author: Min Lin, Qiang Chen, Shuicheng Yan
+    publisher: arXiv
+    year: 2013
+    url: https://arxiv.org/abs/1312.4400
+    accessed: 2026-11-25
+    type: paper
+  - id: d2l-modern-cnn
+    title: "Dive into Deep Learning, chapter 8: Modern Convolutional Neural Networks"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_convolutional-modern/index.html
+    accessed: 2026-11-25
+    type: book
+  - id: pt-batchnorm2d
+    title: torch.nn.BatchNorm2d
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "Wikipedia: Residual neural network"
+    url: https://en.wikipedia.org/wiki/Residual_neural_network
+  - title: "Wikipedia: AlexNet"
+    url: https://en.wikipedia.org/wiki/AlexNet
+exercises:
+  - id: adv-resnet-degradation
+    type: mcq
+    difficulty: easy
+    title: Deeper but worse
+    prompt: "A plain 56-layer CNN ends training with a *higher training error* than a plain 20-layer CNN on the same data. What is the best explanation?"
+    options:
+      - The 56-layer network overfits the training data
+      - The deeper network is harder to optimise, so gradient descent fails to find weights as good as the shallow network's
+      - The 56-layer network has too few parameters
+      - Training error always rises with depth, so this is expected and unavoidable
+    answer: 1
+    explanation: "Overfitting would make the *training* error lower and only the test error higher. Here the training error itself is worse, although the deep network could in principle copy the shallow one and set its extra layers to the identity. He et al. called this the degradation problem: an optimisation difficulty, which residual connections fix."
+  - id: adv-resnet-gap-params
+    type: numeric
+    difficulty: medium
+    title: Shrink the head
+    prompt: "In the digits CNN (conv1: 320 parameters, conv2: 18,496), replace flatten → fc1 (3136→128) → fc2 (128→10) with global average pooling over each 7×7 map followed by one `nn.Linear(64, 10)`. How many parameters does the whole network have now?"
+    answer: 19466
+    tolerance: 0
+    hint: "Global average pooling has no parameters. A Linear(64, 10) layer has 64·10 weights plus 10 biases."
+    explanation: "$320 + 18{,}496 + (64 \\cdot 10 + 10) = 320 + 18{,}496 + 650 = 19{,}466$, about 95% fewer than the original 421,642. Almost all of the original parameters lived in fc1."
+  - id: adv-resnet-bn-eval
+    type: mcq
+    difficulty: medium
+    title: BatchNorm at test time
+    prompt: "You add `nn.BatchNorm2d` to the doodle CNN. Predictions on single drawings in the app look random, although test accuracy was good. What is the most likely mistake?"
+    options:
+      - The app forgot to call `model.eval()`, so BatchNorm normalises each single image with its own statistics
+      - BatchNorm cannot be used with grayscale images
+      - BatchNorm doubles the number of output channels
+      - The learning rate was too high during training
+    answer: 0
+    explanation: "In training mode BatchNorm uses the mean and variance of the current batch. A batch of one drawing gives meaningless statistics. `model.eval()` switches to the running averages collected during training, which is what inference needs."
+  - id: adv-resnet-identity
+    type: reveal
+    difficulty: hard
+    title: Why "doing nothing" must be easy
+    prompt: "Explain why it is easy for a residual block to behave like the identity, and why that matters when you stack 100 of them."
+    answer: "A residual block outputs F(x) + x, so it becomes the identity when F(x) = 0, which the optimiser reaches by pushing the block's weights towards zero. A plain block would have to learn the identity through convolutions and ReLUs, which is hard. With 100 blocks, any block that has nothing useful to add can step aside, so extra depth cannot make the network worse than a shallower one, and the +1 in each block's derivative gives the gradient a direct path to the early layers."
+    explanation: "This is the argument of He et al. (2015, section 3.1): reformulating the layers to learn residuals makes the identity solution easy, which removes the degradation problem."
+---
+
+**Deep convolutional networks** stack many convolutional layers so that each one builds on the patterns found by the last. Their history runs through three landmark designs: **LeNet-5** (1998) read handwritten digits, **AlexNet** (2012) started the deep learning boom on photographs, and **ResNet** (2015) showed how to train networks with more than a hundred layers.<Cite id="d2l-modern-cnn" /> The ideas they introduced, especially residual connections, are now used far beyond images, including inside every Transformer.
+
+## Three landmark networks
+
+| Network | Year | Depth | Parameters | Result | What it changed |
+|---|---|---|---|---|---|
+| LeNet-5 | 1998 | 7 layers | about 60,000 | 0.95% test error on MNIST | Convolution, subsampling and backpropagation on real documents |
+| AlexNet | 2012 | 8 learned layers | about 60 million | 15.3% top-5 error on ImageNet (runner-up 26.2%) | ReLU, dropout, data augmentation, GPU training |
+| ResNet | 2015 | up to 152 layers | 11-60 million | 3.57% top-5 error (ensemble) | Residual (skip) connections |
+
+**LeNet-5**, by LeCun, Bottou, Bengio and Haffner, took 32×32 images through two convolution-and-subsampling stages and three fully connected layers.<Cite id="lecun1998" /> The same paper introduced the <Term slug="mnist" /> benchmark and described a deployed system for reading bank cheques.<Cite id="lecun1998" /> The digits project's CNN is a close modern descendant.
+
+**AlexNet**, by Krizhevsky, Sutskever and Hinton, won the 2012 ImageNet challenge by a wide margin with five convolutional and three fully connected layers trained on two GPUs.<Cite id="krizhevsky2012" /> Its ingredients are still standard: <Term slug="relu" /> activations, which trained several times faster than tanh, <Term slug="dropout" /> in the fully connected layers, and <Term slug="data-augmentation" /> with crops and flips.<Cite id="krizhevsky2012" /> CNNs were not new; AlexNet's contribution was scale and training technique.<Cite id="d2l-modern-cnn" />
+
+## The degradation problem
+
+After AlexNet, deeper usually meant better, but only up to a point. He, Zhang, Ren and Sun observed that a plain 56-layer network had a higher **training** error than a 20-layer one on CIFAR-10.<Cite id="he2015-resnet" /> This is not <Term slug="overfitting" />, which would lower training error. It is an optimisation failure: the deeper network could copy the shallow one and set its extra layers to the identity, yet gradient descent did not find such a solution.<Cite id="he2015-resnet" />
+
+The obvious suspect is the <Term slug="vanishing-gradient" /> problem: the gradient reaching an early layer is a product of one factor per layer, and twenty factors of 0.5 multiply to about one millionth. He and colleagues ruled it out for their networks, which used batch normalization and had healthy gradients, and concluded that stacks of non-linear layers simply find it hard to fit an identity-like mapping.<Cite id="he2015-resnet" /> Residual connections address both difficulties at once.<Cite id="d2l-modern-cnn" />
+
+## Residual connections
+
+ResNet's fix is a <Term slug="residual-connection" />: each block computes a correction $F(x)$ with a couple of convolutions and adds its own input back, $y = F(x) + x$.<Cite id="he2015-resnet" />
+
+<Analogy breaks="The corrections are not small in general; the framing describes the structure, not a limit on how much a block may change.">
+A residual block edits a draft instead of rewriting it from scratch. It receives the current draft and only writes corrections, and if it has nothing useful to add it leaves the draft alone.
+</Analogy>
+
+<MathSteps
+  title="Why the skip connection helps the gradient"
+  legend={[
+    { symbol: 'x', meaning: 'input to the block' },
+    { symbol: 'F(x)', meaning: 'what the block\'s layers compute' },
+    { symbol: 'y', meaning: 'block output' },
+    { symbol: 'L', meaning: 'the loss' },
+  ]}
+>
+  <Step tex="y = F(x) + \hl{x}" words="The block's layers compute a correction; the input is added back unchanged through the shortcut." />
+  <Step tex="\frac{\partial y}{\partial x} = \frac{\partial F}{\partial x} + \hl{1}" words="Differentiate both terms. The shortcut contributes exactly 1 (the identity matrix for vectors)." />
+  <Step tex="\frac{\partial L}{\partial x} = \frac{\partial L}{\partial y}\left(\frac{\partial F}{\partial x} + 1\right) = \frac{\partial L}{\partial y}\frac{\partial F}{\partial x} + \hl{\frac{\partial L}{\partial y}}" words="By the chain rule, the gradient arriving from above passes through the shortcut untouched, whatever the layers do." />
+  <Step tex="\text{plain: } 0.5^{20} \approx 9.5 \times 10^{-7} \qquad \text{residual: a direct term survives}" words="A plain stack multiplies its factors; stacked residual blocks always keep a path where the gradient skips every block." />
+  <Step tex="F(x) = 0 \;\Rightarrow\; y = \hl{x}" words="If the best thing a block can do is nothing, it only needs weights near zero, which is easy to reach." />
+</MathSteps>
+
+He and colleagues later made the direct-path argument precise: with pure identity shortcuts, the signal and its gradient can travel between any two blocks without being multiplied by the layers in between.<Cite id="he2016-identity" /> When a block changes the number of channels or the resolution, the shortcut uses a 1×1 convolution so the shapes match.<Cite id="he2015-resnet" /> With these blocks, a 152-layer network won the 2015 ImageNet challenge.<Cite id="he2015-resnet" />
+
+A minimal residual block in PyTorch looks like this:
+
+```python
+class ResidualBlock(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, channels, 3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(channels)
+        self.conv2 = nn.Conv2d(channels, channels, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(channels)
+
+    def forward(self, x):
+        out = torch.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        return torch.relu(out + x)      # the skip connection
+```
+
+## Batch normalization in CNNs
+
+<Term slug="batch-normalization" />, introduced by Ioffe and Szegedy, standardises each channel to mean 0 and variance 1 over the mini-batch, then applies a learned scale $\gamma$ and shift $\beta$.<Cite id="ioffe2015" /> It allowed higher learning rates and faster training, and ResNet places it after every convolution.<Cite id="he2015-resnet" /> In a CNN, `nn.BatchNorm2d(C)` computes the statistics over the batch and all spatial positions, so it learns just two numbers per channel.<Cite id="pt-batchnorm2d" />
+
+Two practical rules follow. A convolution directly before BatchNorm does not need its own bias, because the normalisation subtracts it again (hence `bias=False` above). And BatchNorm behaves differently in training and evaluation: `model.eval()` makes it use running averages collected during training instead of the current batch's statistics.<Cite id="pt-batchnorm2d" />
+
+## Global average pooling
+
+In the digits CNN, 95% of the 421,642 parameters sit in the first fully connected layer. Lin, Chen and Yan proposed **global average pooling** in *Network in Network*: average each final feature map down to a single number and feed those numbers straight to the output.<Cite id="lin2013" /> The pooling itself has no parameters, so it cannot overfit, and the authors found it more robust to spatial shifts of the input.<Cite id="lin2013" /> ResNet ends the same way, with global average pooling and one fully connected layer.<Cite id="he2015-resnet" /> For the digits CNN, replacing flatten and both fully connected layers with global average pooling and `nn.Linear(64, 10)` leaves 19,466 parameters.
+
+## Where the projects use this
+
+The doodle project's CNN has an optional BatchNorm switch. Turning it on adds `BatchNorm2d` after each convolution, 192 learned numbers in total:
+
+<CodeFile path="code/projects/project-doodles/models.py" lines="18-36" highlight="24,25" title="Optional batch normalization in the doodle CNN (models.py)" />
+
+- [Data augmentation and regularization for sketches](/course/project-doodles/doodle-augmentation/) compares training with and without these options.
+- [A CNN that reads digits at 99%](/course/project-digits-letters/mnist-cnn/) compares the digits network with LeNet-5.
+- On 28×28 images a two-block CNN already reaches about 99%, so the projects do not need a ResNet. Residual connections return in [the Transformer](/course/advanced/transformers/), and pretrained ResNets are the starting point of [transfer learning](/course/advanced/transfer-learning/).
+
+## Summary
+
+- LeNet-5 established the CNN recipe, AlexNet scaled it with ReLU, dropout, augmentation and GPUs, and ResNet made very deep networks trainable.
+- Plain deep networks suffer from degradation: worse *training* error, an optimisation problem.
+- A residual block outputs $F(x) + x$; its derivative contains $+1$, so gradients always have a direct path.
+- BatchNorm2d normalises each channel and needs `model.eval()` at test time; global average pooling replaces large fully connected heads.

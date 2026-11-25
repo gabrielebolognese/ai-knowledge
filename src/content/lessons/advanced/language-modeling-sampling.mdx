@@ -1,0 +1,213 @@
+---
+title: Language modelling, perplexity and sampling
+slug: language-modeling-sampling
+track: advanced
+level: advanced
+order: 80
+minutes: 25
+module: Sequences and language
+summary: A language model predicts the next token. This lesson shows how one text window becomes many training examples, turns the loss into perplexity, and works through greedy decoding, temperature, top-k and top-p (nucleus) sampling by hand, including why greedy text repeats itself.
+hatnote: For the sampling settings used in the code autocompleter, see "Sampling completions and measuring the parse rate".
+prerequisites: [transformers, tokenization-bpe]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Explain next-token prediction and the shifted-target trick
+  - Convert loss to perplexity and read it
+  - Apply temperature, top-k and top-p (nucleus) sampling by hand
+  - Explain why greedy decoding repeats itself
+build: Temperature and top-k sampling on three logits, checked against the project's sampling code
+reviewed: 2026-11-25
+seeAlso: [tokenization-bpe, transformers, recurrent-networks]
+sources:
+  - id: d2l-lm
+    title: "Dive into Deep Learning, 9.3 Language Models"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_recurrent-neural-networks/language-model.html
+    accessed: 2026-11-25
+    type: book
+  - id: wiki-perplexity
+    title: Perplexity
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Perplexity
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: holtzman2019
+    title: The Curious Case of Neural Text Degeneration
+    author: Ari Holtzman, Jan Buys, Li Du, Maxwell Forbes, Yejin Choi
+    publisher: ICLR 2020 (arXiv:1904.09751)
+    year: 2019
+    url: https://arxiv.org/abs/1904.09751
+    accessed: 2026-11-25
+    type: paper
+  - id: fan2018
+    title: Hierarchical Neural Story Generation
+    author: Angela Fan, Mike Lewis, Yann Dauphin
+    publisher: ACL 2018 (arXiv:1805.04833)
+    year: 2018
+    url: https://arxiv.org/abs/1805.04833
+    accessed: 2026-11-25
+    type: paper
+  - id: hf-generate
+    title: "How to generate text: using different decoding methods for language generation with Transformers"
+    author: Patrick von Platen
+    publisher: Hugging Face
+    year: 2020
+    url: https://huggingface.co/blog/how-to-generate
+    accessed: 2026-11-25
+    type: article
+  - id: pt-multinomial
+    title: torch.multinomial
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.multinomial.html
+    accessed: 2026-11-25
+    type: docs
+  - id: shannon1951
+    title: Prediction and Entropy of Printed English
+    author: Claude E. Shannon
+    publisher: Bell System Technical Journal 30(1)
+    year: 1951
+    url: https://doi.org/10.1002/j.1538-7305.1951.tb01366.x
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Andrej Karpathy: The Unreasonable Effectiveness of Recurrent Neural Networks"
+    url: https://karpathy.github.io/2015/05/21/rnn-effectiveness/
+exercises:
+  - id: adv-lm-perplexity
+    type: numeric
+    difficulty: easy
+    title: Loss to perplexity
+    prompt: "A names model reaches a validation loss of 2.14 nats per character. What is its perplexity? (Round to one decimal.)"
+    answer: 8.5
+    tolerance: 0.05
+    hint: "Perplexity is $e^{\\text{loss}}$ when the loss uses the natural logarithm."
+    explanation: "$e^{2.14} \\approx 8.50$. The model is, on average, as unsure as if it were choosing among 8.5 equally likely characters, against 27 for blind guessing."
+  - id: adv-lm-temperature
+    type: numeric
+    difficulty: medium
+    title: Temperature by hand
+    prompt: "Logits are $[2, 1, 0]$ for tokens A, B and C. At temperature $T = 0.5$, what probability does A get? (Three decimals.)"
+    answer: 0.867
+    tolerance: 0.002
+    hint: "Divide the logits by 0.5 first, giving $[4, 2, 0]$, then apply the softmax."
+    explanation: "$e^4 = 54.598$, $e^2 = 7.389$, $e^0 = 1$; the sum is 62.987, so $p_A = 54.598 / 62.987 \\approx 0.867$. At $T = 1$ it was 0.665: a lower temperature sharpens the distribution."
+  - id: adv-lm-top-p
+    type: numeric
+    difficulty: medium
+    title: How big is the nucleus?
+    prompt: "Sorted next-token probabilities are 0.50, 0.30, 0.15 and 0.05. With top-p sampling at $p = 0.75$, how many tokens remain candidates?"
+    answer: 2
+    tolerance: 0
+    explanation: "Accumulate from the top: 0.50 is below 0.75, 0.80 reaches it, so the nucleus is the first two tokens. They are renormalised to 0.625 and 0.375 before sampling."
+  - id: adv-lm-greedy
+    type: mcq
+    difficulty: hard
+    title: Why greedy text loops
+    prompt: Greedy decoding keeps producing `self.self.self.` in the code model. Which explanation matches the findings of Holtzman et al. (2019)?
+    options:
+      - The model was trained with the wrong loss function
+      - Each repetition makes the same continuation more likely, so always taking the most probable token locks into a loop
+      - Greedy decoding picks tokens at random, so loops are bad luck
+      - The vocabulary is too small to express anything else
+    answer: 1
+    explanation: "Holtzman et al. found that the probability of repeating a phrase rises with each repetition, a positive feedback loop. Maximisation-based decoding such as greedy search follows that loop. Sampling, especially from a truncated distribution such as the nucleus, breaks it while avoiding the unreliable tail."
+---
+
+A **language model** assigns a probability to every possible next token given the tokens before it, written $P(x_t \mid x_{<t})$.<Cite id="d2l-lm" /> Generating text means asking for that distribution, picking one token, appending it and asking again. Training decides how good the probabilities are; the picking rule, called *decoding* or *sampling*, decides how the generated text reads, and it changes the output as much as many training choices do.<Cite id="hf-generate" />
+
+## Next-token prediction
+
+By the chain rule of probability, the probability of a whole sequence is the product of next-token probabilities: $P(x_1, \ldots, x_T) = \prod_t P(x_t \mid x_{<t})$.<Cite id="d2l-lm" /> A model that predicts the next token well therefore models whole texts well. The idea is old: Claude Shannon measured in 1951 how well people could guess the next letter of English text, as a way to estimate its information content.<Cite id="shannon1951" />
+
+Training uses a neat alignment trick. Take a window of $T+1$ consecutive tokens. The input is the first $T$ of them and the target is the same window shifted one position to the left, so position $t$ of the target holds the token that follows position $t$ of the input.<Cite id="d2l-lm" /> One window therefore gives $T$ training examples at once: predict token 2 from token 1, token 3 from tokens 1–2, and so on. With a <Term slug="causal-mask" /> or a recurrent network, each position sees only the tokens to its left, so no example can peek at its own answer.
+
+<CodeFile path="code/projects/project-code-autocomplete/train.py" lines="68-73" highlight="71,72" title="train.py: inputs and targets shifted by one" />
+
+<Callout type="pitfall">
+An off-by-one error here, such as using `data[i:i+T]` for both inputs and targets, teaches the model to copy its input. The training loss then falls almost to zero while the generated text is garbage.
+</Callout>
+
+## Loss and perplexity
+
+The training loss is the <Term slug="cross-entropy" /> of the true next token, averaged over all positions: the mean of $-\ln p$ for the token that actually came next. Natural logarithms give the loss in *nats* per token.<Cite id="d2l-lm" /> **Perplexity** is the exponential of that average loss, and it has a friendly reading: the model is as unsure as if it were choosing uniformly among that many tokens.<Cite id="wiki-perplexity" />
+
+<MathSteps
+  title="From loss to perplexity, with the names model"
+  legend={[
+    { symbol: 'V', meaning: 'vocabulary size' },
+    { symbol: 'L', meaning: 'average loss in nats per token' },
+    { symbol: '\\text{PPL}', meaning: 'perplexity' },
+  ]}
+>
+  <Step tex="L_{\text{uniform}} = -\ln \tfrac{1}{V} = \ln 27 \approx \hl{3.30}" words="An untrained model that spreads probability evenly over the 27 symbols (26 letters plus an end marker) pays ln 27 on every character. This is the baseline every model must beat." />
+  <Step tex="L = -\tfrac{1}{N}\sum_{t=1}^{N} \ln p_{\text{model}}(x_t \mid x_{<t})" words="The real loss averages the surprise at each true next character over all N positions of the validation text." />
+  <Step tex="\text{PPL} = e^{\hl{L}}" words="Undo the logarithm. Perplexity is in units of 'equally likely choices'." example="uniform: e^3.30 = 27" />
+  <Step tex="e^{2.45} \approx 11.6, \qquad e^{2.14} \approx \hl{8.5}" words="The bigram table reaches loss 2.45, and the small MLP 2.14. Each choice has narrowed from 27 options to about 11.6, then 8.5." />
+  <Step tex="\text{bits per token} = L / \ln 2" words="Dividing by ln 2 converts nats to bits, the unit Shannon used. The code model's 1.15 nats per character is about 1.66 bits per character." />
+</MathSteps>
+
+<Analogy breaks="A real model is not uniform over a fixed set of options; it is confident about some tokens and unsure about others, and perplexity is only their geometric average.">
+Perplexity 8.5 means the model behaves, on average, like someone rolling a fair 8.5-sided die among the plausible next letters. A perfect model would have perplexity 1.
+</Analogy>
+
+Perplexity is only comparable between models that use the same tokenizer and the same test text, because a token's difficulty depends on how much text it covers.<Cite id="wiki-perplexity" />
+
+## Decoding: from probabilities to text
+
+The model's last layer outputs one raw score, a <Term slug="logits">logit</Term>, per vocabulary entry, and a <Term slug="softmax" /> turns the logits into probabilities. There are two extreme ways to pick the next token.<Cite id="hf-generate" /> <Term slug="greedy-decoding">Greedy decoding</Term> always takes the most probable token; it is deterministic and tends to repeat itself. *Pure sampling* draws a token at random in proportion to its probability; it is varied but now and then picks an unlikely token that derails the text. In PyTorch the draw is [`torch.multinomial`](https://docs.pytorch.org/docs/stable/generated/torch.multinomial.html), which picks indices according to given weights.<Cite id="pt-multinomial" />
+
+Three controls sit between those extremes. **Temperature** divides the logits by a number $T$ before the softmax; see <Term slug="sampling-temperature" />. **Top-k** keeps only the $k$ most likely tokens; Fan, Lewis and Dauphin used it with $k = 10$ for story generation.<Cite id="fan2018" /> **Top-p**, or <Term slug="nucleus-sampling" />, keeps the smallest set of tokens whose probabilities add up to at least $p$.<Cite id="holtzman2019" />
+
+## Temperature, top-k and top-p by hand
+
+Take three tokens A, B and C with logits $z = [2, 1, 0]$.<Cite id="hf-generate" />
+
+<MathSteps
+  title="Three sampling rules on the logits 2, 1, 0"
+  legend={[
+    { symbol: 'z_i', meaning: 'logit of token i' },
+    { symbol: 'T', meaning: 'temperature' },
+    { symbol: 'p_i', meaning: 'probability of token i' },
+  ]}
+>
+  <Step tex="p_i = \frac{e^{z_i / \hl{T}}}{\sum_j e^{z_j / T}}" words="Temperature scales the logits before the softmax. T = 1 is the model's own distribution." />
+  <Step tex="T = 1:\; \frac{(7.389,\ 2.718,\ 1)}{11.107} = \hl{(0.665,\ 0.245,\ 0.090)}" words="Exponentiate each logit and divide by the sum." />
+  <Step tex="T = 0.5:\; \frac{(54.598,\ 7.389,\ 1)}{62.987} = \hl{(0.867,\ 0.117,\ 0.016)}" words="Dividing by 0.5 doubles the gaps between logits, so the favourite gets even more of the probability. As T approaches 0 this becomes greedy decoding." />
+  <Step tex="T = 2:\; \frac{(2.718,\ 1.649,\ 1)}{5.367} = \hl{(0.506,\ 0.307,\ 0.186)}" words="Halving the gaps flattens the distribution. As T grows very large it approaches a uniform choice." />
+  <Step tex="\text{top-}k{=}2:\; \left(\tfrac{0.665}{0.910},\ \tfrac{0.245}{0.910},\ 0\right) = \hl{(0.731,\ 0.269,\ 0)}" words="Drop every token outside the k best, then renormalise the survivors so they sum to 1." />
+  <Step tex="\text{top-}p{=}0.9:\; 0.665 < 0.9,\ \ 0.665 + 0.245 = \hl{0.910} \ge 0.9" words="Sort and accumulate until the total reaches p. At T = 1 the nucleus is A and B, the same as top-2. On the flatter T = 2 distribution the running sum is 0.506, 0.813, 1.0, so all three tokens stay: the nucleus grows when the model is unsure." />
+</MathSteps>
+
+<Analogy breaks="A diner chooses once per meal; a language model makes this choice at every token, so small differences compound over a long text.">
+Temperature is how adventurous a regular diner is: at a low temperature they always order their favourite dish, at a high one they nearly pick from the menu at random. Top-k is "only consider the dishes on the specials board".
+</Analogy>
+
+<Exercise id="adv-lm-temperature" />
+
+## Why greedy decoding repeats itself
+
+It seems natural that always picking the most likely token would give the best text. Holtzman and colleagues showed that it does not: maximisation-based decoding, greedy or beam search, produces text that is bland and strangely repetitive.<Cite id="holtzman2019" /> They found a feedback loop: each time a phrase repeats, the model assigns a higher probability to repeating it again, so a decoder that follows the maximum gets stuck.<Cite id="holtzman2019" /> Human-written text, by contrast, regularly uses tokens that the model did not rank first.
+
+Pure sampling avoids the loop but has the opposite problem. The tail of the distribution, thousands of tokens with tiny probabilities each, adds up to a noticeable chance of drawing nonsense.<Cite id="holtzman2019" /> Nucleus sampling cuts that unreliable tail while keeping a candidate set that adapts to the model's confidence: a single token when the next word is obvious, many when it is open.<Cite id="holtzman2019" />
+
+## Choosing settings
+
+The right settings depend on the task, and the published values are starting points to tune by reading samples, not rules.<Cite id="hf-generate" /> For code completion, where a likely continuation is what the user wants, a low temperature with top-k works well; the course's autocompleter defaults to $T = 0.4$ and $k = 20$. For names and Shakespeare, a temperature near 0.8–1.0 keeps variety. The small-text project writes the rules once and every generator calls them:
+
+<CodeFile path="code/projects/project-text/sampling.py" lines="11-30" highlight="18,20,21,22,30" title="sampling.py: temperature, top-k and the draw" />
+
+Running `python sampling.py` prints the numbers from the steps above (0.665, 0.245, 0.090 at $T = 1$, and 0.731, 0.269 with top-2) and confirms them with 10,000 random draws.
+
+## In the projects
+
+- The names models in [the bigram lesson](/course/project-text/names-bigram/) and [the MLP lesson](/course/project-text/names-mlp/) are judged by exactly this loss: 3.30 for guessing, 2.45 for the bigram table, about 2.14 for the MLP.
+- [The Shakespeare LSTM](/course/project-text/shakespeare-lstm/) reaches a validation loss of about 1.50 nats per character, a perplexity of about 4.5.
+- [Sampling completions and measuring the parse rate](/course/project-code-autocomplete/code-sampling-eval/) applies temperature and top-k to code and checks whether completions parse.
+
+## Summary
+
+- A language model predicts $P(x_t \mid x_{<t})$; one window of $T+1$ tokens gives $T$ training examples through shifted targets.
+- Loss is the average $-\ln p$ of the true next token; perplexity $= e^{L}$ reads as "choosing among this many equally likely tokens".
+- Temperature rescales logits; top-k keeps a fixed number of candidates; top-p keeps a set that grows with uncertainty.
+- Greedy decoding loops because repetition feeds on itself; truncated sampling breaks the loop without drawing from the junk tail.

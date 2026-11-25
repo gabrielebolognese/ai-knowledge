@@ -1,0 +1,251 @@
+---
+title: The Transformer and GPT
+slug: transformers
+track: advanced
+level: advanced
+order: 60
+minutes: 30
+module: Sequences and language
+summary: A GPT is a stack of identical blocks, each made of causal self-attention and a small MLP joined by residual connections and LayerNorm. This lesson draws the block, explains position embeddings and weight tying, and counts parameters and training compute.
+hatnote: For the full implementation used in the course, see "Writing a tiny GPT in PyTorch".
+prerequisites: [attention, initialization-normalization]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Draw a decoder-only Transformer block (attention, MLP, residuals, LayerNorm)
+  - Explain positional embeddings and weight tying
+  - Count the parameters of a tiny GPT
+  - Estimate training compute with 6 × params × tokens
+build: A parameter count and a compute budget for a tiny GPT, checked against nanoGPT and the project model
+reviewed: 2026-11-25
+seeAlso: [attention, tokenization-bpe, language-modeling-sampling, code-tiny-gpt]
+sources:
+  - id: vaswani2017
+    title: "Attention Is All You Need"
+    author: Ashish Vaswani et al.
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1706.03762
+    accessed: 2026-11-25
+    type: paper
+  - id: radford2019
+    title: "Language Models are Unsupervised Multitask Learners"
+    author: Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever
+    publisher: OpenAI
+    year: 2019
+    url: https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf
+    accessed: 2026-11-25
+    type: paper
+  - id: he2015-resnet
+    title: "Deep Residual Learning for Image Recognition"
+    author: Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
+    publisher: arXiv
+    year: 2015
+    url: https://arxiv.org/abs/1512.03385
+    accessed: 2026-11-25
+    type: paper
+  - id: ba2016
+    title: "Layer Normalization"
+    author: Jimmy Lei Ba, Jamie Ryan Kiros, Geoffrey E. Hinton
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1607.06450
+    accessed: 2026-11-25
+    type: paper
+  - id: hendrycks2016
+    title: "Gaussian Error Linear Units (GELUs)"
+    author: Dan Hendrycks, Kevin Gimpel
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1606.08415
+    accessed: 2026-11-25
+    type: paper
+  - id: press2016
+    title: "Using the Output Embedding to Improve Language Models"
+    author: Ofir Press, Lior Wolf
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1608.05859
+    accessed: 2026-11-25
+    type: paper
+  - id: kaplan2020
+    title: "Scaling Laws for Neural Language Models"
+    author: Jared Kaplan et al.
+    publisher: arXiv
+    year: 2020
+    url: https://arxiv.org/abs/2001.08361
+    accessed: 2026-11-25
+    type: paper
+  - id: illustrated-transformer
+    title: "The Illustrated Transformer"
+    author: Jay Alammar
+    publisher: jalammar.github.io
+    year: 2018
+    url: https://jalammar.github.io/illustrated-transformer/
+    accessed: 2026-11-25
+    type: article
+  - id: annotated-transformer
+    title: "The Annotated Transformer"
+    publisher: Harvard NLP
+    url: https://nlp.seas.harvard.edu/annotated-transformer/
+    accessed: 2026-11-25
+    type: article
+  - id: nanogpt
+    title: "nanoGPT (GitHub repository)"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/nanoGPT
+    accessed: 2026-11-25
+    type: code
+furtherReading:
+  - title: "Jay Alammar: The Illustrated GPT-2"
+    url: https://jalammar.github.io/illustrated-gpt2/
+  - title: "Andrej Karpathy: Let's build GPT, from scratch, in code, spelled out (video)"
+    url: https://www.youtube.com/watch?v=kCc8FmEb1nY
+exercises:
+  - id: adv-tf-params
+    type: numeric
+    difficulty: easy
+    title: Estimate the project model
+    prompt: "The code-autocompletion GPT has $L = 4$ blocks and $d = 192$. Estimate the parameters in its blocks with the rule $12 L d^2$."
+    answer: 1769472
+    tolerance: 0
+    hint: "$192^2 = 36{,}864$."
+    explanation: "$12 \\cdot 4 \\cdot 36{,}864 = 1{,}769{,}472$. The exact count printed by `model.py` is 1,823,040: the rest is the token and position embeddings, the biases and the LayerNorm parameters."
+  - id: adv-tf-compute
+    type: numeric
+    difficulty: medium
+    title: A compute budget
+    prompt: "A 10-million-parameter language model is trained on 100 million tokens. Using $C \\approx 6ND$, how many FLOPs does training take, in units of $10^{15}$?"
+    answer: 6
+    tolerance: 0.01
+    hint: "$N = 10^7$, $D = 10^8$."
+    explanation: "$6 \\cdot 10^7 \\cdot 10^8 = 6 \\times 10^{15}$ FLOPs. At an assumed 100 GFLOP/s that is $6 \\times 10^4$ seconds, about 17 hours, which is why the course's CPU models are ten times smaller."
+  - id: adv-tf-order
+    type: mcq
+    difficulty: medium
+    title: What do positions add?
+    prompt: "Take one self-attention layer with **no** position information and **no** mask. You shuffle the order of the input tokens. What happens to the outputs?"
+    options:
+      - "They are shuffled in the same way and otherwise unchanged"
+      - "They change completely, because attention reads tokens left to right"
+      - "They stay in the original order"
+      - "The layer raises an error"
+    answer: 0
+    explanation: "Without positions, attention treats its input as a set: each output depends on its own token and on the multiset of all tokens, not on their order. Shuffling the inputs only shuffles the outputs. Position embeddings (or sinusoidal encodings) are added to give the model word order."
+  - id: adv-tf-residual
+    type: reveal
+    difficulty: hard
+    title: Why the residual stream?
+    prompt: "Each GPT block computes `x = x + attn(ln1(x))` and `x = x + mlp(ln2(x))`. What would go wrong in a 12-block model if you wrote `x = attn(ln1(x))` and `x = mlp(ln2(x))` instead?"
+    answer: "Without the additions, every block must rebuild the whole representation, and gradients must pass through every attention and MLP layer on the way back, multiplying many factors that can shrink them. With residual connections, each block only adds a correction, the input reaches the output unchanged if a block learns nothing, and the gradient has a direct path from the loss to every layer. Deep stacks then train reliably."
+    explanation: "This is the ResNet argument (He et al. 2015) applied to Transformers: the derivative of x + F(x) with respect to x is 1 + F′(x), so there is always a path with factor 1."
+---
+
+The **Transformer** is a neural-network architecture that processes a sequence using only attention and small feed-forward networks, with no recurrence.<Cite id="vaswani2017" /> A **GPT** (generative pre-trained transformer) keeps only its decoder half: a stack of identical blocks with a causal mask, trained to predict the next token.<Cite id="radford2019" /> The model in the [code autocompletion project](/course/project-code-autocomplete/code-tiny-gpt/) is a GPT with four such blocks.
+
+## From translation to GPT
+
+Vaswani et al. introduced the Transformer in 2017 for translation, in a paper titled *Attention Is All You Need*. Their base model had 6 layers, vectors of size 512, 8 attention heads and an inner feed-forward size of 2048.<Cite id="vaswani2017" /> Because every position is processed at once instead of one after another, it trained much faster than recurrent models: the larger version reached 28.4 BLEU on English-to-German news translation after 3.5 days on eight GPUs.<Cite id="vaswani2017" />
+
+OpenAI's GPT-2 (2019) used a decoder-only stack and scaled it to 1.5 billion parameters, trained on about 40 GB of web text with a byte-level <Term slug="byte-pair-encoding" /> vocabulary of 50,257 tokens.<Cite id="radford2019" /> Karpathy's [nanoGPT](https://github.com/karpathy/nanoGPT) reproduces this recipe in a few hundred lines and includes a small character-level Shakespeare configuration; the course's project code follows its structure.<Cite id="nanogpt" />
+
+## Inside one block
+
+A GPT block has two sub-layers. First, causal multi-head <Term slug="self-attention" /> lets each token gather information from earlier tokens. Second, an MLP processes each token on its own: a linear layer that widens the vector four times, a <Term slug="gelu" /> non-linearity, and a linear layer back to the original size.<Cite id="nanogpt" /><Cite id="hendrycks2016" /> Each sub-layer is wrapped in two helpers:
+
+- A **residual connection** adds the sub-layer's output to its input, $x \leftarrow x + F(x)$, an idea taken from ResNet. The input passes through unchanged if the sub-layer contributes nothing, and the gradient has a direct path back.<Cite id="he2015-resnet" />
+- <Term slug="layer-normalization" /> rescales each token's vector to zero mean and unit variance, with a learned gain and bias.<Cite id="ba2016" /> GPT-2 moved it to the input of each sub-layer ("pre-LN") and added one after the last block, which also trains more stably in small models.<Cite id="radford2019" />
+
+<Analogy breaks="The 'talking' is a weighted average of vectors, not communication in any human sense.">
+A block is a meeting followed by private thinking: in attention each token listens to the earlier tokens, and in the MLP it works alone on what it heard. The residual stream is the shared notepad every block reads and adds to.
+</Analogy>
+
+Visual walk-throughs of these pieces are in Jay Alammar's [Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/) and, with full code, Harvard NLP's [Annotated Transformer](https://nlp.seas.harvard.edu/annotated-transformer/).<Cite id="illustrated-transformer" /><Cite id="annotated-transformer" />
+
+<MathSteps
+  title="A tiny GPT's forward pass, by shapes"
+  legend={[
+    { symbol: 'B, T', meaning: 'batch size and context length (tokens)' },
+    { symbol: 'd', meaning: 'vector size per token' },
+    { symbol: 'V', meaning: 'vocabulary size' },
+    { symbol: 'L', meaning: 'number of blocks' },
+  ]}
+>
+  <Step tex="x = \text{wte}[\text{idx}] + \hl{\text{wpe}[0..T-1]} \;\in\; \mathbb{R}^{B \times T \times d}" words="Look up a token embedding and a position embedding for every position, and add them." />
+  <Step tex="x \leftarrow x + \text{Attn}(\text{LN}_1(x))" words="Pre-LN causal self-attention with a residual connection: tokens exchange information." />
+  <Step tex="x \leftarrow x + \text{MLP}(\text{LN}_2(x)), \quad \text{MLP}: d \rightarrow 4d \rightarrow d" words="Pre-LN MLP with a residual connection: each token is processed separately. Repeat both lines L times." />
+  <Step tex="\text{logits} = \text{LN}_f(x)\, \hl{\text{wte}^\top} \;\in\; \mathbb{R}^{B \times T \times V}" words="A final LayerNorm, then scores for every vocabulary entry at every position, using the tied embedding matrix." />
+  <Step tex="\text{loss} = \text{CE}(\text{logits}[:, t],\ \text{idx}[:, t+1]) \text{ for all } t" words="Cross-entropy against the next token at every position at once: one sequence gives T training examples." />
+</MathSteps>
+
+## Positions and weight tying
+
+Attention on its own ignores word order: it computes weighted averages over a set. The original Transformer therefore added fixed <Term slug="positional-encoding">sinusoidal positional encodings</Term>, sines and cosines of different frequencies, to the token embeddings.<Cite id="vaswani2017" /> GPT models instead learn one position vector per slot, up to the maximum context length, and add it in the same way.<Cite id="radford2019" /><Cite id="nanogpt" /> A consequence is that a GPT cannot read more tokens than it has position vectors, so generation code crops the context.
+
+<Exercise id="adv-tf-order" />
+
+<Term slug="weight-tying" /> reuses the token-embedding matrix as the output layer. Press and Wolf showed in 2016 that tying the input and output embeddings reduces the parameter count and usually improves language models; nanoGPT and the course model do the same.<Cite id="press2016" /><Cite id="nanogpt" /> For GPT-2's vocabulary at $d = 768$, the shared matrix has $50{,}257 \times 768 \approx 38.6$ million entries, so tying saves that many parameters.
+
+## Counting parameters
+
+Inside a block, the query, key, value and output projections of attention are four $d \times d$ matrices, and the MLP has a $d \times 4d$ and a $4d \times d$ matrix. Biases and LayerNorm add only a few numbers per channel.<Cite id="nanogpt" />
+
+<MathSteps
+  title="The 12·L·d² rule, checked against nanoGPT"
+  legend={[
+    { symbol: 'L', meaning: 'number of blocks' },
+    { symbol: 'd', meaning: 'vector size' },
+    { symbol: 'V', meaning: 'vocabulary size' },
+  ]}
+>
+  <Step tex="\text{attention: } 4 \cdot d \cdot d = 4d^2" words="Q, K, V and the output projection W_O." />
+  <Step tex="\text{MLP: } d \cdot 4d + 4d \cdot d = 8d^2" words="Widen to 4d, then project back." />
+  <Step tex="\text{per block} \approx \hl{12d^2}, \quad \text{all blocks} \approx 12 L d^2" words="Ignore the small bias and LayerNorm terms." />
+  <Step tex="12 \cdot 6 \cdot 384^2 = 10{,}616{,}832" words="nanoGPT's Shakespeare configuration: 6 blocks of size 384." />
+  <Step tex="10{,}616{,}832 + 65 \cdot 384 = 10{,}641{,}792 \approx \hl{10.64\text{M}}" words="Add the tied token embeddings for 65 characters. nanoGPT prints 10.65M; the remaining few thousand are LayerNorm parameters, and its count leaves out the position embeddings." />
+</MathSteps>
+
+The same rule gives about 0.8 million for nanoGPT's CPU configuration (4 blocks of size 128) and 1.77 million for the project's 4 blocks of size 192.<Cite id="nanogpt" />
+
+<Exercise id="adv-tf-params" />
+
+## Estimating training compute
+
+Kaplan et al. (2020) estimate that a Transformer needs about $2N$ floating-point operations per token for the forward pass and about $6N$ for forward plus backward, where $N$ is the number of non-embedding parameters. Training on $D$ tokens therefore costs about $C \approx 6ND$.<Cite id="kaplan2020" /> The same paper reported that loss falls smoothly, as a power law, when parameters, data and compute grow together, the <Term slug="scaling-laws" />.<Cite id="kaplan2020" />
+
+<MathSteps
+  title="6 × params × tokens for nanoGPT's CPU run"
+  legend={[
+    { symbol: 'N', meaning: 'parameters' },
+    { symbol: 'D', meaning: 'training tokens' },
+    { symbol: 'C', meaning: 'training compute in FLOPs' },
+  ]}
+>
+  <Step tex="D = 2{,}000 \text{ steps} \times 12 \times 64 = 1{,}536{,}000 \text{ tokens}" words="nanoGPT's CPU example: 2,000 steps of 12 windows of 64 characters." />
+  <Step tex="C \approx 6 \times 0.8 \times 10^6 \times 1.536 \times 10^6 \approx \hl{7.4 \times 10^{12}}" words="About 7 trillion floating-point operations in total." />
+  <Step tex="\frac{7.4 \times 10^{12}}{10^{11}\ \text{FLOP/s}} \approx 74\ \text{s}" words="At an assumed 100 GFLOP/s for a laptop CPU, a little over a minute of pure arithmetic; overheads make the real run a few minutes." />
+</MathSteps>
+
+nanoGPT's README reports a validation loss of about 1.88 for that CPU run, against about 1.47 for the 10.65M-parameter model on a GPU.<Cite id="nanogpt" />
+
+## Where the projects use it
+
+- [Writing a tiny GPT](/course/project-code-autocomplete/code-tiny-gpt/) builds this exact block and counts its 1,823,040 parameters.
+- [Training the code model](/course/project-code-autocomplete/code-training/) prints the $6ND$ budget before training.
+- [Sampling completions](/course/project-code-autocomplete/code-sampling-eval/) generates code one token at a time with the trained model; see also [Language modelling, perplexity and sampling](/course/advanced/language-modeling-sampling/).
+
+## Try it
+
+The project's block and the start of the model class show every idea of this lesson: pre-LN, two residual additions, token plus position embeddings and weight tying.
+
+<CodeFile path="code/projects/project-code-autocomplete/model.py" lines="65-89" highlight="74,75,84,89" title="model.py: the block, position embeddings and weight tying" />
+
+Lines 74 and 75 are the two residual sub-layers, line 84 creates the learned position embeddings and line 89 ties the output layer to the token embeddings.
+
+## Summary
+
+- A GPT is a stack of blocks: pre-LN causal self-attention and a 4× MLP, each with a residual connection.
+- Attention ignores order, so token embeddings are added to position embeddings (learned in GPT, sinusoidal in the original Transformer).
+- Weight tying reuses the embedding matrix as the output layer and saves $V \times d$ parameters.
+- The blocks hold about $12 L d^2$ parameters: 10.6M for nanoGPT's Shakespeare model, 1.77M for the course's code model.
+- Training costs about $6ND$ FLOPs, a quick way to see whether a run fits on a laptop.

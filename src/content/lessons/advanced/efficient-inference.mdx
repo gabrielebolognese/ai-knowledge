@@ -1,0 +1,207 @@
+---
+title: "Efficient inference: quantization, pruning and export"
+slug: efficient-inference
+track: advanced
+level: advanced
+order: 120
+minutes: 20
+module: Reusing and shipping models
+summary: A trained model can be made smaller and faster before it ships. This lesson quantizes a weight to 8 bits by hand with a scale and zero-point, measures what dynamic quantization does to the digits CNN, and surveys pruning, distillation, ONNX export and NNUE's incremental updates.
+hatnote: For the chess engine's own speed tricks, see "Plugging the network into search (and the NNUE idea)".
+prerequisites: [convolutional-networks]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Explain int8 quantization with a scale and zero-point, by hand
+  - Measure model size and latency before and after dynamic quantization
+  - Name other speed-ups (pruning, distillation, ONNX export, incremental updates) and their trade-offs
+build: An 8-bit version of the digits CNN, with size, speed and accuracy measured
+reviewed: 2026-11-25
+seeAlso: [transfer-learning, convolutional-networks, chess-nn-search]
+sources:
+  - id: pt-quantization
+    title: Quantization
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/quantization.html
+    accessed: 2026-11-25
+    type: docs
+  - id: jacob2017
+    title: Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference
+    author: Benoit Jacob, Skirmantas Kligys, Bo Chen, Menglong Zhu, Matthew Tang, Andrew Howard, Hartwig Adam, Dmitry Kalenichenko
+    publisher: arXiv (CVPR 2018)
+    year: 2017
+    url: https://arxiv.org/abs/1712.05877
+    accessed: 2026-11-25
+    type: paper
+  - id: han2015
+    title: "Deep Compression: Compressing Deep Neural Networks with Pruning, Trained Quantization and Huffman Coding"
+    author: Song Han, Huizi Mao, William J. Dally
+    publisher: arXiv (ICLR 2016)
+    year: 2015
+    url: https://arxiv.org/abs/1510.00149
+    accessed: 2026-11-25
+    type: paper
+  - id: hinton2015
+    title: Distilling the Knowledge in a Neural Network
+    author: Geoffrey Hinton, Oriol Vinyals, Jeff Dean
+    publisher: arXiv
+    year: 2015
+    url: https://arxiv.org/abs/1503.02531
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-onnx
+    title: torch.onnx
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/onnx.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-pruning
+    title: Pruning Tutorial
+    author: Michela Paganini
+    publisher: PyTorch Tutorials
+    url: https://docs.pytorch.org/tutorials/intermediate/pruning_tutorial.html
+    accessed: 2026-11-25
+    type: docs
+  - id: onnxruntime
+    title: ONNX Runtime
+    publisher: Microsoft / ONNX Runtime project
+    url: https://onnxruntime.ai/
+    accessed: 2026-11-25
+    type: docs
+  - id: torchao
+    title: "torchao: PyTorch native quantization and sparsity"
+    publisher: PyTorch (GitHub)
+    url: https://github.com/pytorch/ao
+    accessed: 2026-11-25
+    type: code
+  - id: nnue-doc
+    title: NNUE (nnue-pytorch documentation)
+    publisher: Stockfish developers
+    url: https://official-stockfish.github.io/docs/nnue-pytorch-wiki/docs/nnue.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "Wikipedia: Knowledge distillation"
+    url: https://en.wikipedia.org/wiki/Knowledge_distillation
+  - title: "Wikipedia: Open Neural Network Exchange"
+    url: https://en.wikipedia.org/wiki/Open_Neural_Network_Exchange
+exercises:
+  - id: adv-quant-by-hand
+    type: numeric
+    difficulty: easy
+    title: Quantize one number
+    prompt: "Use the lesson's 8-bit mapping for the range $[-1, 1.55]$: scale $S = 0.01$, zero-point $Z = 100$, integers 0 to 255. What integer $q$ stores the value $1.2371$?"
+    answer: 224
+    tolerance: 0
+    hint: "$q = \\text{round}(x / S) + Z$."
+    explanation: "$1.2371 / 0.01 = 123.71$, which rounds to 124; adding $Z = 100$ gives $q = 224$. Decoding gives $0.01 \\cdot (224 - 100) = 1.24$, an error of $0.0029$, below the maximum $S/2 = 0.005$."
+  - id: adv-quant-nnue
+    type: numeric
+    difficulty: easy
+    title: An NNUE hidden weight
+    prompt: "Stockfish's NNUE stores hidden-layer weights as int8 with a scale of 64 (integer = round(weight × 64)). Which integer stores a float weight of 0.75?"
+    answer: 48
+    tolerance: 0
+    explanation: "$0.75 \\cdot 64 = 48$. The largest storable weight is $127 / 64 \\approx 1.98$, which is why the trainer clamps weights to that range: a quantized net only matches the float net if no weight falls outside it."
+  - id: adv-quant-no-speedup
+    type: mcq
+    difficulty: medium
+    title: Smaller but not faster
+    prompt: "Dynamic quantization made the digits CNN's file 3.5 times smaller, yet classifying 10,000 images took about as long as before. Why?"
+    options:
+      - Dynamic quantization converts only the Linear layers, and about 90% of the multiply-adds happen in the convolutions
+      - Integer arithmetic is always slower than floating point on CPUs
+      - The quantized model was still stored in float32
+      - The test images were quantized too, which cancels the gain
+    answer: 0
+    explanation: "fc1 holds 95% of the parameters, so quantizing it shrinks the file. But the two convolutions perform about 3.8 million of the 4.2 million multiply-adds per image, and they stay in float32. To speed up a CNN you need static quantization of the convolutions too, or a faster runtime."
+  - id: adv-quant-distill
+    type: reveal
+    difficulty: hard
+    title: What soft targets add
+    prompt: "In knowledge distillation the student learns from the teacher's softened probabilities instead of only the true labels. What information do the soft targets contain that a one-hot label does not, and how does the chess project use a similar idea?"
+    answer: "A one-hot label says only which class is right. The teacher's probabilities also say how similar the input is to every other class (this 2 looks a bit like a 7, not at all like a 4), and raising the temperature makes those small probabilities large enough to learn from. The chess project's evaluator is trained on Stockfish's scores rather than on game results alone, so a small network learns to imitate a much stronger teacher's judgement of each position."
+    explanation: "Hinton, Vinyals and Dean showed that these relative probabilities transfer much of a large model's knowledge to a small one. Learning from a teacher's continuous scores is the same principle in a regression setting."
+---
+
+**Efficient inference** is the work of making a trained model cheaper to run: smaller files, less memory and lower latency, ideally without losing accuracy.<Cite id="pt-quantization" /> The main tools are **quantization** (fewer bits per number), **pruning** (fewer weights), **distillation** (a smaller model that imitates a larger one) and **export** to a fast runtime.<Cite id="han2015" /> The chess engine's NNUE-style evaluator adds a fifth: never recompute what has not changed.
+
+## Where the cost goes
+
+Size and speed are different budgets. Size is the number of parameters times the bytes per parameter; speed depends mostly on the number of multiply-adds. In the [digits CNN](/course/advanced/convolutional-networks/), 95% of the 421,642 parameters sit in the first fully connected layer, but the two convolutions, which reuse their small kernels at every pixel, perform about 3.8 million of the roughly 4.2 million multiply-adds per image. Shrinking fc1 therefore shrinks the file but barely changes the running time, as the measurement below confirms.
+
+## Quantization: 32 bits down to 8
+
+A float32 number takes 4 bytes; an 8-bit integer takes 1. <Term slug="quantization" /> maps each real value onto one of 256 evenly spaced levels. Jacob and colleagues at Google described the affine scheme used by most frameworks: a real value $r$ is stored as an integer $q$ with $r = S(q - Z)$, where the **scale** $S$ is the step between levels and the **zero-point** $Z$ is the integer that represents exactly 0.<Cite id="jacob2017" /> Representing zero exactly matters, because zero-padding and ReLU outputs produce many exact zeros.<Cite id="jacob2017" />
+
+<Analogy breaks="A ruler's marks are fixed, while quantization picks its range and spacing separately for every tensor (or even every channel).">
+Quantization is like measuring with a ruler that has only 256 marks: each length is rounded to the nearest mark, so the result is never off by more than half a mark.
+</Analogy>
+
+<MathSteps
+  title="8-bit quantization by hand"
+  legend={[
+    { symbol: 'r', meaning: 'real (float) value' },
+    { symbol: 'q', meaning: 'stored integer, 0 to 255' },
+    { symbol: 'S', meaning: 'scale: real step between levels' },
+    { symbol: 'Z', meaning: 'zero-point: the integer that means 0.0' },
+  ]}
+>
+  <Step tex="S = \frac{r_{max} - r_{min}}{255} = \frac{1.55 - (-1)}{255} = \hl{0.01}" words="Spread the observed range of the values over the 255 gaps between 256 levels." />
+  <Step tex="Z = \text{round}\left(\frac{-r_{min}}{S}\right) = \text{round}(100) = \hl{100}" words="Choose the integer that lands exactly on real zero." />
+  <Step tex="q = \text{round}\left(\frac{0.4237}{0.01}\right) + 100 = 42 + 100 = \hl{142}" words="Quantize a weight of 0.4237: divide by the step, round, shift by the zero-point." />
+  <Step tex="\hat r = S(q - Z) = 0.01 \cdot (142 - 100) = \hl{0.42}" words="Decode it. The rounding error is 0.0037, and it can never exceed S/2 = 0.005." />
+  <Step tex="-128 \ldots 127: \quad Z = -28, \quad q = 42 - 28 = \hl{14}" words="With signed int8, as PyTorch uses for weights, every integer shifts down by 128; the decoded value is the same 0.42." />
+</MathSteps>
+
+Quantization can also happen during training. Jacob and colleagues simulated the rounding in the forward pass while training, so the network learns weights that survive it; this is *quantization-aware training*.<Cite id="jacob2017" /> PyTorch's documentation distinguishes **dynamic** quantization (weights converted ahead of time, activations quantized on the fly, mainly for `Linear` and recurrent layers), **static** quantization (activations calibrated on sample data, needed for convolutions) and quantization-aware training.<Cite id="pt-quantization" />
+
+## Measured: dynamic quantization of the digits CNN
+
+The script below quantizes the fc1 weight matrix by hand with the formulas above, then applies PyTorch's dynamic quantization to all `Linear` layers of the trained digits model and compares the two versions:
+
+<CodeFile path="code/core/advanced/quantize_cnn.py" lines="26-36" highlight="29,30,31,36" title="Affine int8 quantization (quantize_cnn.py)" />
+
+One CPU run printed:
+
+| | float32 | int8 Linear layers |
+|---|---|---|
+| Saved file | 1,689,933 bytes | 483,327 bytes |
+| Test accuracy (10,000 digits) | 98.91% | 98.91% |
+| Time for 10,000 images | about 1.6-1.7 s | about 1.6-1.8 s |
+
+For fc1 the script found $S = 0.00225$ and $Z = -6$, with a largest rounding error of $0.001125$, exactly $S/2$. The file shrank 3.5 times with no loss of accuracy, but the speed did not change, because the convolutions still run in float32. A CNN needs static quantization of its convolutions to get faster.
+
+<Callout type="note">
+The PyTorch build used here (2.15) prints a notice that `torch.ao.quantization` is deprecated and that new code should use the separate [torchao](https://github.com/pytorch/ao) library, which provides quantization and sparsity for PyTorch models.<Cite id="torchao" /> The scale and zero-point arithmetic is the same in both.
+</Callout>
+
+## Pruning
+
+<Term slug="network-pruning" /> removes weights that contribute little, usually those with the smallest magnitude, and then retrains the rest. In *Deep Compression*, Han, Mao and Dally combined pruning, which cut AlexNet's connections about 9 times, with quantization to a few shared values and Huffman coding. Together these shrank AlexNet 35 times, from 240 MB to 6.9 MB, and VGG-16 49 times, without loss of accuracy.<Cite id="han2015" />
+
+The trade-off is that scattered zeros only save time when the software or hardware can skip them; ordinary dense matrix code multiplies the zeros anyway. PyTorch's `torch.nn.utils.prune` supports both this *unstructured* pruning and *structured* pruning, which removes whole channels and leaves a smaller dense layer that is faster with any software.<Cite id="pt-pruning" />
+
+## Distillation
+
+<Term slug="knowledge-distillation" /> trains a small *student* model to reproduce the outputs of a large *teacher*. Hinton, Vinyals and Dean softened the teacher's probabilities with a temperature $T$ in the softmax, $p_i = e^{z_i/T} / \sum_j e^{z_j/T}$.<Cite id="hinton2015" /> For logits $(5, 2, 1)$, $T = 1$ gives probabilities $(0.936, 0.047, 0.017)$, while $T = 4$ gives $(0.543, 0.257, 0.200)$, which reveals how the teacher ranks the wrong classes. Those relative probabilities carry information a one-hot label lacks, and the authors showed a small network trained on them comes much closer to the large one.<Cite id="hinton2015" />
+
+The chess project uses the same principle. Its [768→256→32→1 evaluator](/course/project-chess/chess-train-evaluator/) is not trained on game results but on Stockfish's evaluations, so a 205,121-parameter network learns to imitate a far stronger teacher.
+
+## Export to a runtime
+
+Python and PyTorch are convenient for training but heavy to ship. <Term slug="onnx" /> ([onnx.ai](https://onnx.ai/)) is an open file format for neural networks, and `torch.onnx.export` writes a PyTorch model into it.<Cite id="pt-onnx" /> The file can then run in ONNX Runtime, which offers APIs for C++, C#, Java, JavaScript and other languages, and applies graph optimisations and hardware-specific acceleration.<Cite id="onnxruntime" /> The drawing apps in the vision projects could be served this way without installing PyTorch.
+
+## Incremental updates: the NNUE idea
+
+The most effective speed-up is to avoid work altogether. A chess engine evaluates millions of positions that differ by a single move. In Stockfish's <Term slug="nnue" />, the first layer's output, the *accumulator*, is the sum of the weight columns of the active piece-square features, so a quiet move needs only one column subtracted and one added instead of a full recomputation.<Cite id="nnue-doc" /> The project's model computes exactly that sum:
+
+<CodeFile path="code/projects/project-chess/model.py" lines="67-72" highlight="69,70" title="The accumulator in the chess evaluator (model.py)" />
+
+Stockfish also quantizes: the first layer uses int16 values scaled by 127, and the hidden layers use int8 weights scaled by 64, so the largest weight is $127/64 \approx 1.98$ and rescaling is a bit shift.<Cite id="nnue-doc" /> In Python the accumulator raised the project engine's speed only from 4,330 to 5,146 nodes per second, because interpreter overhead dominates; see [Plugging the network into search](/course/project-chess/chess-nn-search/) for the measurement.
+
+## Summary
+
+- Size depends on parameters × bytes; speed depends on multiply-adds. Check which one you need to cut.
+- Affine quantization stores $r = S(q - Z)$; 8 bits make weights 4 times smaller with an error of at most $S/2$.
+- Dynamic quantization shrank the digits CNN 3.5 times at the same 98.91% accuracy, but not its running time.
+- Pruning, distillation, ONNX export and incremental updates (NNUE) each trade effort, accuracy and portability differently.

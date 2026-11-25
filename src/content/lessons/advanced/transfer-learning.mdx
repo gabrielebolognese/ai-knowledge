@@ -1,0 +1,192 @@
+---
+title: Transfer learning and fine-tuning
+slug: transfer-learning
+track: advanced
+level: advanced
+order: 110
+minutes: 20
+module: Reusing and shipping models
+summary: Transfer learning starts from a network trained on another task instead of random weights. This lesson explains why early features are general, fine-tunes a pretrained torchvision ResNet, and measures digits-to-letters transfer with the course's own CNN.
+hatnote: 'For how residual networks are built, see "Deep CNNs: from LeNet to ResNet".'
+prerequisites: [deep-cnns-resnets]
+tools: [Python 3, PyTorch, torchvision]
+outcomes:
+  - Explain why features learned on one task transfer to another
+  - "Fine-tune a pretrained torchvision model: freeze, replace the head, train"
+  - Choose between feature extraction and full fine-tuning
+build: A digits-to-letters transfer experiment with three training strategies
+reviewed: 2026-11-25
+seeAlso: [deep-cnns-resnets, efficient-inference, emnist-letters]
+sources:
+  - id: pt-transfer
+    title: Transfer Learning for Computer Vision Tutorial
+    author: Sasank Chilamkurthy
+    publisher: PyTorch Tutorials
+    url: https://docs.pytorch.org/tutorials/beginner/transfer_learning_tutorial.html
+    accessed: 2026-11-25
+    type: docs
+  - id: yosinski2014
+    title: How transferable are features in deep neural networks?
+    author: Jason Yosinski, Jeff Clune, Yoshua Bengio, Hod Lipson
+    publisher: arXiv (NeurIPS 2014)
+    year: 2014
+    url: https://arxiv.org/abs/1411.1792
+    accessed: 2026-11-25
+    type: paper
+  - id: tv-models
+    title: "Models and pre-trained weights (torchvision.models)"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/vision/stable/models.html
+    accessed: 2026-11-25
+    type: docs
+  - id: d2l-fine-tuning
+    title: "Dive into Deep Learning, 14.2 Fine-Tuning"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_computer-vision/fine-tuning.html
+    accessed: 2026-11-25
+    type: book
+  - id: wiki-transfer
+    title: Transfer learning
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Transfer_learning
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: pt-batchnorm2d
+    title: torch.nn.BatchNorm2d
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
+    accessed: 2026-11-25
+    type: docs
+furtherReading:
+  - title: "CS231n: Transfer Learning"
+    url: https://cs231n.github.io/transfer-learning/
+exercises:
+  - id: adv-tl-strategy
+    type: mcq
+    difficulty: easy
+    title: Pick a strategy
+    prompt: "You have 300 labelled photos of three bird species and a ResNet pretrained on ImageNet. Which approach is the most sensible first try?"
+    options:
+      - Train a ResNet from random weights on the 300 photos
+      - Freeze the pretrained body, replace the final layer with a 3-class layer and train only that layer
+      - Fine-tune every layer with a large learning rate such as 0.1
+      - Use the pretrained model unchanged and read its 1,000 ImageNet outputs
+    answer: 1
+    explanation: "With very little data from a domain close to ImageNet (photos of animals), the pretrained features are already good, and training only a small new head avoids overfitting. Training from scratch would overfit 300 images; a large learning rate on all layers would wreck the pretrained features; the unchanged model predicts ImageNet classes, not your three species."
+  - id: adv-tl-head-params
+    type: numeric
+    difficulty: easy
+    title: Size of the new head
+    prompt: "ResNet-18's final layer is `Linear(512, 1000)`. You replace it with `nn.Linear(512, 5)` and freeze everything else. How many parameters will the optimiser train?"
+    answer: 2565
+    tolerance: 0
+    hint: "Weights plus biases of the new layer only."
+    explanation: "$512 \\cdot 5 = 2{,}560$ weights plus 5 biases gives 2,565 trainable parameters, out of about 11.2 million in the whole network."
+  - id: adv-tl-small-lr
+    type: mcq
+    difficulty: medium
+    title: Two learning rates
+    prompt: "When fine-tuning all layers, why do practitioners give the pretrained body a smaller learning rate than the new head?"
+    options:
+      - The body has fewer parameters, so it needs smaller steps
+      - The body's weights are already useful, and large updates driven by the random new head would destroy them
+      - PyTorch does not allow the same learning rate for two parameter groups
+      - A smaller learning rate makes the forward pass faster
+    answer: 1
+    explanation: "At the start the new head is random, so its gradients are large and noisy. Small steps let the body adapt gently instead of being overwritten. Dive into Deep Learning uses a 10 times larger rate for the output layer for this reason, and the course's transfer script uses 1e-4 for the body and 1e-3 for the head."
+  - id: adv-tl-when-small
+    type: reveal
+    difficulty: hard
+    title: Why so little gain?
+    prompt: "In the course's experiment, reusing the digits CNN for letters gained only 1-2 percentage points with 2,000 training letters and did not help with 500. Give two reasons, using what Yosinski et al. found."
+    answer: "First, the digits CNN has only two convolutional layers, and such early layers learn general features (strokes, edges) that a network also learns quickly from scratch, so there is little to save. Second, the transferred fully connected layer is specific to digits, and digits are a different, smaller task than letters, so its features fit letters only partly; with very few examples, adapting those mismatched layers can even hurt. Big gains come from deep networks pretrained on millions of varied images."
+    explanation: "Yosinski et al. showed that features move from general in the first layers to task-specific in the last, and that transferability falls as the source and target tasks grow apart. Transfer pays off most when the pretrained network is large and its source data broad."
+---
+
+**Transfer learning** reuses a network trained on one task as the starting point for another, instead of starting from random weights.<Cite id="wiki-transfer" /> Its most common form in deep learning is **fine-tuning**: take a model pretrained on a large dataset such as <Term slug="imagenet" />, replace its output layer, and train on your own, often much smaller, dataset.<Cite id="d2l-fine-tuning" /> It is the standard way to get good results with a few hundred labelled images.
+
+## Why features transfer
+
+A CNN trained on photographs learns a hierarchy: edges and colour blobs in the first layer, textures and parts in the middle, task-specific detectors at the end.<Cite id="yosinski2014" /> Yosinski, Clune, Bengio and Lipson measured this directly. They found that first-layer features look much the same whatever dataset the network was trained on, and that features become more specific to the original task layer by layer.<Cite id="yosinski2014" />
+
+Their experiments also showed two costs of copying layers: higher layers are specialised to the original task, and splitting the network in the middle breaks units that had learned to work together. Transferability fell as the two tasks became less similar, yet even features from a distant task beat random weights. Most usefully, starting from transferred layers and then fine-tuning them gave *better* accuracy than training from scratch, even with plenty of target data.<Cite id="yosinski2014" />
+
+<Analogy breaks="A driver knows which skills carry over; a network has no such insight, and the useful layers have to be found by experiment.">
+Someone who can drive a car learns to drive a van in an afternoon: steering, traffic rules and judging distances carry over, and only the size and the mirrors are new.
+</Analogy>
+
+## The recipe: freeze, replace, train
+
+The [torchvision models page](https://docs.pytorch.org/vision/stable/models.html) lists pretrained networks together with their weights and the exact preprocessing they expect.<Cite id="tv-models" /> For ResNet-18, `ResNet18_Weights.DEFAULT` loads weights that reach 69.8% top-1 accuracy on ImageNet, and `weights.transforms()` resizes to 256, crops to 224 and normalises with the ImageNet mean and standard deviation.<Cite id="tv-models" />
+
+```python
+import torch
+from torch import nn
+from torchvision.models import resnet18, ResNet18_Weights
+
+weights = ResNet18_Weights.DEFAULT
+model = resnet18(weights=weights)            # downloads ~45 MB once
+preprocess = weights.transforms()            # the preprocessing the weights expect
+
+for p in model.parameters():                 # 1. freeze the pretrained body
+    p.requires_grad = False
+model.fc = nn.Linear(model.fc.in_features, 3)    # 2. new head: 512 -> 3 classes
+optimizer = torch.optim.SGD(model.fc.parameters(), lr=1e-3, momentum=0.9)  # 3. train the head
+```
+
+The [official PyTorch tutorial](https://docs.pytorch.org/tutorials/beginner/transfer_learning_tutorial.html) uses this setup to classify ants and bees from about 120 training images per class, a dataset far too small to train a ResNet from scratch.<Cite id="pt-transfer" /> It compares two scenarios. In **fine-tuning**, all layers are trained, starting from the pretrained weights. In **feature extraction**, the body is frozen and only the new final layer learns; the tutorial notes that this takes about half the time on a CPU, since gradients are not needed for most of the network.<Cite id="pt-transfer" />
+
+<MathSteps
+  title="How much a frozen ResNet-18 actually trains"
+  legend={[
+    { symbol: 'N_{total}', meaning: 'all parameters of ResNet-18' },
+    { symbol: 'N_{head}', meaning: 'parameters of the final layer' },
+  ]}
+>
+  <Step tex="N_{total} = 11{,}689{,}512, \quad N_{head} = 512 \cdot 1000 + 1000 = \hl{513{,}000}" words="The pretrained network ends with a 512-to-1000 layer for the ImageNet classes." />
+  <Step tex="N_{body} = 11{,}689{,}512 - 513{,}000 = \hl{11{,}176{,}512}" words="Everything before the head is the body, which stays frozen." />
+  <Step tex="N_{new} = 512 \cdot 2 + 2 = \hl{1{,}026}" words="A new two-class head for ants and bees." />
+  <Step tex="\frac{1{,}026}{11{,}176{,}512 + 1{,}026} \approx \hl{0.009\%}" words="Feature extraction trains less than a ten-thousandth of the network, which is why a few hundred images suffice." />
+</MathSteps>
+
+## Feature extraction or full fine-tuning?
+
+| Situation | Usual choice |
+|---|---|
+| Little data, similar to the pretraining images | Freeze the body, train a new head |
+| More data, or a somewhat different domain | Fine-tune all layers, with a small learning rate for the body |
+| Very different inputs (X-rays, sketches, spectrograms) | Fine-tune more layers, or compare against training from scratch |
+
+When fine-tuning everything, the pretrained layers get a smaller learning rate than the new head. Dive into Deep Learning's hot-dog example trains the output layer with a learning rate ten times that of the pretrained layers, so that large, noisy gradients from the random head do not wreck useful features.<Cite id="d2l-fine-tuning" /> In its experiment the fine-tuned model beat an identical network trained from scratch.<Cite id="d2l-fine-tuning" />
+
+<Callout type="pitfall">
+`requires_grad = False` stops the weights from changing but not the <Term slug="batch-normalization" /> running statistics: in `model.train()` mode those keep updating from your batches.<Cite id="pt-batchnorm2d" /> To keep a frozen body truly fixed, put its BatchNorm layers in `eval()` mode.
+</Callout>
+
+## When transfer does not help
+
+Transfer can fail, or even hurt, when the source and target tasks are too different; the literature calls this *negative transfer*.<Cite id="wiki-transfer" /> Practical mismatches matter too. ImageNet models expect 224×224 colour photos, so 28×28 grayscale digits would have to be enlarged and copied into three channels, and on MNIST a small CNN trained from scratch already reaches about 99%. The projects in this course therefore train their own small networks.
+
+## Measured on the course's own models
+
+The handwriting project trains a digits CNN first and then [a letters CNN](/course/project-digits-letters/emnist-letters/) with the same architecture. That makes digits-to-letters a clean small experiment: `transfer_digits_to_letters.py` loads the trained [digits model](/course/project-digits-letters/mnist-cnn/), keeps everything except the 10-class output layer, and compares three strategies on the same small set of letters.
+
+<CodeFile path="code/core/advanced/transfer_digits_to_letters.py" lines="35-48" highlight="40,41,45,47" title="Three ways to start the letters model" />
+
+With 2,000 training letters, 10 epochs and 5,000 test letters, one CPU run printed:
+
+| Strategy | Trainable parameters | Test accuracy |
+|---|---|---|
+| From scratch | 423,706 | 81.5% |
+| Frozen conv layers (feature extraction) | 404,890 | 82.6% |
+| Fine-tune all, body at 1e-4 | 423,706 | 83.5% |
+
+The gain is real but small, and with only 500 training letters transfer did not help at all (62.1% from scratch against 57.5-58.0%). The digits network is shallow, its two convolutional layers learn generic strokes that a network also learns quickly from scratch, and digits are a narrow source task. This matches Yosinski and colleagues' finding that transferability depends on depth and on how related the tasks are.<Cite id="yosinski2014" /> Large gains come from deep networks pretrained on millions of varied images. Run the script with `--train-size 500` to see the small-data case yourself; numbers vary slightly between machines.
+
+## Summary
+
+- Transfer learning starts from pretrained weights; fine-tuning adapts them to a new task.
+- Early layers learn general features and later layers task-specific ones, so the head is replaced and the body reused.
+- Feature extraction freezes the body and trains a tiny head; full fine-tuning trains everything with a small learning rate for the body.
+- Transfer helps most with little data and a large, broadly pretrained source model; on the course's shallow digits CNN the gain is 1-2 points.

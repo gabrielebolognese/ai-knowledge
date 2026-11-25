@@ -1,0 +1,220 @@
+---
+title: "Game-tree search: minimax and alpha-beta"
+slug: game-tree-search
+track: advanced
+level: advanced
+order: 90
+minutes: 25
+module: "Games: search and self-play"
+summary: Game-tree search chooses a move by looking ahead and assuming both players play their best. This lesson scores a small tree with minimax, rewrites it as negamax, traces alpha-beta pruning leaf by leaf, and shows why move ordering decides how much alpha-beta saves.
+hatnote: For the same search inside a real chess engine, see "Negamax search with alpha-beta pruning" in the chess project.
+prerequisites: []
+tools: [Python 3]
+outcomes:
+  - Build a game tree and score it with minimax by hand
+  - Rewrite minimax as negamax
+  - Prune a tree with alpha-beta and count the nodes saved
+  - Explain why move ordering makes pruning stronger
+build: Minimax, negamax and alpha-beta on tic-tac-toe, with node counts
+reviewed: 2026-11-25
+seeAlso: [reinforcement-learning-self-play]
+sources:
+  - id: wiki-minimax
+    title: Minimax
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Minimax
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: cpw-minimax
+    title: Minimax
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Minimax
+    accessed: 2026-11-25
+    type: docs
+  - id: cpw-negamax
+    title: Negamax
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Negamax
+    accessed: 2026-11-25
+    type: docs
+  - id: cpw-alphabeta
+    title: Alpha-Beta
+    publisher: Chessprogramming Wiki
+    url: https://www.chessprogramming.org/Alpha-Beta
+    accessed: 2026-11-25
+    type: docs
+  - id: wiki-alphabeta
+    title: Alpha–beta pruning
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Alpha%E2%80%93beta_pruning
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: knuth1975
+    title: An Analysis of Alpha-Beta Pruning
+    author: Donald E. Knuth, Ronald W. Moore
+    publisher: Artificial Intelligence 6(4)
+    year: 1975
+    url: https://doi.org/10.1016/0004-3702%2875%2990019-3
+    accessed: 2026-11-25
+    type: paper
+  - id: shannon1950
+    title: Programming a Computer for Playing Chess
+    author: Claude E. Shannon
+    publisher: Philosophical Magazine 41(314)
+    year: 1950
+    url: https://doi.org/10.1080/14786445008521796
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "Chessprogramming Wiki: Move Ordering"
+    url: https://www.chessprogramming.org/Move_Ordering
+  - title: "Russell and Norvig, Artificial Intelligence: A Modern Approach (book site)"
+    url: https://aima.cs.berkeley.edu/
+exercises:
+  - id: adv-gts-minimax-value
+    type: numeric
+    difficulty: easy
+    title: Score a tree with minimax
+    prompt: "The root is a MAX node with three moves. Each leads to a MIN node whose leaves are, left to right, $[3, 9]$, $[6, 7]$ and $[2, 8]$. What is the minimax value of the root?"
+    answer: 6
+    tolerance: 0
+    hint: "Each MIN node takes the smaller of its leaves; the root takes the largest of those."
+    explanation: "The MIN nodes are worth 3, 6 and 2. MAX picks the best of them, 6, so the middle move is chosen."
+  - id: adv-gts-leaves-seen
+    type: numeric
+    difficulty: medium
+    title: Count what alpha-beta looks at
+    prompt: "Search the same tree ($[3, 9]$, $[6, 7]$, $[2, 8]$) with alpha-beta, left to right. How many of the 6 leaves are evaluated?"
+    answer: 5
+    tolerance: 0
+    hint: "After each MIN node, alpha is the best value MAX is already guaranteed. A MIN node can stop as soon as one of its leaves is at or below alpha."
+    explanation: "Both leaves of the first node are needed (alpha becomes 3). In the second node, 6 and 7 are both above 3, so both are needed (alpha becomes 6). In the third node the first leaf, 2, is already at or below 6, so the leaf 8 is skipped. That is 5 of 6 leaves."
+  - id: adv-gts-ordering
+    type: mcq
+    difficulty: medium
+    title: Why order moves?
+    prompt: Two versions of the same alpha-beta engine differ only in the order they try moves. What can differ between them?
+    options:
+      - The value they return for the root position
+      - The number of nodes they visit, and so how deep they can search in the same time
+      - Whether they find checkmates at all
+      - Nothing; alpha-beta ignores move order
+    answer: 1
+    explanation: "Alpha-beta always returns the minimax value, whatever the order. Order only changes how many branches are cut off: from no pruning at all in the worst order to roughly the square root of the tree size in the best. Fewer nodes per depth means more depth in the same time, which is why engines spend so much effort on move ordering."
+  - id: adv-gts-negamax-sign
+    type: reveal
+    difficulty: hard
+    title: The minus sign in negamax
+    prompt: "Negamax computes $V(p) = \\max_m \\big(-V(p \\text{ after } m)\\big)$. Explain the minus sign, and say what the evaluation function must return for this to work."
+    answer: "After my move it is the opponent's turn, so V of the child is the score from the opponent's point of view. In a zero-sum game their gain is my loss, so the child's value for me is its negative. The evaluation must therefore score positions for the side to move, not always for White."
+    explanation: "Negamax uses the identity $\\max(a, b) = -\\min(-a, -b)$ to merge the MAX and MIN cases into one function. If the evaluation always scored from White's point of view, the signs would be wrong on every Black move."
+---
+
+**Game-tree search** is the method computer programs use to choose moves in two-player games such as tic-tac-toe, checkers and chess: imagine every possible move, every reply to it, and so on, then pick the move whose worst case is best.<Cite id="cpw-minimax" /> Its basic rule, **minimax**, assumes both players always play their best. **Alpha-beta pruning** returns exactly the same answer while skipping branches that cannot change it, which is why it powers the search of the chess engine built later in the course.<Cite id="cpw-alphabeta" />
+
+## Search and evaluation
+
+A position is the root of a <Term slug="game-tree" />. Each legal move is a branch to a child position, and each child has its own branches for the opponent's replies.<Cite id="wiki-minimax" /> One move by one player is called a *ply*. In 1950 Claude Shannon described how a chess program could search such a tree to a fixed depth and score the positions at the bottom with an evaluation function.<Cite id="shannon1950" /> Those two parts, search and evaluation, still structure every chess engine.
+
+The tree grows fast. With a branching factor $b$ of about 35 legal moves in a chess middlegame and a depth of $d$ plies, a full search visits about $b^d$ positions: $35^4 \approx 1.5$ million, and $35^6 \approx 1.8$ billion.<Cite id="cpw-minimax" /> Even tic-tac-toe has a full game tree of 549,946 positions when searched from the empty board, as the script at the end of this lesson counts.
+
+<Analogy breaks="A hiker's gut feeling and lookahead are not separate machines; in an engine they are two different functions, and either can be improved without the other.">
+Search is a hiker looking ahead at forks in the path; evaluation is the hiker's gut feeling about the view from any one spot. A better gut feeling means fewer paths must be walked to choose well.
+</Analogy>
+
+## Minimax
+
+<Term slug="minimax">Minimax</Term> labels the levels of the tree. At MAX levels, the player to move picks the child with the highest value; at MIN levels, the opponent picks the lowest. Values flow up from the leaves, which are scored by the evaluation function or by the game result.<Cite id="cpw-minimax" /> The name comes from game theory, where John von Neumann proved the minimax theorem for zero-sum games in 1928.<Cite id="wiki-minimax" />
+
+Take a root where MAX has three moves, a, b and c. Each leads to a MIN node with three leaves: a has $[4, 6, 5]$, b has $[7, 2, 9]$ and c has $[1, 8, 3]$.
+
+<MathSteps
+  title="Minimax and negamax on a two-ply tree"
+  legend={[
+    { symbol: 'V(p)', meaning: 'value of position p' },
+    { symbol: 'm', meaning: 'a legal move' },
+  ]}
+>
+  <Step tex="V(a) = \min(4, 6, 5) = \hl{4}" words="At a MIN node the opponent picks the reply that is worst for MAX." />
+  <Step tex="V(b) = \min(7, 2, 9) = \hl{2}, \quad V(c) = \min(1, 8, 3) = \hl{1}" words="Do the same for the other two moves. Move b has a tempting 9, but the opponent will answer with 2." />
+  <Step tex="V(\text{root}) = \max(4, 2, 1) = \hl{4}" words="MAX picks the move with the best guaranteed outcome, so the answer is move a, worth 4." />
+  <Step tex="\max(a, b) = -\min(-a, -b)" words="This identity lets one function play both sides: a minimum is a maximum of negated values." />
+  <Step tex="V(p) = \max_{m} \big(\hl{-}V(p \text{ after } m)\big)" words="This is negamax. Every value is scored for the side to move, and the sign flips at each ply, because a position worth +3 for the opponent is worth −3 for me." />
+</MathSteps>
+
+**Negamax** is simply this compact form of minimax. It needs one condition: the evaluation must return scores from the point of view of the side to move.<Cite id="cpw-negamax" /> The chess project's evaluator, and later its neural network, are built that way for this reason.
+
+## Alpha-beta pruning
+
+<Term slug="alpha-beta-pruning">Alpha-beta</Term> carries two bounds down the tree. **Alpha** is the score the maximising player is already guaranteed elsewhere; **beta** is the most the opponent will allow, because they already have a better option elsewhere.<Cite id="cpw-alphabeta" /> As soon as a branch is proven to be no better than alpha for MAX, the rest of it can be skipped: whatever is in it, MAX will not choose it.<Cite id="wiki-alphabeta" /> Knuth and Moore published the classic analysis of the method in 1975.<Cite id="knuth1975" />
+
+<Analogy breaks="Flight prices are known exactly once quoted; in a game tree the 'price' of a branch is itself the result of a search further down.">
+You are shopping for the cheapest flight and already have one for €100. The next airline's first quote is €140 and its fares can only be at least that, so you close its website without reading the rest.
+</Analogy>
+
+Trace it on the same tree, visiting moves in the order a, b, c.
+
+<MathSteps
+  title="Alpha-beta, one leaf at a time"
+  legend={[
+    { symbol: '\\alpha', meaning: 'best score MAX is already guaranteed' },
+    { symbol: '\\beta_x', meaning: 'best (lowest) score MIN has found so far inside node x' },
+  ]}
+>
+  <Step tex="V(a) = \min(4, 6, 5) = 4 \;\Rightarrow\; \hl{\alpha = 4}" words="The first move must be searched completely. Afterwards MAX knows it can get at least 4." />
+  <Step tex="\text{leaf } 7:\; \beta_b = 7 > \alpha" words="The first reply in b is worth 7. MIN might still find something lower, so keep going." />
+  <Step tex="\text{leaf } 2:\; \beta_b = 2 \le \alpha = 4 \;\Rightarrow\; \hl{\text{cutoff}}" words="MIN can hold b to 2 or less, which is worse for MAX than the 4 already guaranteed. The leaf 9 is never examined." />
+  <Step tex="\text{leaf } 1:\; \beta_c = 1 \le \alpha = 4 \;\Rightarrow\; \hl{\text{cutoff}}" words="The very first reply in c already refutes it, so the leaves 8 and 3 are skipped." />
+  <Step tex="V(\text{root}) = 4, \quad \text{leaves seen} = 3 + 2 + 1 = \hl{6 \text{ of } 9}" words="Same answer as minimax, a third less work. In a deeper tree, every skipped leaf would have been a whole skipped subtree." />
+</MathSteps>
+
+<Exercise id="adv-gts-leaves-seen" />
+
+## Why move ordering matters
+
+Alpha-beta always returns the minimax value, but how much it saves depends on the order in which moves are tried, called <Term slug="move-ordering" />.<Cite id="cpw-alphabeta" /> If the same tree is searched in the order c, b, a, alpha starts at 1, then rises to 2, and no leaf is ever low enough to cut: all 9 leaves are evaluated. If, instead, the best move comes first and each refutation is the first reply tried, only 5 leaves are needed.
+
+<MathSteps
+  title="Best and worst cases (Knuth and Moore)"
+  legend={[
+    { symbol: 'b', meaning: 'branching factor' },
+    { symbol: 'd', meaning: 'search depth in plies' },
+  ]}
+>
+  <Step tex="\text{worst order: } b^{d}" words="With the worst ordering nothing is pruned, and alpha-beta visits as many leaves as minimax." />
+  <Step tex="\text{best order: } b^{\lceil d/2 \rceil} + b^{\lfloor d/2 \rfloor} - 1" words="With perfect ordering, Knuth and Moore showed this minimum number of leaves." example="our tree: 3 + 3 − 1 = 5" />
+  <Step tex="b = 40,\ d = 6:\quad 40^6 = 4{,}096{,}000{,}000 \;\to\; 40^3 + 40^3 - 1 = \hl{127{,}999}" words="For a chess-like tree, perfect ordering cuts four billion leaves to about 128 thousand." />
+  <Step tex="b^{d/2} = \sqrt{b^{d}}" words="The best case is roughly the square root of the full tree, so in the same time the search can reach about twice the depth." />
+</MathSteps>
+
+This is the formula from Knuth and Moore's analysis, and the Chessprogramming Wiki works the same $b = 40$, $d = 6$ example.<Cite id="knuth1975" /><Cite id="cpw-alphabeta" /> Perfect ordering is impossible, since knowing the best move first is the whole problem, but good guesses get close: try captures of valuable pieces first, and the move that was best in a shallower search.
+
+## Try it
+
+The companion script searches tic-tac-toe from the empty board four ways. The alpha-beta version is negamax plus the window; note the swapped and negated window passed to the child:
+
+<CodeFile path="code/core/advanced/tictactoe_search.py" lines="89-107" highlight="101,103,104,105" title="tictactoe_search.py: negamax with alpha-beta" />
+
+Running `python tictactoe_search.py` first replays the tree above (6 leaves in order a, b, c; 9 in order c, b, a; 5 with perfect ordering), then prints:
+
+```text
+minimax                value +0   positions visited 549,946
+negamax                value +0   positions visited 549,946
+alpha-beta             value +0   positions visited  18,297
+alpha-beta + ordering  value +0   positions visited   7,275
+```
+
+All four agree that perfect play is a draw. Alpha-beta visits 30 times fewer positions, and simply trying the centre first, then corners, then edges, cuts the count by more than half again.
+
+## In the chess project
+
+The chess track uses exactly this search with a chess evaluation at the leaves. [Negamax search with alpha-beta pruning](/course/project-chess/chess-alpha-beta/) adds checkmate and draw scores; at depth 3 from the starting position, plain minimax visited 9,322 nodes and alpha-beta 883. [Move ordering and quiescence search](/course/project-chess/chess-ordering-quiescence/) applies the ordering lesson above, and [Plugging the network into search](/course/project-chess/chess-nn-search/) replaces the hand-written evaluation with a neural network. The core loop in the engine is the same as in the tic-tac-toe script:
+
+<CodeFile path="code/projects/project-chess/search.py" lines="289-303" highlight="292,300" title="search.py: the engine's alpha-beta loop" />
+
+## Summary
+
+- Game-tree search looks ahead through moves and replies; a full search costs about $b^d$ positions.
+- Minimax backs up values from the leaves: MAX takes the highest child, MIN the lowest. Negamax writes this once by flipping the sign at each ply, with side-to-move scores.
+- Alpha-beta keeps a window $[\alpha, \beta]$ and skips branches that cannot change the result; the answer equals minimax.
+- Move ordering decides the savings: from none in the worst order to about $\sqrt{b^d}$ leaves in the best.

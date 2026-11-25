@@ -1,0 +1,223 @@
+---
+title: Attention, step by step
+slug: attention
+track: advanced
+level: advanced
+order: 50
+minutes: 25
+module: Sequences and language
+summary: Attention lets every token build its output as a weighted average of other tokens, with weights from how well a query matches each key. This lesson computes scaled dot-product attention by hand for three tokens, explains the √d scaling, applies a causal mask and introduces multi-head attention.
+hatnote: For the code that runs this inside a tiny GPT, see "Writing a tiny GPT in PyTorch".
+prerequisites: [recurrent-networks]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Compute scaled dot-product attention by hand for three tokens
+  - Explain queries, keys and values with the library analogy
+  - Apply a causal mask and explain why it is needed
+  - Explain why we divide by √d
+build: A three-token attention table by hand, then the same computation in the project's model.py
+reviewed: 2026-11-25
+seeAlso: [recurrent-networks, transformers, code-tiny-gpt]
+sources:
+  - id: bahdanau2014
+    title: "Neural Machine Translation by Jointly Learning to Align and Translate"
+    author: Dzmitry Bahdanau, Kyunghyun Cho, Yoshua Bengio
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1409.0473
+    accessed: 2026-11-25
+    type: paper
+  - id: sutskever2014
+    title: "Sequence to Sequence Learning with Neural Networks"
+    author: Ilya Sutskever, Oriol Vinyals, Quoc V. Le
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1409.3215
+    accessed: 2026-11-25
+    type: paper
+  - id: luong2015
+    title: "Effective Approaches to Attention-based Neural Machine Translation"
+    author: Minh-Thang Luong, Hieu Pham, Christopher D. Manning
+    publisher: arXiv
+    year: 2015
+    url: https://arxiv.org/abs/1508.04025
+    accessed: 2026-11-25
+    type: paper
+  - id: vaswani2017
+    title: "Attention Is All You Need"
+    author: Ashish Vaswani et al.
+    publisher: arXiv
+    year: 2017
+    url: https://arxiv.org/abs/1706.03762
+    accessed: 2026-11-25
+    type: paper
+  - id: distill-attention
+    title: "Attention and Augmented Recurrent Neural Networks"
+    author: Chris Olah, Shan Carter
+    publisher: Distill
+    year: 2016
+    url: https://distill.pub/2016/augmented-rnns/
+    accessed: 2026-11-25
+    type: article
+  - id: d2l-attention
+    title: "Dive into Deep Learning, 11 Attention Mechanisms and Transformers"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_attention-mechanisms-and-transformers/index.html
+    accessed: 2026-11-25
+    type: book
+  - id: pt-sdpa
+    title: "torch.nn.functional.scaled_dot_product_attention"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html
+    accessed: 2026-11-25
+    type: docs
+  - id: jain2019
+    title: "Attention is not Explanation"
+    author: Sarthak Jain, Byron C. Wallace
+    publisher: arXiv
+    year: 2019
+    url: https://arxiv.org/abs/1902.10186
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "PyTorch documentation: torch.nn.MultiheadAttention"
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html
+  - title: "Wikipedia: Attention (machine learning)"
+    url: https://en.wikipedia.org/wiki/Attention_(machine_learning)
+exercises:
+  - id: adv-attn-weights
+    type: numeric
+    difficulty: easy
+    title: Attention weights for new keys
+    prompt: "With $d_k = 4$, a query $q = [1, 1, 0, 0]$ meets keys $k_1 = [1, 1, 0, 0]$, $k_2 = [0, 0, 1, 1]$ and $k_3 = [1, 0, 0, 0]$. After scaling by $\\sqrt{d_k}$ and a softmax, what weight does token 1 get? Give three decimals."
+    answer: 0.506
+    tolerance: 0.002
+    hint: "The dot products are 2, 0 and 1. Divide by 2, exponentiate, and divide by the sum."
+    explanation: "Scaled scores $1, 0, 0.5$; exponentials $2.718, 1, 1.649$, sum $5.367$. Token 1 gets $2.718 / 5.367 \\approx 0.506$ (token 2 gets 0.186, token 3 gets 0.307)."
+  - id: adv-attn-masked
+    type: numeric
+    difficulty: medium
+    title: A masked row
+    prompt: "Token 2 of a causal model has query $q = [0, 1, 0, 1]$. Use the keys $k_1 = [1,0,1,0]$, $k_2 = [0,1,0,1]$, $k_3 = [1,1,1,1]$, values $v_1 = [1, 0]$, $v_2 = [0, 1]$, $v_3 = [1, 1]$ and $\\sqrt{d_k} = 2$. Apply the causal mask. What is the **second** number of token 2's output? Give three decimals."
+    answer: 0.731
+    tolerance: 0.002
+    hint: Token 2 may look at tokens 1 and 2 only, so the score for token 3 becomes minus infinity.
+    explanation: "Scores $0, 2, (2 \\to -\\infty)$; scaled $0, 1, -\\infty$. Softmax gives $1/(1+e) \\approx 0.269$ and $e/(1+e) \\approx 0.731$ and exactly 0 for token 3. Output $0.269\\,[1,0] + 0.731\\,[0,1] = [0.269, 0.731]$."
+  - id: adv-attn-scale
+    type: mcq
+    difficulty: medium
+    title: Why divide by √d?
+    prompt: "Why does scaled dot-product attention divide the scores by $\\sqrt{d_k}$?"
+    options:
+      - "Dot products of random d-dimensional vectors have a spread that grows like √d; dividing keeps the softmax from saturating, which would make its gradients tiny"
+      - "To make the attention weights sum to 1"
+      - "To make the computation cheaper"
+      - "To stop tokens from attending to the future"
+    answer: 0
+    explanation: "With independent unit-variance components, $q \\cdot k$ has variance $d_k$ and standard deviation $\\sqrt{d_k}$. Large scores push the softmax towards a one-hot output whose gradient is almost zero. The softmax already makes the weights sum to 1, and the causal mask, not the scaling, hides the future."
+  - id: adv-attn-cheat
+    type: reveal
+    difficulty: hard
+    title: The missing mask
+    prompt: "You train a GPT-style model and forget the causal mask. The training loss drops almost to zero within minutes, but generated text is garbage. Explain both observations."
+    answer: "Without the mask, position t can attend to position t+1, which is exactly the token it is asked to predict, so it learns to copy the answer and the training loss collapses. At generation time the future token does not exist yet, so the copying shortcut is useless and the model has learned nothing about real prediction."
+    explanation: "The code-autocompletion project has a `--no-causal-mask` flag that shows this bug on purpose. A loss that is too good to be true is a classic sign of information leaking from the targets into the inputs."
+---
+
+**Attention** is a way for each position in a sequence to gather information from other positions, by taking a weighted average of their vectors where the weights say how relevant each position is right now.<Cite id="d2l-attention" /> It was introduced to fix a bottleneck in machine translation and became the only mixing operation of the Transformer, the architecture behind GPT and the [code autocompletion project](/course/project-code-autocomplete/code-tiny-gpt/).<Cite id="vaswani2017" />
+
+## The bottleneck that attention removed
+
+Early neural translators used two <Term slug="recurrent-neural-network">RNNs</Term>: an encoder read the whole source sentence into one fixed vector, and a decoder produced the translation from that vector alone.<Cite id="sutskever2014" /> One vector has to hold everything, so quality dropped on long sentences.<Cite id="bahdanau2014" />
+
+Bahdanau, Cho and Bengio (2014) let the decoder look back at every encoder state at every output step. It scores how well each source position matches what it is about to produce, turns the scores into weights with a <Term slug="softmax" />, and uses the weighted average, the *context vector*, as extra input.<Cite id="bahdanau2014" /> The weights act as a soft alignment between source and target words and can be drawn as a heat map.<Cite id="distill-attention" /> Bahdanau's version scored with a small neural network; Luong, Pham and Manning (2015) showed that a plain <Term slug="dot-product" /> also works well and is cheaper.<Cite id="luong2015" />
+
+## Queries, keys and values
+
+Vaswani et al. (2017) generalised the idea. Each token's vector $x$ is projected three ways by learned matrices: a **query** $q = xW_Q$ ("what am I looking for?"), a **key** $k = xW_K$ ("what do I contain?") and a **value** $v = xW_V$ ("what I hand over if chosen").<Cite id="vaswani2017" /> The output for a token is a sum of all values, weighted by how well its query matches each key. When queries, keys and values all come from the same sequence, this is <Term slug="self-attention" />. The <Term slug="query-key-value" /> naming borrows from information retrieval.<Cite id="d2l-attention" />
+
+<Analogy breaks="In a real library you pick one book; attention always takes a blend of all of them, and the 'questions' and 'catalogue cards' are learned vectors no human wrote.">
+Your query is the question you type into a library catalogue; every book has a catalogue card (its key) and contents (its value). You take a mix of all the contents, weighted by how well each card matches your question.
+</Analogy>
+
+## Scaled dot-product attention by hand
+
+The formula is $\text{softmax}(QK^\top / \sqrt{d_k})\,V$, where $d_k$ is the size of the keys.<Cite id="vaswani2017" /> Here it is for the third of three tokens, with $d_k = 4$.
+
+<MathSteps
+  title="Three tokens, one query"
+  legend={[
+    { symbol: 'q', meaning: 'query of the token being computed (token 3)' },
+    { symbol: 'k_j, v_j', meaning: 'key and value of token j' },
+    { symbol: 'd_k', meaning: 'key size, here 4, so √d_k = 2' },
+    { symbol: 'a_j', meaning: 'attention weight on token j' },
+  ]}
+>
+  <Step tex="q = [1,0,1,0];\quad k_1 = [1,0,1,0],\ k_2 = [0,1,0,1],\ k_3 = [1,1,1,1]" words="The query of token 3 and the keys of all three tokens." />
+  <Step tex="q \cdot k_1 = 2,\quad q \cdot k_2 = 0,\quad q \cdot k_3 = 2" words="Score each key with a dot product: large when query and key point the same way." />
+  <Step tex="\frac{[2,\ 0,\ 2]}{\hl{\sqrt{4}}} = [1,\ 0,\ 1]" words="Divide by √d_k = 2 (the reason is explained in the next section)." />
+  <Step tex="a = \frac{[e^1,\ e^0,\ e^1]}{e + 1 + e} = \frac{[2.718,\ 1,\ 2.718]}{6.437} \approx [\hl{0.422},\ 0.155,\ 0.422]" words="Softmax turns the scores into positive weights that sum to 1." />
+  <Step tex="\text{out}_3 = 0.422\,[1,0] + 0.155\,[0,1] + 0.422\,[1,1] \approx [\hl{0.845},\ \hl{0.578}]" words="Mix the values v₁ = [1,0], v₂ = [0,1], v₃ = [1,1] with those weights. Token 3 mostly listens to tokens 1 and 3." example="exact weights 0.4223, 0.1554, 0.4223" />
+</MathSteps>
+
+In matrix form every token does this at once: $QK^\top$ is a $T \times T$ table of scores, one row per query, and each row goes through its own softmax.<Cite id="d2l-attention" /> PyTorch provides the whole computation as [`F.scaled_dot_product_attention`](https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html).<Cite id="pt-sdpa" />
+
+<Exercise id="adv-attn-weights" />
+
+## Why divide by √d
+
+If the components of $q$ and $k$ are independent with mean 0 and variance 1, their dot product is a sum of $d_k$ such products and has variance $d_k$.<Cite id="vaswani2017" /> For $d_k = 64$ the typical score is then about 8 in size. Softmax of large scores is nearly one-hot: scores $[8, 0, 0]$ give weights $[0.9993, 0.0003, 0.0003]$, while $[1, 0, 0]$ gives $[0.58, 0.21, 0.21]$. A nearly one-hot softmax has almost no gradient, so learning stalls. Dividing by $\sqrt{d_k}$ brings the variance back to 1.<Cite id="vaswani2017" />
+
+<Exercise id="adv-attn-scale" />
+
+## The causal mask
+
+A model that generates text left to right must not peek at the tokens it is trying to predict. The <Term slug="causal-mask" /> sets every score for a later position to minus infinity before the softmax, so those weights become exactly zero.<Cite id="vaswani2017" />
+
+<MathSteps
+  title="Masking the future for token 2"
+  legend={[
+    { symbol: 's_{2j}', meaning: 'scaled score of token 2 for token j' },
+  ]}
+>
+  <Step tex="s_2 = [s_{21},\ s_{22},\ s_{23}] = [1,\ 0,\ 1]" words="Suppose token 2 had the same query as token 3 above, so its scaled scores are 1, 0, 1." />
+  <Step tex="s_2 \rightarrow [1,\ 0,\ \hl{-\infty}]" words="Token 3 comes later, so its score is replaced by minus infinity." />
+  <Step tex="a_2 = \frac{[e^1,\ e^0,\ 0]}{e + 1} \approx [0.731,\ 0.269,\ \hl{0}]" words="Because e to the minus infinity is 0, the future gets no weight and the rest still sums to 1." />
+  <Step tex="M = \begin{pmatrix} 1 & 0 & 0 \\ 1 & 1 & 0 \\ 1 & 1 & 1 \end{pmatrix}" words="The full mask is lower-triangular: row t may use columns 1 to t." />
+</MathSteps>
+
+With the mask, a single training sequence of $T$ tokens gives $T$ next-token predictions at once, each using only its past.
+
+<Exercise id="adv-attn-masked" />
+
+## Multi-head attention and cost
+
+Instead of one attention with large vectors, the Transformer runs $h$ smaller ones in parallel, each on its own learned projection of size $d_{model}/h$, then concatenates the results and mixes them with one more matrix $W_O$.<Cite id="vaswani2017" /> The base model of the 2017 paper used 8 heads of size 64 on 512-number vectors. Different heads can learn different patterns, such as "look at the previous token" or "look at the matching bracket". This is <Term slug="multi-head-attention" />.<Cite id="d2l-attention" />
+
+The score table has $T \times T$ entries, so time and memory grow with the square of the context length. That is one reason the course's CPU models use contexts of 64 to 128 tokens.<Cite id="d2l-attention" />
+
+<Callout type="warning">
+Attention weights are tempting to read as explanations ("the model looked here"). Jain and Wallace found that different weight patterns can give the same predictions, so treat heat maps as one clue, not as proof of the model's reasoning.<Cite id="jain2019" />
+</Callout>
+
+## Where the projects use it
+
+- [Writing a tiny GPT](/course/project-code-autocomplete/code-tiny-gpt/) implements causal multi-head self-attention in about 25 lines.
+- [Training the code model](/course/project-code-autocomplete/code-training/) includes the missing-mask experiment from the last exercise.
+
+## Try it
+
+The project's attention layer computes the scores, the mask, the softmax and the weighted sum explicitly when `explicit=True`, and otherwise calls PyTorch's fused function. Its self-test checks that both paths give the same numbers.
+
+<CodeFile path="code/projects/project-code-autocomplete/model.py" lines="36-51" highlight="42,44,45,46" title="model.py: scores, mask, softmax, weighted sum" />
+
+Line 42 is $QK^\top/\sqrt{d_k}$ for every head, line 44 applies the causal mask, line 45 the softmax and line 46 the weighted sum of values.
+
+## Summary
+
+- Attention replaces a fixed memory with a weighted average over all positions (Bahdanau et al. 2014).
+- Scaled dot-product attention: score $q \cdot k$, divide by $\sqrt{d_k}$, softmax, then mix the values.
+- Dividing by $\sqrt{d_k}$ keeps the score variance near 1 so the softmax does not saturate.
+- A causal mask sets future scores to minus infinity, so a language model cannot copy the answer.
+- Multi-head attention runs several smaller attentions in parallel; the cost grows with the square of the context length.

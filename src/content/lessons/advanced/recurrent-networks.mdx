@@ -1,0 +1,259 @@
+---
+title: "Recurrent networks: RNN, LSTM and GRU"
+slug: recurrent-networks
+track: advanced
+level: advanced
+order: 40
+minutes: 30
+module: Sequences and language
+summary: A recurrent network reads a sequence one token at a time and carries a hidden state as its memory. This lesson computes RNN steps by hand, shows why gradients vanish through time, walks through the LSTM gates with numbers and gets the PyTorch shapes right.
+hatnote: For the project that trains an LSTM on Shakespeare, see "A character-level Shakespeare generator with an LSTM".
+prerequisites: [embeddings, backpropagation]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Unroll an RNN over time and compute one step by hand
+  - Explain vanishing gradients through time
+  - Walk through the LSTM gates with scalar numbers
+  - Use nn.LSTM / nn.GRU and get the shapes right
+build: Two RNN steps and one LSTM step by hand, then the project's CharRNN module
+reviewed: 2026-11-25
+seeAlso: [embeddings, attention, shakespeare-lstm, sentiment-bilstm]
+sources:
+  - id: hochreiter1997
+    title: "Long Short-Term Memory"
+    author: Sepp Hochreiter, Jürgen Schmidhuber
+    publisher: Neural Computation 9(8)
+    year: 1997
+    url: https://doi.org/10.1162/neco.1997.9.8.1735
+    accessed: 2026-11-25
+    type: paper
+  - id: bengio1994
+    title: "Learning long-term dependencies with gradient descent is difficult"
+    author: Yoshua Bengio, Patrice Simard, Paolo Frasconi
+    publisher: IEEE Transactions on Neural Networks 5(2)
+    year: 1994
+    url: https://doi.org/10.1109/72.279181
+    accessed: 2026-11-25
+    type: paper
+  - id: gers2000
+    title: "Learning to Forget: Continual Prediction with LSTM"
+    author: Felix Gers, Jürgen Schmidhuber, Fred Cummins
+    publisher: Neural Computation 12(10)
+    year: 2000
+    url: https://doi.org/10.1162/089976600300015015
+    accessed: 2026-11-25
+    type: paper
+  - id: cho2014
+    title: "Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation"
+    author: Kyunghyun Cho et al.
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1406.1078
+    accessed: 2026-11-25
+    type: paper
+  - id: chung2014
+    title: "Empirical Evaluation of Gated Recurrent Neural Networks on Sequence Modeling"
+    author: Junyoung Chung, Caglar Gulcehre, KyungHyun Cho, Yoshua Bengio
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1412.3555
+    accessed: 2026-11-25
+    type: paper
+  - id: olah2015
+    title: "Understanding LSTM Networks"
+    author: Christopher Olah
+    publisher: colah.github.io
+    year: 2015
+    url: https://colah.github.io/posts/2015-08-Understanding-LSTMs/
+    accessed: 2026-11-25
+    type: article
+  - id: goodfellow2016-rnn
+    title: "Deep Learning, chapter 10: Sequence Modeling: Recurrent and Recursive Nets"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/rnn.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-lstm
+    title: "Dive into Deep Learning, 10.1 Long Short-Term Memory (LSTM)"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_recurrent-modern/lstm.html
+    accessed: 2026-11-25
+    type: book
+  - id: d2l-gru
+    title: "Dive into Deep Learning, 10.2 Gated Recurrent Units (GRU)"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_recurrent-modern/gru.html
+    accessed: 2026-11-25
+    type: book
+  - id: pt-lstm
+    title: "torch.nn.LSTM"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html
+    accessed: 2026-11-25
+    type: docs
+  - id: karpathy2015
+    title: "The Unreasonable Effectiveness of Recurrent Neural Networks"
+    author: Andrej Karpathy
+    publisher: karpathy.github.io
+    year: 2015
+    url: https://karpathy.github.io/2015/05/21/rnn-effectiveness/
+    accessed: 2026-11-25
+    type: article
+furtherReading:
+  - title: "PyTorch documentation: torch.nn.GRU"
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.GRU.html
+exercises:
+  - id: adv-rnn-step
+    type: numeric
+    difficulty: easy
+    title: One RNN step by hand
+    prompt: "A scalar RNN uses $h_t = \\tanh(0.5\\,x_t + 0.8\\,h_{t-1})$. The previous state is $h_{t-1} = 0.5$ and the input is $x_t = 1$. What is $h_t$? Give three decimals."
+    answer: 0.716
+    tolerance: 0.002
+    hint: "First compute the inside: $0.5 \\cdot 1 + 0.8 \\cdot 0.5$."
+    explanation: "The pre-activation is $0.5 + 0.4 = 0.9$, and $\\tanh(0.9) \\approx 0.716$."
+  - id: adv-rnn-lstm-params
+    type: numeric
+    difficulty: medium
+    title: Count an LSTM layer
+    prompt: "The Shakespeare project's first LSTM layer has input size 64 (the embedding) and hidden size 256. Using PyTorch's two bias vectors per gate, how many parameters does this layer have?"
+    answer: 329728
+    tolerance: 0
+    hint: "Use $4H(I+H) + 8H$ with $I = 64$ and $H = 256$."
+    explanation: "$4 \\cdot 256 \\cdot (64 + 256) = 327{,}680$ weights, plus $8 \\cdot 256 = 2{,}048$ biases, gives $329{,}728$. The factor 4 is one weight block per gate (input, forget, candidate, output)."
+  - id: adv-rnn-forget
+    type: mcq
+    difficulty: medium
+    title: What keeps the memory alive?
+    prompt: "In an LSTM, which choice lets information and gradients pass through many time steps almost unchanged?"
+    options:
+      - "A forget gate near 1 and an input gate near 0"
+      - "A forget gate near 0 and an input gate near 1"
+      - "An output gate near 0"
+      - "A learning rate near 1"
+    answer: 0
+    explanation: "The cell update is $c_t = f_t c_{t-1} + i_t g_t$. With $f_t \\approx 1$ and $i_t \\approx 0$ the cell is copied forward, and $\\partial c_t / \\partial c_{t-1} = f_t \\approx 1$ keeps the gradient from shrinking. The output gate only controls what the rest of the network reads now."
+  - id: adv-rnn-parallel
+    type: reveal
+    difficulty: hard
+    title: Why did Transformers replace RNNs?
+    prompt: Training a character LSTM on 1 million characters is slow even on a fast GPU, while a Transformer of the same size trains much faster. What property of the recurrence causes this?
+    answer: "Each hidden state depends on the previous one, so step t cannot be computed before step t−1. The work along the sequence is strictly sequential. A Transformer computes all positions of a training sequence in parallel with matrix products, because attention replaces the step-by-step memory with direct connections between positions."
+    explanation: Vaswani et al. (2017) made exactly this argument for dropping recurrence. RNNs remain useful for teaching state and gating, and for small, streaming models.
+---
+
+A **recurrent neural network** (RNN) reads a sequence one element at a time and keeps a running summary, the <Term slug="hidden-state" />, which it updates at every step and passes to the next.<Cite id="goodfellow2016-rnn" /> Because the same weights are used at every step, one small network can read sequences of any length. The **LSTM** and **GRU** variants add gates that let this memory last much longer, and they power the [Shakespeare generator](/course/project-text/shakespeare-lstm/) and the [BiLSTM sentiment classifier](/course/project-text/sentiment-bilstm/) in the small-text project.
+
+## The vanilla RNN
+
+At step $t$ the network mixes the new input $x_t$ (usually an <Term slug="embedding" />) with the previous hidden state $h_{t-1}$, squashes the result, and uses it both to predict the next token and as memory for the following step.<Cite id="goodfellow2016-rnn" /> Drawn over time, the loop becomes a chain of identical copies, one per token. This is called *unrolling*.
+
+<MathSteps
+  title="Two steps of a scalar RNN"
+  legend={[
+    { symbol: 'x_t', meaning: 'input at step t' },
+    { symbol: 'h_t', meaning: 'hidden state (memory) after step t' },
+    { symbol: 'w_x, w_h', meaning: 'input weight and recurrent weight, shared by every step' },
+  ]}
+>
+  <Step tex="h_t = \tanh(\hl{w_x x_t + w_h h_{t-1}} + b)" words="The update rule. Real RNNs use matrices; here everything is one number so you can compute it." />
+  <Step tex="w_x = 0.5,\ w_h = 0.8,\ b = 0,\ h_0 = 0,\ x_1 = x_2 = 1" words="Choose small numbers and start with an empty memory." />
+  <Step tex="h_1 = \tanh(0.5 \cdot 1 + 0.8 \cdot 0) = \tanh(0.5) \approx \hl{0.462}" words="Step 1: no memory yet, so only the input counts." />
+  <Step tex="h_2 = \tanh(0.5 + 0.8 \cdot 0.462) = \tanh(0.870) \approx \hl{0.701}" words="Step 2: the same input gives a bigger state, because the memory of step 1 is added in." />
+  <Step tex="\text{logits}_t = W_{hy} h_t + b_y" words="At every step a linear layer turns the state into scores for the next token." />
+</MathSteps>
+
+<Exercise id="adv-rnn-step" />
+
+<Analogy breaks="A person chooses what to write down; an RNN's update is a fixed formula, and its 'notes' are numbers without readable meaning.">
+The hidden state is like a notebook carried through a book: after each word you rewrite one page of notes from the old page and the new word.
+</Analogy>
+
+## Why gradients vanish through time
+
+Training an unrolled RNN means running <Term slug="backpropagation" /> backwards along the chain, which is called <Term slug="backpropagation-through-time" /> (BPTT).<Cite id="goodfellow2016-rnn" /> The gradient that reaches an early step has been multiplied by one factor per step in between. In 1994 Bengio, Simard and Frasconi showed that this makes long-range dependencies hard to learn with gradient descent: the product tends either to shrink towards zero or to blow up.<Cite id="bengio1994" />
+
+<MathSteps
+  title="The gradient shrinks step after step"
+  legend={[
+    { symbol: '\\partial h_t / \\partial h_{t-1}', meaning: 'how much the new state changes when the old one changes' },
+  ]}
+>
+  <Step tex="\frac{\partial h_2}{\partial h_1} = w_h\,(1 - h_2^2) = 0.8 \cdot (1 - 0.701^2) \approx \hl{0.41}" words="The chain rule through tanh: its slope 1 − h² times the recurrent weight." />
+  <Step tex="0.41^{10} \approx 1.2 \times 10^{-4}, \qquad 0.41^{20} \approx 1.5 \times 10^{-8}" words="Ten steps back the signal is ten thousand times weaker; twenty steps back it is effectively zero." />
+  <Step tex="1.1^{50} \approx 117" words="If the factor is above 1 instead, the gradient explodes, which is why RNN training clips gradients." />
+</MathSteps>
+
+The <Term slug="vanishing-gradient" /> means a plain RNN learns little from tokens more than roughly 10-20 steps back. The opposite, the <Term slug="exploding-gradient" />, is usually handled with <Term slug="gradient-clipping" />. In practice, long texts are also cut into chunks and gradients stop at chunk borders (truncated BPTT), which the Shakespeare project does.<Cite id="goodfellow2016-rnn" />
+
+## The LSTM: a memory with valves
+
+Hochreiter and Schmidhuber's **Long Short-Term Memory** (1997) adds a second state, the *cell* $c_t$, which is changed only by element-wise multiplications and additions, so information can flow along it for many steps.<Cite id="hochreiter1997" /> Gates, small sigmoid layers with outputs between 0 and 1, decide what to erase, what to write and what to show. The forget gate was added three years later by Gers, Schmidhuber and Cummins, and today "LSTM" means the version with it.<Cite id="gers2000" /> The equations below follow the [PyTorch convention](https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html).<Cite id="pt-lstm" />
+
+<MathSteps
+  title="One LSTM step with scalar numbers"
+  legend={[
+    { symbol: '\\sigma', meaning: 'sigmoid, a valve between 0 and 1' },
+    { symbol: 'f, i, o', meaning: 'forget, input and output gates' },
+    { symbol: 'g', meaning: 'candidate values to write, between −1 and 1' },
+    { symbol: 'c_t', meaning: 'cell state, the long-term memory' },
+  ]}
+>
+  <Step tex="f_t, i_t, o_t = \sigma(W [x_t, h_{t-1}] + b), \quad g_t = \tanh(W_g [x_t, h_{t-1}] + b_g)" words="Each gate looks at the input and the previous output. Suppose this step gives f = 0.9, i = 0.2, o = 0.8 and g = 0.5." />
+  <Step tex="c_t = \hl{f_t \cdot c_{t-1}} + i_t \cdot g_t" words="Keep some of the old memory, then add some new. The update is an addition." />
+  <Step tex="c_t = 0.9 \cdot 1.0 + 0.2 \cdot 0.5 = 0.9 + 0.1 = \hl{1.0}" words="With an old cell of 1.0: forget 10%, write a little new information." />
+  <Step tex="h_t = o_t \cdot \tanh(c_t) = 0.8 \cdot 0.762 \approx \hl{0.609}" words="The output gate decides how much of the squashed memory the rest of the network sees." />
+  <Step tex="\frac{\partial c_t}{\partial c_{t-1}} = \hl{f_t}" words="Along the cell, the backward factor is just the forget gate. With f near 1 the gradient survives many steps." example="0.99^50 ≈ 0.61, against 0.41^50 ≈ 0 for the plain RNN" />
+</MathSteps>
+
+That last line is the whole trick: the cell is a path where the gradient is multiplied by a learned number close to 1 instead of by a tanh slope times a weight.<Cite id="olah2015" /><Cite id="d2l-lstm" /> PyTorch keeps four weight blocks (one per gate) and two bias vectors per gate, so a layer with input size $I$ and hidden size $H$ has $4H(I+H) + 8H$ parameters: 99,328 for $I = 64, H = 128$.<Cite id="pt-lstm" />
+
+<Analogy breaks="The 'slots' are not separate facts; each number in the cell blends many features.">
+An LSTM is a notebook with three valves: an eraser (forget gate), a pen (input gate) and a window (output gate) that decides what others may read right now.
+</Analogy>
+
+## The GRU
+
+The **gated recurrent unit**, introduced by Cho and colleagues in 2014, merges the cell and the hidden state and uses two gates: a *reset* gate that decides how much of the old state feeds the candidate, and an *update* gate $z$ that blends old and new.<Cite id="cho2014" /> Its last step, $h_t = (1 - z_t) \odot n_t + z_t \odot h_{t-1}$, is a weighted average: with $z$ near 1 the unit copies its memory forward.<Cite id="d2l-gru" /> A <Term slug="gated-recurrent-unit">GRU</Term> has three weight blocks instead of four, so it is about 25% smaller than an <Term slug="long-short-term-memory">LSTM</Term> of the same size. An empirical comparison by Chung et al. found the two broadly similar on the tasks they tested, so the choice is often made on speed.<Cite id="chung2014" />
+
+## Shapes in PyTorch
+
+`nn.LSTM(input_size, hidden_size, num_layers, batch_first)` returns an output for every step plus the final state:<Cite id="pt-lstm" />
+
+| Tensor | Shape with `batch_first=True` |
+|---|---|
+| input | `(batch, time, input_size)` |
+| output | `(batch, time, hidden_size)` |
+| `h_n`, `c_n` | `(num_layers, batch, hidden_size)` |
+
+<Callout type="pitfall">
+The default is `batch_first=False`, which expects `(time, batch, features)`. Passing batch-first data to a default LSTM raises no error if the sizes happen to fit; it just reads the batch as time. Also note that `batch_first` does not change the shape of `h_n` and `c_n`.
+</Callout>
+
+## Where the projects use it
+
+Andrej Karpathy's 2015 essay on character-level RNNs trained LSTMs on Shakespeare, Wikipedia markup and Linux source code, and it is the direct model for two projects.<Cite id="karpathy2015" />
+
+- [The Shakespeare generator](/course/project-text/shakespeare-lstm/) trains a 2-layer LSTM with truncated BPTT and gradient clipping.
+- [The BiLSTM classifier](/course/project-text/sentiment-bilstm/) reads each sentence in both directions and classifies its sentiment.
+- The names model in the same project uses a GRU, so you can compare it with the [MLP model](/course/project-text/names-mlp/).
+
+## Try it
+
+The project wraps both cells in one module: an embedding table, a GRU or LSTM, and a linear head that predicts the next character at every position.
+
+<CodeFile path="code/projects/project-text/char_rnn.py" lines="32-45" highlight="37,38,44" title="char_rnn.py: one class for GRU and LSTM" />
+
+Line 38 sets `batch_first=True`, and line 44 returns both the per-step outputs and the state, which the training loop carries into the next chunk of text.
+
+## Summary
+
+- An RNN applies the same update at every step: $h_t = \tanh(W_{xh} x_t + W_{hh} h_{t-1} + b)$.
+- Backpropagation through time multiplies one factor per step, so gradients vanish or explode over long ranges (Bengio et al. 1994).
+- The LSTM's cell is updated by addition, and its backward factor is the forget gate, so memory and gradients last longer.
+- The GRU uses two gates and no separate cell; it is smaller and often about as good.
+- Check `batch_first` and the state shapes whenever you use `nn.LSTM` or `nn.GRU`.

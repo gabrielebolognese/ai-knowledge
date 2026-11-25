@@ -1,0 +1,257 @@
+---
+title: Convolutional neural networks
+slug: convolutional-networks
+track: advanced
+level: advanced
+order: 10
+minutes: 30
+module: Seeing with convolutions
+summary: A convolutional layer slides one small grid of weights over an image, so a pattern learned in one place is recognised everywhere. This lesson computes a convolution by hand, drills the output-size formula, and counts every parameter of the 421,642-parameter digits CNN.
+hatnote: For the hands-on version trained on MNIST, see "A CNN that reads digits at 99%".
+prerequisites: [training-loop]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Compute a convolution output by hand on a small image
+  - Use the output-size formula with padding and stride
+  - Explain weight sharing, receptive fields and pooling
+  - Count the parameters of a small CNN
+build: The parameter table and shape trace of the digits CNN
+reviewed: 2026-11-25
+seeAlso: [deep-cnns-resnets, mnist-cnn, doodle-cnn]
+sources:
+  - id: cs231n-cnn
+    title: "CS231n: Convolutional Networks"
+    publisher: Stanford CS231n course notes
+    url: https://cs231n.github.io/convolutional-networks/
+    accessed: 2026-11-25
+    type: course
+  - id: d2l-cnn
+    title: "Dive into Deep Learning, chapter 7: Convolutional Neural Networks"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_convolutional-neural-networks/index.html
+    accessed: 2026-11-25
+    type: book
+  - id: goodfellow2016-cnn
+    title: "Deep Learning, chapter 9: Convolutional Networks"
+    author: Ian Goodfellow, Yoshua Bengio, Aaron Courville
+    publisher: MIT Press
+    year: 2016
+    url: https://www.deeplearningbook.org/contents/convnets.html
+    accessed: 2026-11-25
+    type: book
+  - id: dumoulin2016
+    title: A guide to convolution arithmetic for deep learning
+    author: Vincent Dumoulin, Francesco Visin
+    publisher: arXiv
+    year: 2016
+    url: https://arxiv.org/abs/1603.07285
+    accessed: 2026-11-25
+    type: paper
+  - id: lecun1998
+    title: Gradient-Based Learning Applied to Document Recognition
+    author: Yann LeCun, Léon Bottou, Yoshua Bengio, Patrick Haffner
+    publisher: Proceedings of the IEEE 86(11)
+    year: 1998
+    url: https://doi.org/10.1109/5.726791
+    accessed: 2026-11-25
+    type: paper
+  - id: pt-conv2d
+    title: torch.nn.Conv2d
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
+    accessed: 2026-11-25
+    type: docs
+  - id: pt-maxpool
+    title: torch.nn.MaxPool2d
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
+    accessed: 2026-11-25
+    type: docs
+  - id: zeiler2014
+    title: Visualizing and Understanding Convolutional Networks
+    author: Matthew D. Zeiler, Rob Fergus
+    publisher: arXiv (ECCV 2014)
+    year: 2013
+    url: https://arxiv.org/abs/1311.2901
+    accessed: 2026-11-25
+    type: paper
+  - id: simonyan2014
+    title: Very Deep Convolutional Networks for Large-Scale Image Recognition
+    author: Karen Simonyan, Andrew Zisserman
+    publisher: arXiv
+    year: 2014
+    url: https://arxiv.org/abs/1409.1556
+    accessed: 2026-11-25
+    type: paper
+furtherReading:
+  - title: "CNN Explainer: an interactive visual explanation of convolutional networks"
+    url: https://poloclub.github.io/cnn-explainer/
+  - title: Convolution arithmetic animations (GitHub)
+    url: https://github.com/vdumoulin/conv_arithmetic
+exercises:
+  - id: adv-cnn-one-value
+    type: numeric
+    difficulty: easy
+    title: A horizontal edge
+    prompt: "Use the 4×4 image $X$ from the lesson (rows `1 2 0 1`, `0 1 3 1`, `2 1 0 0`, `1 0 1 2`) and the horizontal-edge kernel with rows `1 1 1`, `0 0 0`, `-1 -1 -1`. No padding, stride 1, bias 0. What is $Y_{1,0}$ (row 1, column 0 of the output, counting from 0)?"
+    answer: 2
+    tolerance: 0
+    hint: "The patch is rows 1-3 and columns 0-2. The kernel adds the patch's top row and subtracts its bottom row."
+    explanation: "Top row of the patch: $0 + 1 + 3 = 4$. Bottom row: $1 + 0 + 1 = 2$. The middle row is multiplied by zeros. $Y_{1,0} = 4 - 2 = 2$: the patch is brighter at the top than at the bottom, which is what a horizontal-edge kernel detects."
+  - id: adv-cnn-output-size
+    type: numeric
+    difficulty: easy
+    title: Output width with stride 2
+    prompt: "A 32×32 image goes through a convolution with a 5×5 kernel, padding 2 and stride 2. What is the output width?"
+    answer: 16
+    tolerance: 0
+    hint: "$W_{out} = \\lfloor (W - K + 2P)/S \\rfloor + 1$."
+    explanation: "$(32 - 5 + 2 \\cdot 2)/2 = 31/2 = 15.5$, rounded down to 15, plus 1 gives 16. Stride 2 roughly halves the size; the padding makes it come out at exactly half."
+  - id: adv-cnn-params
+    type: numeric
+    difficulty: medium
+    title: Parameters of one layer
+    prompt: "How many learnable parameters does `nn.Conv2d(64, 128, kernel_size=3)` have (weights and biases)?"
+    answer: 73856
+    tolerance: 0
+    hint: "Each of the 128 kernels spans all 64 input channels and has one bias."
+    explanation: "Each kernel has $3 \\cdot 3 \\cdot 64 = 576$ weights plus 1 bias, so 577 numbers; 128 kernels give $577 \\cdot 128 = 73{,}856$. The image size does not appear in the formula, because the same kernels are reused at every position."
+  - id: adv-cnn-receptive
+    type: numeric
+    difficulty: medium
+    title: Receptive field of a stack
+    prompt: "Three 3×3 convolutions (stride 1) are stacked. How many pixels wide is the patch of the original image that one output value of the third layer depends on?"
+    answer: 7
+    tolerance: 0
+    hint: "Each extra 3×3 layer widens the view by 2 pixels."
+    explanation: "One layer sees 3 pixels, two see $3 + 2 = 5$, three see $5 + 2 = 7$. A single 7×7 layer would see the same patch with $49C^2$ weights instead of $27C^2$, which is the argument the VGG paper made for small kernels."
+  - id: adv-cnn-rotation
+    type: mcq
+    difficulty: medium
+    title: Shifted or rotated?
+    prompt: "A CNN trained on upright handwritten digits is shown a 6 that has been turned upside down. What is the most likely result?"
+    options:
+      - It reads it as a 6, because convolutions are rotation-invariant
+      - It probably reads it as a 9, because convolutions tolerate shifts but not rotations
+      - It refuses to answer, because the input is out of range
+      - It reads it as a 6, because max pooling removes orientation
+    answer: 1
+    explanation: "Weight sharing makes a convolution respond to the same pattern wherever it appears (shifts), and pooling adds a little tolerance to small shifts. Nothing in the architecture makes it ignore rotations, and an upside-down 6 is pixel-for-pixel a plausible 9. Rotation tolerance has to come from data, for example by augmenting the training set."
+---
+
+A **convolutional neural network** (CNN) is a neural network whose main layers slide a small grid of learned <Term slug="weight">weights</Term> across an image instead of connecting every pixel to every unit.<Cite id="cs231n-cnn" /> Because the same small grid is reused at every position, a pattern learned in one corner is recognised anywhere, and the network needs far fewer parameters than a fully connected one.<Cite id="goodfellow2016-cnn" /> CNNs read the digits, letters and doodles in this course's three vision projects.
+
+## Why a plain MLP struggles with images
+
+A <Term slug="multilayer-perceptron" /> flattens a 28×28 image into 784 unrelated numbers. It has no idea that neighbouring pixels belong together, and a "7" moved two pixels to the right lands on completely different inputs, so it must be learned again.<Cite id="d2l-cnn" /> A fully connected layer from 784 pixels to just 128 units already needs 100,480 weights and biases, and every one of them is tied to a single pixel position.
+
+Images have two properties a better layer can exploit. Useful patterns, such as edges and stroke ends, are *local*: they occupy a few neighbouring pixels. And the same pattern can appear *anywhere*. A convolutional layer builds both facts into its structure.<Cite id="goodfellow2016-cnn" />
+
+## The convolution, by hand
+
+A <Term slug="convolution" /> layer holds a small grid of weights, the **kernel** or filter, typically 3×3. It lays the kernel on a patch of the image, multiplies the overlapping numbers pairwise, adds them up together with a <Term slug="bias" />, and writes the result into an output grid. Then it slides one step and repeats. The output grid is called a <Term slug="feature-map" />.<Cite id="cs231n-cnn" />
+
+<Analogy breaks="Real kernels are learned from data, not designed, and many of them look nothing like a neat stencil.">
+Think of a small torch with a stencil cut into it, swept over a picture row by row. At each spot a meter reads how well what it sees matches the stencil; the sheet of meter readings is the feature map.
+</Analogy>
+
+Here is a 4×4 image and a kernel that adds the left column of each patch and subtracts the right column, so it responds to vertical edges:
+
+<MathSteps
+  title="A 3×3 kernel over a 4×4 image"
+  legend={[
+    { symbol: 'X', meaning: 'input image' },
+    { symbol: 'K', meaning: 'kernel (3×3 weights)' },
+    { symbol: 'Y_{i,j}', meaning: 'output at row i, column j' },
+    { symbol: 'b', meaning: 'bias (0 here)' },
+  ]}
+>
+  <Step tex="Y_{i,j} = b + \sum_{u=0}^{2}\sum_{v=0}^{2} \hl{K_{u,v}\, X_{i+u,\,j+v}}" words="Put the kernel's top-left corner on pixel (i, j), multiply the nine overlapping pairs, add them, add the bias." />
+  <Step tex="X = \begin{pmatrix}1&2&0&1\\0&1&3&1\\2&1&0&0\\1&0&1&2\end{pmatrix},\quad K = \begin{pmatrix}1&0&-1\\1&0&-1\\1&0&-1\end{pmatrix}" words="The image and the vertical-edge kernel. The kernel fits in two positions across and two down." />
+  <Step tex="Y_{0,0} = (1+0+2) - (0+3+0) = \hl{0}, \quad Y_{0,1} = (2+1+1) - (1+1+0) = \hl{2}" words="Top row of outputs: left column minus right column of each patch. Equal sides give 0, a brighter left side gives a positive value." />
+  <Step tex="Y_{1,0} = (0+2+1) - (3+0+1) = \hl{-1}, \quad Y_{1,1} = (1+1+0) - (1+0+2) = \hl{-1}" words="Bottom row of outputs, from the patches starting at row 1." />
+  <Step tex="Y = \begin{pmatrix}0 & 2\\ -1 & -1\end{pmatrix}" words="A 4×4 input and a 3×3 kernel give a 2×2 feature map." />
+</MathSteps>
+
+Strictly, this operation is *cross-correlation*: textbook convolution flips the kernel first. Deep learning libraries skip the flip, and since the kernel is learned the difference does not matter.<Cite id="d2l-cnn" /><Cite id="pt-conv2d" />
+
+## Padding, stride and output size
+
+Two settings control the output size. **Padding** adds a border of zeros so the kernel can also be centred on edge pixels, and **stride** is how many pixels the kernel jumps between positions.<Cite id="dumoulin2016" /> Dumoulin and Visin's guide works out the general rule:<Cite id="dumoulin2016" />
+
+<MathSteps
+  title="The output-size formula"
+  legend={[
+    { symbol: 'W', meaning: 'input width (height works the same)' },
+    { symbol: 'K', meaning: 'kernel size' },
+    { symbol: 'P', meaning: 'padding on each side' },
+    { symbol: 'S', meaning: 'stride' },
+  ]}
+>
+  <Step tex="\hl{W + 2P}" words="The padded width: the zeros are added on both sides." />
+  <Step tex="W + 2P \hl{- K}" words="How far the kernel can slide before it falls off the edge." />
+  <Step tex="\left\lfloor \frac{W - K + 2P}{\hl{S}} \right\rfloor" words="Count the jumps of size S that fit, rounding down." />
+  <Step tex="W_{out} = \left\lfloor \frac{W - K + 2P}{S} \right\rfloor \hl{+ 1}" words="Add one for the starting position." example="4×4 image, 3×3 kernel: (4 − 3 + 0)/1 + 1 = 2" />
+</MathSteps>
+
+| Layer | $W, K, P, S$ | Output |
+|---|---|---|
+| Digits CNN conv, "same" padding | 28, 3, 1, 1 | 28 |
+| 2×2 max pool | 28, 2, 0, 2 | 14 |
+| LeNet-5's first layer | 32, 5, 0, 1 | 28 |
+| AlexNet's first layer | 227, 11, 0, 4 | 55 |
+
+The LeNet-5 row matches the 28×28 maps in LeCun and colleagues' 1998 paper.<Cite id="lecun1998" /> The AlexNet paper states a 224-pixel input, which does not give a whole number; the CS231n notes point out that 227 is what makes the arithmetic work.<Cite id="cs231n-cnn" /> PyTorch's `Conv2d` documentation gives the same formula with an extra term for dilation.<Cite id="pt-conv2d" />
+
+## Channels, weight sharing and parameters
+
+A colour image has three input channels, and a hidden layer may have 32 or 64. A kernel always spans **all** input channels, and a layer with 64 kernels produces 64 output channels, one feature map each.<Cite id="cs231n-cnn" /> Because each kernel is reused at every position, the parameter count depends on the kernel and channel sizes but not on the image size. This **weight sharing** also makes the layer *equivariant* to shifts: move the input and the feature map moves with it.<Cite id="goodfellow2016-cnn" />
+
+The digits CNN used in the [handwriting project](/course/project-digits-letters/mnist-cnn/) has two 3×3 convolutions with 32 and 64 kernels, then two fully connected layers:
+
+<MathSteps
+  title="Counting the digits CNN"
+  legend={[
+    { symbol: 'C_{in}', meaning: 'input channels' },
+    { symbol: 'C_{out}', meaning: 'output channels (kernels)' },
+  ]}
+>
+  <Step tex="\text{params} = (K \cdot K \cdot C_{in} \hl{+ 1}) \cdot C_{out}" words="Each kernel has K·K·C_in weights plus one bias, and there are C_out kernels." />
+  <Step tex="\text{conv1: } (9 \cdot 1 + 1) \cdot 32 = \hl{320}" words="The first layer sees one grey channel." />
+  <Step tex="\text{conv2: } (9 \cdot 32 + 1) \cdot 64 = \hl{18{,}496}" words="The second layer's kernels span all 32 feature maps of the first." />
+  <Step tex="\text{fc1: } 64 \cdot 7 \cdot 7 \cdot 128 + 128 = \hl{401{,}536}" words="After two poolings the 64 maps are 7×7; flattened, that is 3,136 inputs to 128 units." />
+  <Step tex="\text{fc2: } 128 \cdot 10 + 10 = 1{,}290 \;\Rightarrow\; \text{total } \hl{421{,}642}" words="The output layer produces 10 logits. About 95% of all parameters sit in fc1." example="The two conv layers together hold only 18,816." />
+</MathSteps>
+
+## Pooling and receptive fields
+
+A <Term slug="max-pooling" /> layer keeps the largest value in each 2×2 block and, with stride 2, halves the width and height.<Cite id="pt-maxpool" /> It makes later layers cheaper and gives a little tolerance to small shifts, at the cost of exact position.<Cite id="cs231n-cnn" />
+
+Each output value depends on a patch of the original image called its <Term slug="receptive-field" />. One 3×3 layer sees 3×3 pixels; two stacked see 5×5; three see 7×7. Simonyan and Zisserman argued that stacked 3×3 layers beat one large kernel: two 3×3 layers cost $18C^2$ weights against $25C^2$ for one 5×5, and add an extra non-linearity.<Cite id="simonyan2014" /> Pooling grows the receptive field faster still.
+
+Stacking convolution, <Term slug="relu" /> and pooling builds a hierarchy. Zeiler and Fergus visualised trained networks and found early layers responding to edges and colours, and deeper layers to textures, object parts and whole objects.<Cite id="zeiler2014" /> At the end, the feature maps are flattened and passed to fully connected layers that output <Term slug="logits" />, trained with <Term slug="cross-entropy" /> as before.
+
+<Callout type="pitfall">
+CNNs tolerate shifts, not rotations. An upside-down 6 looks like a 9 to them, and EMNIST's letters, which are stored transposed, must be turned upright before training.
+</Callout>
+
+## Where the projects use this
+
+- [A CNN that reads digits at 99%](/course/project-digits-letters/mnist-cnn/) trains exactly the network counted above on <Term slug="mnist" />.
+- [From digits to letters with EMNIST](/course/project-digits-letters/emnist-letters/) reuses it with 26 outputs (423,706 parameters).
+- [Training a doodle classifier](/course/project-doodles/doodle-cnn/) applies the same architecture to <Term slug="quick-draw" /> sketches: only the data changes.
+
+The project defines the network in a few lines. Note `padding = kernel_size // 2`, the "same" padding from the table:
+
+<CodeFile path="code/projects/project-digits-letters/models.py" lines="35-53" highlight="38,40,42,49" title="The digits CNN (models.py)" />
+
+Running `python models.py` in that folder prints the parameter table above and the shape after every layer: 28 → 14 → 7, then 3,136 flattened values.
+
+## Summary
+
+- A convolution slides one small kernel over the image: multiply, add, add the bias, move.
+- Output width is $\lfloor (W - K + 2P)/S \rfloor + 1$; "same" padding for a 3×3 kernel is $P = 1$.
+- Weight sharing makes the parameter count independent of image size: $(K^2 C_{in} + 1) C_{out}$ per layer.
+- Pooling and stacking grow the receptive field, building edges into strokes into shapes.
+- The digits, letters and doodle projects all use the same 421,642-parameter CNN.

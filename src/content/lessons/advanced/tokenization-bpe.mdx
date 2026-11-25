@@ -1,0 +1,248 @@
+---
+title: Tokenization and byte-pair encoding
+slug: tokenization-bpe
+track: advanced
+level: advanced
+order: 70
+minutes: 25
+module: Sequences and language
+summary: A tokenizer turns text into the integer ids a language model reads. This lesson compares character, word and subword tokens, runs byte-pair encoding (BPE) merges by hand, explains byte-level BPE and the vocabulary-size trade-off, and shows why the tokenizer must be trained on training data only.
+hatnote: 'For the tokenizer built in the code-autocompletion project, see "Stage 2: a BPE tokenizer for code".'
+prerequisites: [embeddings]
+tools: [Python 3, tiktoken]
+outcomes:
+  - Compare character, word and subword tokenization
+  - Run BPE merges by hand on a tiny corpus
+  - Explain byte-level BPE and why vocabulary size is a trade-off
+  - Avoid tokenizer leakage (train it on training data only)
+build: Three BPE merges by hand, then a look at GPT-2's tokenizer with tiktoken
+reviewed: 2026-11-25
+seeAlso: [embeddings, language-modeling-sampling, transformers]
+sources:
+  - id: sennrich2016
+    title: Neural Machine Translation of Rare Words with Subword Units
+    author: Rico Sennrich, Barry Haddow, Alexandra Birch
+    publisher: Proceedings of ACL 2016 (arXiv:1508.07909)
+    year: 2016
+    url: https://arxiv.org/abs/1508.07909
+    accessed: 2026-11-25
+    type: paper
+  - id: wiki-bpe
+    title: Byte pair encoding
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Byte_pair_encoding
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: hf-bpe
+    title: "LLM Course, chapter 6.5: Byte-Pair Encoding tokenization"
+    publisher: Hugging Face
+    url: https://huggingface.co/learn/llm-course/chapter6/5
+    accessed: 2026-11-25
+    type: course
+  - id: radford2019
+    title: Language Models are Unsupervised Multitask Learners
+    author: Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever
+    publisher: OpenAI
+    year: 2019
+    url: https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf
+    accessed: 2026-11-25
+    type: paper
+  - id: tiktoken
+    title: tiktoken
+    publisher: OpenAI (GitHub)
+    url: https://github.com/openai/tiktoken
+    accessed: 2026-11-25
+    type: code
+  - id: minbpe
+    title: "minbpe: minimal, clean code for the byte-pair encoding algorithm"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/minbpe
+    accessed: 2026-11-25
+    type: code
+  - id: kudo2018
+    title: "SentencePiece: A simple and language independent subword tokenizer and detokenizer for Neural Text Processing"
+    author: Taku Kudo, John Richardson
+    publisher: EMNLP 2018 System Demonstrations (arXiv:1808.06226)
+    year: 2018
+    url: https://arxiv.org/abs/1808.06226
+    accessed: 2026-11-25
+    type: paper
+  - id: hf-tokenizers-summary
+    title: "LLM Course, chapter 2.4: Tokenizers"
+    publisher: Hugging Face
+    url: https://huggingface.co/learn/llm-course/chapter2/4
+    accessed: 2026-11-25
+    type: course
+  - id: lets-build-tokenizer
+    title: "Let's build the GPT Tokenizer (video lecture)"
+    author: Andrej Karpathy
+    publisher: YouTube
+    year: 2024
+    url: https://www.youtube.com/watch?v=zduSFxRajkE
+    accessed: 2026-11-25
+    type: video
+  - id: hf-wordpiece
+    title: "LLM Course, chapter 6.6: WordPiece tokenization"
+    publisher: Hugging Face
+    url: https://huggingface.co/learn/llm-course/chapter6/6
+    accessed: 2026-11-25
+    type: course
+  - id: hf-unigram
+    title: "LLM Course, chapter 6.7: Unigram tokenization"
+    publisher: Hugging Face
+    url: https://huggingface.co/learn/llm-course/chapter6/7
+    accessed: 2026-11-25
+    type: course
+  - id: wiki-leakage
+    title: Leakage (machine learning)
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Leakage_(machine_learning)
+    accessed: 2026-11-25
+    type: wikipedia
+furtherReading:
+  - title: Hugging Face tokenizers library documentation
+    url: https://huggingface.co/docs/tokenizers/index
+exercises:
+  - id: adv-bpe-identifier
+    type: short
+    difficulty: easy
+    title: Three ways to cut an identifier
+    prompt: "How would a character-level, a word-level and a subword (BPE) tokenizer each handle the Python identifier `get_user_by_id`, assuming the word-level vocabulary never saw it?"
+    answer: "Character-level: 14 tokens, one per character, never unknown. Word-level: a single unknown token, so the name is lost. BPE: a few familiar pieces such as get, _, user, _, by, _, id."
+    explanation: "Characters always work but make long sequences; whole words make short sequences but fail on unseen names, which are everywhere in code; subwords sit in between. GPT-2's tokenizer, for example, splits this identifier into seven pieces: `get`, `_`, `user`, `_`, `by`, `_`, `id`."
+  - id: adv-bpe-encode-count
+    type: numeric
+    difficulty: medium
+    title: Encode a new word
+    prompt: "With the three merges learned in this lesson, in order `u g → ug`, `u n → un`, `h ug → hug`, how many tokens does the word `pugs` become?"
+    answer: 3
+    hint: "Start from the characters p, u, g, s and apply each merge in the order it was learned."
+    explanation: "`u g` merges to give p, ug, s. There is no `u n` pair. `h ug` does not occur because the word starts with p. The result is [p, ug, s], 3 tokens."
+  - id: adv-bpe-embedding-rows
+    type: numeric
+    difficulty: medium
+    title: What a bigger vocabulary costs
+    prompt: "A model has embedding width $d = 192$. How many parameters does its token-embedding table hold for a vocabulary of 609 tokens (97 characters plus 512 merges)?"
+    answer: 116928
+    tolerance: 0
+    explanation: "One row of 192 numbers per token: $609 \\times 192 = 116{,}928$. With 2,145 tokens the table grows to 411,840 parameters, which is why small models need small vocabularies."
+  - id: adv-bpe-leakage
+    type: mcq
+    difficulty: hard
+    title: Where the tokenizer learns
+    prompt: You train a BPE tokenizer on your whole corpus, then split the corpus into training and validation files. What is wrong?
+    options:
+      - Nothing, because the tokenizer has no weights that gradient descent updates
+      - The merges were chosen with knowledge of the validation text, so validation scores become slightly optimistic
+      - BPE cannot be trained on more than one file
+      - The vocabulary will be too small for the validation set
+    answer: 1
+    explanation: "The merge list is learned from data, so it is part of the model. Strings that occur only in the validation files can become single tokens, which makes validation text look easier than truly unseen text. Train the tokenizer on the training split only, as the code project's `BPETokenizer.train` docstring says."
+---
+
+**Tokenization** is the step that turns text into a sequence of integers, called token ids, drawn from a fixed list called the vocabulary.<Cite id="hf-tokenizers-summary" /> A <Term slug="language-model" /> never sees letters: it sees these ids, looks each one up in an <Term slug="embedding" /> table and predicts the next id. How the text is cut decides how long the sequences are, how big the vocabulary is, and whether unfamiliar words can be represented at all.
+
+## Characters, words or something in between
+
+There are three common ways to cut text into tokens, and each makes a different trade.<Cite id="hf-tokenizers-summary" />
+
+| Unit | Vocabulary | Sequence length | Unseen words |
+|---|---|---|---|
+| Character | tiny (65 for the Shakespeare file) | long | never a problem |
+| Word | huge (hundreds of thousands) | short | become a single "unknown" token |
+| Subword | chosen size (hundreds to ~100,000) | medium | split into known pieces |
+
+Character models are the simplest to build, which is why the small-text project starts there. The cost is length: the model must spend capacity learning to spell, and a fixed context window covers fewer words. Word models fail on rare words and on code, where names such as `get_user_by_id` are invented all the time.<Cite id="sennrich2016" /> **Subword** tokenization keeps frequent words whole and splits rare ones into pieces, so every string can be encoded while common text stays short.<Cite id="sennrich2016" />
+
+## Byte-pair encoding, merge by merge
+
+Byte-pair encoding began in 1994 as a data-compression trick by Philip Gage: replace the most common pair of adjacent bytes with a new, unused byte, and repeat.<Cite id="wiki-bpe" /> Sennrich, Haddow and Birch adapted it in 2016 to build subword vocabularies for neural translation.<Cite id="sennrich2016" /> The training loop is short: start from single characters, count every adjacent pair across the corpus, merge the most frequent pair into a new token, and repeat until the vocabulary reaches the size you chose.<Cite id="hf-bpe" />
+
+Take a corpus of five words with their counts: `hug` ×10, `pug` ×5, `pun` ×12, `bun` ×4 and `hugs` ×5. The starting vocabulary is the seven characters b, g, h, n, p, s, u.<Cite id="hf-bpe" />
+
+<MathSteps
+  title="Three BPE merges on a five-word corpus"
+  legend={[
+    { symbol: '(a,\\,b)', meaning: 'an adjacent pair of tokens' },
+    { symbol: '\\text{count}', meaning: 'how often the pair occurs, weighted by word frequency' },
+  ]}
+>
+  <Step tex="\text{count}(u,g) = 10 + 5 + 5 = \hl{20}" words="Count every adjacent pair. The pair u g occurs in hug, pug and hugs. The runners-up are p u (17), u n (16) and h u (15), so u g wins." example="Merge 1: u g → ug" />
+  <Step tex="\text{count}(u,n) = 12 + 4 = \hl{16}" words="Rewrite the words with the new token (h ug, p ug, p u n, b u n, h ug s) and count again. Now u n is the most frequent pair, ahead of h ug (15)." example="Merge 2: u n → un" />
+  <Step tex="\text{count}(h,\,ug) = 10 + 5 = \hl{15}" words="Count once more on h ug, p ug, p un, b un, h ug s. The pair h ug wins, so 'hug' becomes one token." example="Merge 3: h ug → hug" />
+  <Step tex="\text{vocab} = 7 + \hl{3} = 10" words="Each merge adds exactly one token. The ordered merge list, not just the vocabulary, is the trained tokenizer." />
+  <Step tex="\texttt{bug}:\; b\,u\,g \to \hl{[\,b,\; ug\,]}" words="To encode a new word, start from characters and apply the merges in the order they were learned. 'bug' was never in the corpus, yet it becomes two known pieces." />
+</MathSteps>
+
+The method generalises to unseen words because pieces like `ug` and `un` recur across many words.<Cite id="sennrich2016" /> It also shows the weakness of a character-based start: the word `mug` contains `m`, which is not in the base vocabulary, so this tokenizer would have to emit an "unknown" token.<Cite id="hf-bpe" />
+
+<Analogy breaks="A note-taker's abbreviations stand for meaningful words; BPE merges purely by frequency, so a piece like 'ug' is common, not meaningful.">
+BPE works like a student who invents shorthand while taking notes: a squiggle for a letter pair written constantly, then a squiggle for a whole common word. Rare words stay spelled out letter by letter.
+</Analogy>
+
+<Exercise id="adv-bpe-encode-count" />
+
+## Encoding and decoding
+
+A tokenizer must be lossless: decoding the ids must give back exactly the original text, spaces and newlines included.<Cite id="minbpe" /> Decoding is the easy direction, since each id maps to a string and the strings are concatenated. Encoding repeats one rule: among the adjacent pairs in the current sequence, find the one whose merge was learned earliest, apply it, and stop when no pair has a merge.<Cite id="minbpe" /> Applying merges in learned order guarantees that encoding reproduces the same cuts that training made.
+
+## Byte-level BPE
+
+GPT-2 solved the unknown-character problem by starting from the 256 possible byte values instead of characters. Any text in any script, including emoji, is a sequence of bytes, so nothing is ever unknown.<Cite id="radford2019" /> GPT-2 then learned 50,000 merges on top of the bytes and added one special end-of-text token, for a vocabulary of 50,257.<Cite id="radford2019" /> It also cuts text into chunks with a regular expression before merging, so that a merge never glues letters to punctuation; for example, it avoids separate tokens for "dog.", "dog!" and "dog?".<Cite id="radford2019" />
+
+OpenAI's [tiktoken](https://github.com/openai/tiktoken) library ships these trained vocabularies with a fast encoder.<Cite id="tiktoken" /> With `pip install tiktoken`:
+
+```python
+import tiktoken
+enc = tiktoken.get_encoding("gpt2")
+ids = enc.encode("hello world")
+print(ids)                                   # [31373, 995]
+print([enc.decode([i]) for i in ids])        # ['hello', ' world']
+print(enc.encode(" the"), enc.encode("the"))  # [262] [1169]
+assert enc.decode(ids) == "hello world"      # lossless round trip
+print(enc.n_vocab)                           # 50257
+```
+
+Two details surprise newcomers. Spaces belong to the following word, so " world" is one token. And " the" with a leading space and "the" without one are different tokens with different ids, so tokens are not words.<Cite id="tiktoken" />
+
+## Vocabulary size is a trade-off
+
+More merges give shorter sequences, so a context window of fixed length covers more text. But every token adds one row to the embedding table, and, unless the weights are tied, one more output score per prediction. Rare tokens are also seen rarely in training, so their rows learn slowly.<Cite id="lets-build-tokenizer" />
+
+The code-autocompletion project measured this on Python source with embedding width 192:
+
+| Vocabulary | Characters per token | Embedding parameters | Share of the model |
+|---|---|---|---|
+| 609 (512 merges) | 2.28 | 116,928 | 6% |
+| 2,145 (2,048 merges) | 2.90 | 411,840 | 23% |
+
+GPT-2's 50,257 tokens at width 256 would need about 12.9 million embedding parameters, more than three times the whole 4-million-parameter model one might train on a laptop.<Cite id="radford2019" /> Small models need small vocabularies.
+
+<Callout type="pitfall">
+Losses per token are not comparable between tokenizers. A BPE token covers several characters, so it is harder to guess than one character. Convert both to bits per character (loss ÷ characters per token ÷ ln 2) before comparing.
+</Callout>
+
+## Train the tokenizer on training data only
+
+The merge list is learned from data, so it is part of the model. If the tokenizer is trained on the full corpus before the split, strings that occur only in the validation files can become single tokens, and validation text looks easier than truly unseen text. This is a mild but real form of [data leakage](https://en.wikipedia.org/wiki/Leakage_(machine_learning)): information from the evaluation data reaching the model during training.<Cite id="wiki-leakage" /> The rule is the same as for normalisation statistics: fit on the training split, then apply the frozen tokenizer to validation and test data.
+
+## Other subword algorithms
+
+BPE is not the only option. **WordPiece**, used by BERT, also merges pairs, but scores each pair by its frequency divided by the frequencies of its two parts, which favours pairs whose parts are rare on their own.<Cite id="hf-wordpiece" /> The **Unigram** method works in the opposite direction: it starts from a large vocabulary and repeatedly removes the tokens whose loss hurts the corpus likelihood least.<Cite id="hf-unigram" /> The SentencePiece library implements BPE and Unigram directly on raw text, treating the space as an ordinary symbol, so the same tool works for languages written without spaces.<Cite id="kudo2018" />
+
+## In the projects
+
+The small-text project keeps characters as tokens: 27 symbols for names and 65 for Shakespeare, starting with the [bigram model](/course/project-text/names-bigram/). The code-autocompletion project starts with a 97-character alphabet and then trains its own BPE in [Stage 2: a BPE tokenizer for code](/course/project-code-autocomplete/code-bpe-tokenizer/). Its training loop is the merge rule from this lesson, made fast by updating only the chunks that contain the winning pair:
+
+<CodeFile path="code/projects/project-code-autocomplete/tokenizer.py" lines="70-105" highlight="72,87,90,97" title="tokenizer.py: training BPE merges" />
+
+Line 87 picks the most frequent pair, line 90 adds the merged token to the vocabulary, and line 97 rewrites each affected chunk. The docstring on line 72 repeats this lesson's rule: train on the training split only.
+
+## Summary
+
+- A tokenizer maps text to integer ids and back; it must be lossless.
+- Characters give long sequences and words fail on unseen names; subwords balance the two.
+- BPE starts from characters or bytes and repeatedly merges the most frequent adjacent pair; the ordered merge list is the tokenizer.
+- Byte-level BPE (GPT-2, 50,257 tokens) can encode any string; the vocabulary size trades sequence length against embedding parameters.
+- Fit the tokenizer on the training split only.

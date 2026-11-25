@@ -1,0 +1,216 @@
+---
+title: "Reinforcement learning and self-play: an overview"
+slug: reinforcement-learning-self-play
+track: advanced
+level: advanced
+order: 100
+minutes: 20
+module: "Games: search and self-play"
+summary: Reinforcement learning trains an agent from rewards instead of labelled answers, and self-play makes a game program its own opponent. This overview explains how AlphaZero joins a policy/value network with tree search, and contrasts it with the Stockfish approach the chess project uses.
+hatnote: 'This is a reading lesson without code. For the supervised approach the chess project takes, see "Training the 768→256→32→1 evaluator".'
+prerequisites: [game-tree-search, training-loop]
+outcomes:
+  - Define agent, environment, state, action, reward and policy
+  - Explain how AlphaZero combines a policy/value network with tree search (MCTS) and self-play
+  - Contrast the AlphaZero/Leela approach with Stockfish's alpha-beta + NNUE approach
+reviewed: 2026-11-25
+seeAlso: [game-tree-search, efficient-inference]
+sources:
+  - id: spinningup-rl
+    title: "Spinning Up in Deep RL, Part 1: Key Concepts in RL"
+    author: Joshua Achiam
+    publisher: OpenAI
+    year: 2018
+    url: https://spinningup.openai.com/en/latest/spinningup/rl_intro.html
+    accessed: 2026-11-25
+    type: course
+  - id: wiki-rl
+    title: Reinforcement learning
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Reinforcement_learning
+    accessed: 2026-11-25
+    type: wikipedia
+  - id: samuel1959
+    title: Some Studies in Machine Learning Using the Game of Checkers
+    author: Arthur L. Samuel
+    publisher: IBM Journal of Research and Development 3(3)
+    year: 1959
+    url: https://doi.org/10.1147/rd.33.0210
+    accessed: 2026-11-25
+    type: paper
+  - id: silver2016
+    title: Mastering the game of Go with deep neural networks and tree search
+    author: David Silver, Aja Huang, Chris J. Maddison, et al.
+    publisher: Nature 529
+    year: 2016
+    url: https://doi.org/10.1038/nature16961
+    accessed: 2026-11-25
+    type: paper
+  - id: silver2017
+    title: Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm
+    author: David Silver, Thomas Hubert, Julian Schrittwieser, et al.
+    publisher: arXiv:1712.01815
+    year: 2017
+    url: https://arxiv.org/abs/1712.01815
+    accessed: 2026-11-25
+    type: paper
+  - id: silver2018
+    title: A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play
+    author: David Silver, Thomas Hubert, Julian Schrittwieser, et al.
+    publisher: Science 362(6419)
+    year: 2018
+    url: https://www.science.org/doi/10.1126/science.aar6404
+    accessed: 2026-11-25
+    type: paper
+  - id: lczero
+    title: Leela Chess Zero
+    publisher: LCZero project
+    url: https://lczero.org/
+    accessed: 2026-11-25
+    type: docs
+  - id: nnue-doc
+    title: NNUE (nnue-pytorch documentation)
+    publisher: Stockfish developers
+    url: https://official-stockfish.github.io/docs/nnue-pytorch-wiki/docs/nnue.html
+    accessed: 2026-11-25
+    type: docs
+  - id: sf18
+    title: Stockfish 18
+    publisher: Stockfish blog
+    year: 2026
+    url: https://stockfishchess.org/blog/2026/stockfish-18/
+    accessed: 2026-11-25
+    type: article
+furtherReading:
+  - title: "Leela Chess Zero: technical explanation"
+    url: https://lczero.org/dev/wiki/technical-explanation-of-leela-chess-zero/
+exercises:
+  - id: adv-rl-return
+    type: numeric
+    difficulty: easy
+    title: A discounted return
+    prompt: "An agent receives rewards $0, 0, 1$ on three consecutive steps (a win at the end). With discount factor $\\gamma = 0.9$, what is the discounted return from the first step?"
+    answer: 0.81
+    tolerance: 0.001
+    hint: "$G = r_0 + \\gamma r_1 + \\gamma^2 r_2$."
+    explanation: "$G = 0 + 0.9 \\cdot 0 + 0.9^2 \\cdot 1 = 0.81$. The later a reward arrives, the more it is discounted."
+  - id: adv-rl-policy
+    type: mcq
+    difficulty: easy
+    title: Which one is the policy?
+    prompt: In a chess-playing agent, which of these is the policy?
+    options:
+      - The chessboard and the rules of the game
+      - The +1, 0 or −1 received when the game ends
+      - The rule that maps the current position to a choice (or probabilities) of moves
+      - The number of games played so far
+    answer: 2
+    explanation: "The policy is the agent's decision rule: given a state, which action to take, or a probability for each action. The board and rules are the environment, and the game result is the reward."
+  - id: adv-rl-alphazero-parts
+    type: mcq
+    difficulty: medium
+    title: The parts of AlphaZero
+    prompt: Which description of AlphaZero is accurate?
+    options:
+      - A small network inside alpha-beta search, trained on Stockfish evaluations
+      - A network with a policy head and a value head that guides Monte Carlo tree search, trained only on games it plays against itself
+      - A network trained on millions of human grandmaster games, with no search at all
+      - A hand-written evaluation function tuned by self-play
+    answer: 1
+    explanation: "AlphaZero starts from the rules only. Its network suggests promising moves (policy) and estimates who is winning (value); MCTS uses both to choose moves, and the self-play games become the training data. The first option describes the course's chess project and, in spirit, Stockfish's NNUE."
+  - id: adv-rl-why-supervised
+    type: reveal
+    difficulty: hard
+    title: Why the course does not use self-play
+    prompt: The chess project trains its evaluator on positions already scored by Stockfish instead of learning by self-play like AlphaZero. Give two reasons.
+    answer: "Compute: AlphaZero's self-play used thousands of TPUs to play millions of games, far beyond a laptop, while supervised training on existing evaluations takes minutes to hours on a CPU. Fit: a small, fast network inside alpha-beta search is exactly how Stockfish's NNUE works, so it suits a CPU engine; free labelled data exists (the CC0 Lichess evaluation database)."
+    explanation: "Self-play reinforcement learning must generate its own data by playing, and each game needs many network evaluations during search. Supervised learning reuses data that someone else's search already produced, which makes it the practical choice for a course project."
+---
+
+**Reinforcement learning** (RL) is the branch of machine learning in which an *agent* learns to act by trial and error, guided by rewards, rather than by copying labelled answers.<Cite id="wiki-rl" /> **Self-play** applies it to games: the program plays against copies of itself and learns from the outcomes. Combined with a deep network and tree search, this produced AlphaGo and AlphaZero, the systems that showed a computer could learn Go and chess from scratch at superhuman level.<Cite id="silver2017" /> This lesson is an overview without code, explaining the ideas and why the course's chess engine takes a different, cheaper route.
+
+## The vocabulary of reinforcement learning
+
+RL describes a loop. The **agent** observes the **state** of an **environment**, chooses an **action**, and receives a **reward** and the next state. The agent's decision rule, from states to actions or to probabilities over actions, is its **policy**.<Cite id="spinningup-rl" /> The goal is to maximise the **return**, the total reward collected over time, usually with later rewards *discounted* by a factor $\gamma$ slightly below 1.<Cite id="spinningup-rl" /> A **value function** estimates the return expected from a state when following a given policy.<Cite id="spinningup-rl" />
+
+| RL term | In a chess game |
+|---|---|
+| Environment | The board and the rules, including the opponent |
+| State | The current position |
+| Action | A legal move |
+| Reward | +1 for a win, 0 for a draw, −1 for a loss, given only at the end |
+| Policy | Probabilities for each legal move in a position |
+| Value | Expected result from a position |
+
+<MathSteps
+  title="A discounted return"
+  legend={[
+    { symbol: 'r_t', meaning: 'reward received at step t' },
+    { symbol: '\\gamma', meaning: 'discount factor between 0 and 1' },
+    { symbol: 'G', meaning: 'return' },
+  ]}
+>
+  <Step tex="G = r_0 + \gamma\, r_1 + \gamma^2 r_2 + \cdots" words="Add up future rewards, shrinking each one by an extra factor of gamma for every step it lies in the future." />
+  <Step tex="r = (0,\ 0,\ 1),\ \gamma = 0.9:\quad G = 0 + 0 + 0.9^2 \cdot 1 = \hl{0.81}" words="A win two steps away is worth 0.81 now. The agent prefers rewards that come sooner." />
+</MathSteps>
+
+<Analogy breaks="A dog gets its treat right after the trick; a chess agent gets its reward only when the game ends, so it must work out which of forty moves deserved the credit.">
+Training an RL agent resembles training a dog with treats: no one shows it the right answer, it tries things and repeats what earned a reward.
+</Analogy>
+
+That delayed reward is the central difficulty, called the *credit assignment problem*: when a long game is won, which moves were responsible?<Cite id="wiki-rl" />
+
+## Samuel's checkers player
+
+The idea of a program improving at a game through <Term slug="reinforcement-learning">trial and error</Term> is old. In 1959 Arthur Samuel of IBM described a checkers program that searched ahead with minimax and adjusted the weights of its scoring function from experience, including games against another version of itself.<Cite id="samuel1959" /> The paper's title used the phrase "machine learning", and Samuel reported that the program learned to play better than its author.<Cite id="samuel1959" />
+
+## AlphaGo and AlphaZero
+
+Go resisted classic search because its branching factor is huge and good evaluation functions were hard to write. DeepMind's AlphaGo (2016) combined three pieces: a **policy network** first trained to predict expert human moves and then improved by self-play, a **value network** that estimated the winner from a position, and **Monte Carlo tree search** (MCTS) that used both.<Cite id="silver2016" /> It defeated the European Go champion Fan Hui by 5 games to 0, the first time a computer program had beaten a human professional player in the full-sized game of Go.<Cite id="silver2016" />
+
+**AlphaZero** (2017) removed the human data. Starting from random play and knowing only the rules, it learned chess, shogi and Go by <Term slug="self-play" /> with one network per game that has two outputs: a policy head (which moves look promising) and a value head (who is winning).<Cite id="silver2017" /> Its training loop has three steps:<Cite id="silver2018" />
+
+1. Play a game against itself, choosing each move with MCTS guided by the current network.
+2. Store every position with the search's visit counts per move and the final result.
+3. Train the network so its policy matches the visit counts and its value predicts the result, then repeat with the improved network.
+
+<Term slug="monte-carlo-tree-search">MCTS</Term> grows a search tree selectively. At each node it picks the move that maximises an estimate of how good the move is plus a bonus for moves the network likes but the search has rarely tried. AlphaZero uses a variant called PUCT:<Cite id="silver2017" />
+
+<MathSteps
+  title="Choosing which move to explore (PUCT)"
+  legend={[
+    { symbol: 'Q(s,a)', meaning: 'average value found so far after move a' },
+    { symbol: 'P(s,a)', meaning: 'prior probability of move a from the policy head' },
+    { symbol: 'N(s),\\ N(s,a)', meaning: 'visits to the node, and to move a' },
+    { symbol: 'c', meaning: 'exploration constant' },
+  ]}
+>
+  <Step tex="\text{score}(a) = \hl{Q(s,a)} + U(s,a)" words="Exploit what the search has learned (Q) and add an exploration bonus U." />
+  <Step tex="U(s,a) = c \cdot P(s,a) \cdot \frac{\sqrt{N(s)}}{1 + N(s,a)}" words="The bonus is large for moves the network rates highly and small for moves that have already been visited many times." />
+  <Step tex="A:\ 0.5 + 1.5 \cdot 0.2 \cdot \tfrac{\sqrt{12}}{1 + 10} \approx 0.5 + 0.09 = \hl{0.59}" words="Illustrative numbers: move A has a good average (0.5), a low prior (0.2) and 10 of the 12 visits." />
+  <Step tex="B:\ 0.3 + 1.5 \cdot 0.6 \cdot \tfrac{\sqrt{12}}{1 + 2} \approx 0.3 + 1.04 = \hl{1.34}" words="Move B looks worse so far but has a high prior and only 2 visits, so the search explores it next. As visits pile up, the bonus fades and Q dominates." />
+</MathSteps>
+
+The results were striking. The 2017 preprint reports that AlphaZero outperformed Stockfish after about 4 hours of training, while searching about 80 thousand positions per second against Stockfish's 70 million; its self-play ran on 5,000 first-generation TPUs.<Cite id="silver2017" /> In the longer match published in 2018, AlphaZero won 155 games against Stockfish and lost 6, the rest being draws.<Cite id="silver2018" /> **Leela Chess Zero** (Lc0) is an open-source engine inspired by AlphaZero, with a network that provides both a value and a policy and is trained by volunteers' self-play.<Cite id="lczero" />
+
+## Two ways to put a network into a chess engine
+
+| | AlphaZero / Leela | Stockfish with NNUE |
+|---|---|---|
+| Search | MCTS with PUCT | Alpha-beta with many refinements |
+| Network | Large deep residual network, policy and value | Small network, value only, run on the CPU |
+| Speed | Tens of thousands of positions per second | Tens of millions per second |
+| Training data | Self-play games | Positions scored by engine searches |
+
+Stockfish's NNUE evaluator is designed to be updated incrementally as moves are made and run in integer arithmetic on an ordinary processor, so the search can stay fast.<Cite id="nnue-doc" /> The two families now borrow from each other: Stockfish 18's network was trained on over 100 billion positions of Lc0 evaluation data.<Cite id="sf18" />
+
+## Why the chess project uses supervised learning
+
+AlphaZero-style training must play millions of games, each needing many network evaluations, which requires compute far beyond a laptop.<Cite id="silver2017" /> The course's engine follows the Stockfish route instead. [A training set from the Lichess evaluation database](/course/project-chess/chess-dataset/) collects positions that Stockfish has already scored; [Training the evaluator](/course/project-chess/chess-train-evaluator/) fits a small network to those scores by ordinary supervised regression; and [Plugging the network into search](/course/project-chess/chess-nn-search/) places it at the leaves of the alpha-beta search from [the game-tree lesson](/course/advanced/game-tree-search/). This trains in minutes to hours on a CPU and still teaches the central idea: a learned evaluation inside a search.
+
+## Summary
+
+- RL learns a policy from rewards by trial and error; the return adds up discounted future rewards, and a value function predicts it.
+- Self-play makes a game program its own opponent and its own source of training data.
+- AlphaZero joins a policy/value network with MCTS (PUCT) and learns from self-play alone; Leela Chess Zero is its open-source descendant.
+- Stockfish uses alpha-beta with a small, fast NNUE value network trained on searched positions, the approach the course's chess project follows.

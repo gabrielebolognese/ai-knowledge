@@ -1,0 +1,214 @@
+---
+title: Embeddings and neural language models
+slug: embeddings
+track: advanced
+level: advanced
+order: 30
+minutes: 25
+module: Sequences and language
+summary: An embedding gives every token a short learned vector, so a network can treat similar symbols alike. This lesson shows the lookup as a one-hot times a matrix, builds the Bengio-style MLP language model, counts its 11,897 parameters and measures similarity with the dot product and cosine.
+hatnote: For the project that trains this model on 32,000 names, see "A neural name generator (Bengio-style MLP)".
+prerequisites: [multilayer-perceptron, vectors-dot-product]
+tools: [Python 3, PyTorch]
+outcomes:
+  - Explain one-hot vectors and why learned embeddings replace them
+  - Describe the Bengio-style MLP language model (context → embeddings → hidden → softmax)
+  - Measure similarity between embeddings with the dot product and cosine
+build: The forward pass of a character-level MLP language model, read line by line
+reviewed: 2026-11-25
+seeAlso: [recurrent-networks, attention, names-mlp]
+sources:
+  - id: bengio2003
+    title: "A Neural Probabilistic Language Model"
+    author: Yoshua Bengio, Réjean Ducharme, Pascal Vincent, Christian Jauvin
+    publisher: Journal of Machine Learning Research 3
+    year: 2003
+    url: https://www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf
+    accessed: 2026-11-25
+    type: paper
+  - id: mikolov2013
+    title: "Efficient Estimation of Word Representations in Vector Space"
+    author: Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean
+    publisher: arXiv
+    year: 2013
+    url: https://arxiv.org/abs/1301.3781
+    accessed: 2026-11-25
+    type: paper
+  - id: makemore
+    title: "makemore (GitHub repository)"
+    author: Andrej Karpathy
+    publisher: GitHub
+    url: https://github.com/karpathy/makemore
+    accessed: 2026-11-25
+    type: code
+  - id: pt-embedding
+    title: "torch.nn.Embedding"
+    publisher: PyTorch documentation
+    url: https://docs.pytorch.org/docs/stable/generated/torch.nn.Embedding.html
+    accessed: 2026-11-25
+    type: docs
+  - id: d2l-lm
+    title: "Dive into Deep Learning, 9.3 Language Models"
+    author: Aston Zhang, Zachary Lipton, Mu Li, Alexander Smola
+    publisher: d2l.ai
+    url: https://d2l.ai/chapter_recurrent-neural-networks/language-model.html
+    accessed: 2026-11-25
+    type: book
+  - id: wiki-word-embedding
+    title: Word embedding
+    publisher: Wikipedia
+    url: https://en.wikipedia.org/wiki/Word_embedding
+    accessed: 2026-11-25
+    type: wikipedia
+furtherReading:
+  - title: "Andrej Karpathy: Neural Networks, Zero to Hero (makemore videos)"
+    url: https://karpathy.ai/zero-to-hero.html
+exercises:
+  - id: adv-emb-lookup
+    type: numeric
+    difficulty: easy
+    title: A lookup as a matrix product
+    prompt: "An embedding table has rows $C_0 = [0.1, 0.3]$, $C_1 = [0.7, -0.2]$, $C_2 = [0.5, 0.5]$, $C_3 = [-0.4, 0.9]$. Multiply the one-hot vector $[0, 0, 0, 1]$ by $C$. What is the **second** number of the result?"
+    answer: 0.9
+    tolerance: 0.001
+    hint: A one-hot row vector times a matrix picks out one row of the matrix.
+    explanation: "$[0,0,0,1]\\,C$ is the fourth row (index 3), $[-0.4, 0.9]$, so the second number is $0.9$. `nn.Embedding` returns the same row by indexing, without doing the multiplication."
+  - id: adv-emb-params
+    type: numeric
+    difficulty: medium
+    title: Count a bigger MLP language model
+    prompt: "A character MLP language model has a 27-symbol vocabulary, a context of 4 characters, 16-number embeddings and 300 hidden units. How many parameters does it have (embedding table, hidden layer with bias, output layer with bias)?"
+    answer: 28059
+    tolerance: 0
+    hint: "Embeddings $27 \\times 16$; the hidden layer sees $4 \\times 16 = 64$ inputs; the output layer maps 300 units to 27 scores."
+    explanation: "Embeddings $27 \\cdot 16 = 432$. Hidden $64 \\cdot 300 + 300 = 19{,}500$. Output $300 \\cdot 27 + 27 = 8{,}127$. Total $432 + 19{,}500 + 8{,}127 = 28{,}059$. Note how the hidden layer now dominates."
+  - id: adv-emb-cosine
+    type: mcq
+    difficulty: medium
+    title: Dot product or cosine?
+    prompt: "Vector $a = [1, 2]$ and vector $b = [3, 6]$. Which statement is true?"
+    options:
+      - "Their cosine similarity is 1, although their dot product (15) depends on the lengths"
+      - "Their cosine similarity is 15"
+      - "Their cosine similarity is 0, because the vectors have different lengths"
+      - "Cosine similarity and the dot product always give the same number"
+    answer: 0
+    explanation: "$b = 3a$, so the vectors point the same way and the angle between them is 0: cosine $= 1$. The dot product is $1 \\cdot 3 + 2 \\cdot 6 = 15$, which grows with the lengths. Cosine divides by both lengths, so it measures direction only."
+  - id: adv-emb-why
+    type: short
+    difficulty: hard
+    title: Why not one-hot inputs?
+    prompt: Give two reasons why a language model feeds learned embeddings, rather than one-hot vectors, into its hidden layer.
+    answer: "One-hot vectors are as long as the vocabulary and mostly zeros, so the first layer would be huge and wasteful; and every pair of one-hot vectors is equally far apart, so the model cannot share what it learns about one token with similar tokens. Embeddings are short and dense, and training places similar tokens close together, which lets the model generalise to contexts it never saw."
+    explanation: "Bengio et al. (2003) framed this as fighting the curse of dimensionality: with distributed representations, a sentence seen in training also raises the probability of sentences built from similar words."
+---
+
+An **embedding** is a short list of learned numbers that stands for a discrete symbol such as a character, a word or a code token.<Cite id="wiki-word-embedding" /> Neural networks can only multiply and add numbers, so every text model starts by turning each token into a vector; embeddings do this in a way that lets similar symbols get similar vectors.<Cite id="bengio2003" /> They are the first layer of every model in the [small-text](/course/project-text/names-mlp/) and [code autocompletion](/course/project-code-autocomplete/code-tiny-gpt/) projects.
+
+## From one-hot vectors to embeddings
+
+The simplest way to feed a symbol to a network is a <Term slug="one-hot-encoding">one-hot vector</Term>: a list as long as the vocabulary, with a 1 at the symbol's position and 0 everywhere else. One-hot vectors have two problems. They are long (50,000 numbers for a 50,000-word vocabulary) and they say nothing about meaning, because every pair of one-hot vectors is exactly as far apart as every other pair.<Cite id="wiki-word-embedding" />
+
+An embedding layer fixes both. It keeps a table $C$ with one row per symbol and a small number of columns, for example 10. Looking up a symbol returns its row. PyTorch describes [`nn.Embedding`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Embedding.html) as exactly this: a lookup table indexed by integer ids, whose rows are ordinary trainable weights.<Cite id="pt-embedding" />
+
+<MathSteps
+  title="An embedding lookup is a one-hot times a matrix"
+  legend={[
+    { symbol: 'C', meaning: 'embedding table, one row per symbol' },
+    { symbol: 'e_i', meaning: 'one-hot vector for symbol i' },
+    { symbol: 'V', meaning: 'vocabulary size' },
+    { symbol: 'd', meaning: 'embedding size' },
+  ]}
+>
+  <Step tex="C = \begin{pmatrix} 0.1 & 0.3 \\ 0.7 & -0.2 \\ 0.5 & 0.5 \\ -0.4 & 0.9 \end{pmatrix}" words="A table for a 4-symbol vocabulary with 2 numbers per symbol: V = 4 rows, d = 2 columns." />
+  <Step tex="e_2 = [0,\ 0,\ \hl{1},\ 0]" words="The one-hot vector for symbol 2 (counting from 0)." />
+  <Step tex="e_2\, C = 0 \cdot C_0 + 0 \cdot C_1 + \hl{1 \cdot C_2} + 0 \cdot C_3 = [0.5,\ 0.5]" words="Multiplying adds up the rows, each weighted by the one-hot entry, so only row 2 survives." />
+  <Step tex="\text{emb}(2) = C[\hl{2}] = [0.5,\ 0.5]" words="Indexing gives the same row without the multiplications. This is what nn.Embedding does, and why it is fast." />
+</MathSteps>
+
+Because the lookup equals a matrix product, the gradient flows into the table like into any other weight matrix: each training step nudges only the rows of the symbols that appeared in the batch.<Cite id="pt-embedding" />
+
+<Analogy breaks="Real map pins have two coordinates; embeddings have 10 to several hundred, and their axes have no names.">
+Think of each symbol as a pin on a map. Training slides the pins around until symbols that are used in similar ways sit near each other.
+</Analogy>
+
+## The Bengio-style MLP language model
+
+A <Term slug="language-model" /> predicts the next token from the ones before it, $P(x_t \mid x_{t-n+1}, \dots, x_{t-1})$; multiplying these predictions gives the probability of a whole sequence.<Cite id="d2l-lm" /> Counting models (<Term slug="n-gram">n-grams</Term>) estimate each probability from a table of counts, which explodes in size and cannot handle a context it has never seen.<Cite id="d2l-lm" />
+
+In 2003 Yoshua Bengio and colleagues proposed a neural alternative. Each word gets a learned feature vector; the vectors of the previous $n-1$ words are concatenated, passed through a <Term slug="tanh" /> hidden layer, and a <Term slug="softmax" /> turns the output scores into next-word probabilities.<Cite id="bengio2003" /> Because similar words end up with similar vectors, a sentence seen in training also makes similar unseen sentences more likely. The paper calls this fighting the *curse of dimensionality*.<Cite id="bengio2003" />
+
+Andrej Karpathy's [makemore](https://github.com/karpathy/makemore) rebuilds this model at the character level on a list of about 32,000 names. The vocabulary has 27 symbols: 26 letters plus a "." that marks the start and end of a name.<Cite id="makemore" />
+
+<MathSteps
+  title="Shapes and parameters of the makemore MLP"
+  legend={[
+    { symbol: 'C', meaning: 'embedding table, 27 × 10' },
+    { symbol: 'W_1, b_1', meaning: 'hidden layer, 30 → 200' },
+    { symbol: 'W_2, b_2', meaning: 'output layer, 200 → 27' },
+  ]}
+>
+  <Step tex="\texttt{..e} \;\rightarrow\; \texttt{m}" words="The context is the last 3 characters. For 'emma', after the start padding '..' and the letter 'e', the target is 'm'." />
+  <Step tex="x = [C[.],\ C[.],\ C[e]] \in \mathbb{R}^{\hl{30}}" words="Look up three 10-number embeddings and concatenate them into 30 numbers." example="table C: 27 × 10 = 270 parameters" />
+  <Step tex="h = \tanh(x W_1 + b_1) \in \mathbb{R}^{200}" words="A hidden layer of 200 tanh units." example="30 × 200 + 200 = 6,200 parameters" />
+  <Step tex="\text{logits} = h W_2 + b_2 \in \mathbb{R}^{27}" words="One score per possible next character; softmax and cross-entropy follow, as in any classifier." example="200 × 27 + 27 = 5,427 parameters" />
+  <Step tex="270 + 6{,}200 + 5{,}427 = \hl{11{,}897}" words="The whole model has 11,897 parameters, the count shown in Karpathy's makemore lecture." />
+</MathSteps>
+
+Before training, the model should be about equally unsure of all 27 symbols, so its <Term slug="cross-entropy" /> loss should start near $\ln 27 \approx 3.30$.<Cite id="makemore" /> In the course project the trained model reaches a dev loss of about 2.14, against 2.45 for a counting bigram model.
+
+<Exercise id="adv-emb-params" />
+
+## Measuring similarity
+
+Once symbols are vectors, "similar" can be measured. The <Term slug="dot-product" /> $a \cdot b$ multiplies matching entries and adds them up; it is large when the vectors point the same way, but it also grows with their lengths. <Term slug="cosine-similarity" /> divides the dot product by both lengths, leaving only the angle: 1 for the same direction, 0 for perpendicular, −1 for opposite.<Cite id="wiki-word-embedding" />
+
+<MathSteps
+  title="Dot product and cosine for three embeddings"
+  legend={[
+    { symbol: 'a, b', meaning: 'two embedding vectors' },
+    { symbol: '\\lVert a \\rVert', meaning: 'length of a, the square root of a · a' },
+  ]}
+>
+  <Step tex="a = [0.5, 1.0, -0.5],\ \ b = [0.4, 0.9, -0.3],\ \ z = [-0.6, 0.1, 0.8]" words="Three made-up embeddings: a and b are meant to be similar symbols, z a different one." />
+  <Step tex="a \cdot b = 0.2 + 0.9 + 0.15 = \hl{1.25}, \quad a \cdot z = -0.3 + 0.1 - 0.4 = \hl{-0.6}" words="Multiply matching entries and add. Positive means 'roughly the same direction'." />
+  <Step tex="\lVert a \rVert \approx 1.225,\ \ \lVert b \rVert \approx 1.030,\ \ \lVert z \rVert \approx 1.005" words="Each length is the square root of the vector's dot product with itself." />
+  <Step tex="\cos(a, b) = \frac{a \cdot b}{\lVert a \rVert \lVert b \rVert} \approx \frac{1.25}{1.261} \approx \hl{0.99}" words="Dividing by both lengths keeps only the direction: a and b point almost the same way." />
+  <Step tex="\cos(a, z) \approx \frac{-0.6}{1.231} \approx \hl{-0.49}" words="a and z point in fairly different directions." />
+</MathSteps>
+
+Attention, covered in [Attention, step by step](/course/advanced/attention/), uses exactly these dot products to decide which tokens should listen to which.
+
+<Exercise id="adv-emb-cosine" />
+
+## Word2vec and the geometry of meaning
+
+In 2013 Tomas Mikolov and colleagues at Google showed that embeddings can be learned cheaply from huge text collections with two shallow models, **CBOW** (predict a word from its neighbours) and **skip-gram** (predict the neighbours from a word), together known as <Term slug="word2vec" />.<Cite id="mikolov2013" /> They reported that simple vector arithmetic captures relationships: the vector for "King" minus "Man" plus "Woman" lands closest to "Queen".<Cite id="mikolov2013" />
+
+The idea behind all of this is the *distributional hypothesis*: words that appear in similar contexts tend to have similar meanings.<Cite id="wiki-word-embedding" /> Modern language models no longer use separate word2vec vectors; they learn their embedding table together with the rest of the network, as the Bengio model already did.<Cite id="d2l-lm" />
+
+<Callout type="note">
+Vector arithmetic on embeddings is a striking demonstration, not a guarantee. The famous analogies hold for some relations and fail for many others, and embeddings also absorb biases present in their training text.
+</Callout>
+
+## Where the projects use it
+
+- [A neural name generator](/course/project-text/names-mlp/) trains exactly the 11,897-parameter model above.
+- [The bag-of-embeddings sentiment classifier](/course/project-text/sentiment-bag-of-embeddings/) averages word embeddings of a sentence and feeds the average to one linear layer.
+- [The tiny GPT](/course/project-code-autocomplete/code-tiny-gpt/) starts with a token-embedding table and a position-embedding table, and reuses the token table as its output layer (see [The Transformer and GPT](/course/advanced/transformers/)).
+
+## Try it
+
+The project's model class is the whole lesson in 16 lines: an embedding table, a concatenation, a tanh layer and 27 scores.
+
+<CodeFile path="code/projects/project-text/mlp_lm.py" lines="35-50" highlight="39,47,48" title="mlp_lm.py: embeddings, concatenation, tanh layer" />
+
+Line 47 performs the lookup for all three context characters at once, producing a `(batch, 3, 10)` tensor, and line 48 flattens it into the 30 numbers of the second step above.
+
+## Summary
+
+- An embedding is a learned vector per symbol; the lookup equals a one-hot vector times the embedding matrix.
+- Bengio et al. (2003) concatenated context embeddings, applied a tanh hidden layer and a softmax: the first neural language model.
+- The character version used in the names project has $270 + 6{,}200 + 5{,}427 = 11{,}897$ parameters and starts at a loss near $\ln 27 \approx 3.30$.
+- The dot product and cosine similarity measure how alike two embeddings are; cosine ignores length.
+- Word2vec showed that embeddings learned from large text capture some relationships as directions.
