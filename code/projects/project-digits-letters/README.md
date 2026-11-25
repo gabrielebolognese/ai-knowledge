@@ -12,7 +12,7 @@ confusion matrix, and read your own handwriting with a tkinter drawing app.
 | `train.py` | Training CLI: `--dataset mnist\|letters`, `--model mlp\|cnn`, `--epochs`, `--kernel-size`, `--smoke` | MLP baseline; A CNN at 99%; EMNIST |
 | `evaluate.py` | Test accuracy, per-class accuracy, confusion matrix (text + plot) and the most confident mistakes | Evaluating the digit model |
 | `preprocess.py` | Turns a drawing into a 28×28 image framed like MNIST or EMNIST; `--check` measures what each step is worth | Capstone |
-| `draw_app.py` | tkinter canvas → preprocessing → top-3 predictions, with a preview of what the model sees; `--selftest` runs without a window | Capstone |
+| `draw_app.py` | tkinter canvas → preprocessing → top-3 predictions, with a preview of what the model sees; `--selftest` runs without a window, `--check` tests tkinter and the preprocessing without a window or a checkpoint | Capstone |
 
 ## Requirements
 

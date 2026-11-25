@@ -52,7 +52,7 @@ Data goes to `data/`, checkpoints to `checkpoints/`, plots and logs to
 | `augment.py` | Label-preserving random affine transform (±10°, ±2 px, 90-110% scale); `python augment.py` saves examples | Augmentation |
 | `evaluate.py` | Test accuracy, per-class accuracy, confusion matrix, top confusions, confidence when right/wrong, plots of the worst mistakes; `--samples` | Reading the confusion matrix |
 | `preprocess.py` | Strokes → 28×28 exactly like the official bitmaps; `--check` compares with the real bitmaps | Capstone app |
-| `draw_app.py` | tkinter canvas → strokes → preprocessing → live top-3 guesses, with the dataset credit; `--selftest` runs without a window | Capstone app |
+| `draw_app.py` | tkinter canvas → strokes → preprocessing → live top-3 guesses, with the dataset credit; `--selftest` runs without a window, `--check` tests tkinter and the preprocessing without a window or a checkpoint | Capstone app |
 
 ## Requirements
 

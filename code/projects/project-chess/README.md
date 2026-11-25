@@ -51,7 +51,7 @@ python play.py                         # play the network engine
 
 ## Load the engine in a chess GUI
 
-The engine is a Python script, so a GUI starts it as `python uci.py`. Use the full path to your Python and to `uci.py`. Windows users can also point the GUI at `minifish.bat` (next to this file), which runs the same command.
+The engine is a Python script, so a GUI starts it as `python uci.py`. Use the full path to your Python and to `uci.py`. You can also point the GUI at `minifish.bat` (Windows) or `minifish.sh` (macOS/Linux) next to this file: they run the same command with the course's `.venv` Python (three folders up) when it exists, because a GUI does not activate your virtual environment, and fall back to the Python on your PATH.
 
 - **[Cute Chess](https://cutechess.com/)** (free, Windows/macOS/Linux; [releases](https://github.com/cutechess/cutechess/releases)): *Tools → Settings → Engines → +*. Set **Command** to `python uci.py` (or the path to `minifish.bat`), set **Working Directory** to this folder and **Protocol** to UCI. Then *Game → New*, choose the engine as one player and a time control such as 2 min + 1 s.
 - **[Arena](http://www.playwitharena.de/)** (free, Windows): *Engines → Install New Engine*, select `minifish.bat` and confirm the UCI protocol.

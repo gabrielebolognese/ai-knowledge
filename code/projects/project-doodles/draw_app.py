@@ -129,11 +129,34 @@ def selftest(model, ckpt):
         print(f"{name:<24} -> " + ", ".join(f"{c} {p:.1%}" for c, p in top3))
 
 
+def check():
+    """No window and no checkpoint: is tkinter installed, and do canvas strokes become a valid model input?"""
+    import tkinter                                            # fails here if Python was installed without Tk
+    from PIL import ImageTk  # noqa: F401  (the preview image needs it)
+
+    from models import DoodleCNN
+
+    print(f"tkinter {tkinter.TkVersion} available")
+    model = DoodleCNN(num_classes=10).eval()                  # untrained: only the shapes are tested
+    for name, strokes in demo_shapes().items():
+        x, top3 = top_k(model, [str(i) for i in range(10)], strokes)
+        ink = (x > 0).float().mean().item()
+        assert x.shape == (1, 1, 28, 28) and x.dtype == torch.float32, (x.shape, x.dtype)
+        assert 0.0 <= x.min() and x.max() <= 1.0 and 0.02 < ink < 0.6, (x.min(), x.max(), ink)
+        assert len(top3) == 3
+        print(f"{name:<24} -> 28x28, {ink:.0%} ink pixels -> input accepted by the CNN")
+    print("check passed")
+
+
 def main():
     p = argparse.ArgumentParser(description="Draw doodles and let the CNN guess")
     p.add_argument("--ckpt", default=None)
     p.add_argument("--selftest", action="store_true", help="no window: predict shapes drawn by code")
+    p.add_argument("--check", action="store_true", help="no window, no checkpoint: test tkinter and preprocessing")
     a = p.parse_args()
+    if a.check:
+        check()
+        return
     path = find_checkpoint(a.ckpt)
     model, ckpt = load_checkpoint(path)
     print(f"loaded {path.name} ({len(ckpt['classes'])} classes). {CREDIT}")

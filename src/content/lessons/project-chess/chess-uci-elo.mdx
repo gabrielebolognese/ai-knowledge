@@ -210,7 +210,7 @@ Stockfish's own Move Overhead defaults to 10 ms.<Cite id="sf-uci-commands" /> `u
 
 ## Playing in a GUI
 
-A GUI starts the engine as a program, so the project ships two tiny launchers: `minifish.bat` for Windows and `minifish.sh` for macOS and Linux. Each changes into the project folder and runs `python -u uci.py`, the `-u` keeping output unbuffered. The README explains the steps for each interface:
+A GUI starts the engine as a program, so the project ships two tiny launchers: `minifish.bat` for Windows and `minifish.sh` for macOS and Linux. Each changes into the project folder and runs `python -u uci.py`, the `-u` keeping output unbuffered. A GUI does not activate your virtual environment, so both launchers use the course's `.venv` (in the repository folder, three levels up) when it exists and fall back to the Python on your PATH. The README explains the steps for each interface:
 
 - [Cute Chess](https://github.com/cutechess/cutechess): add an engine with `python uci.py` (or the path to `minifish.bat`) as the command, the project folder as the working directory and UCI as the protocol.<Cite id="cutechess" />
 - Arena (Windows): install a new engine and select `minifish.bat`.
