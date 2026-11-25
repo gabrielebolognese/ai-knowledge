@@ -1,0 +1,486 @@
+{
+  "shots": {
+    "python-downloads-install-manager.png": {
+      "file": "python-downloads-install-manager.png",
+      "id": "SS-W02a",
+      "url": "https://www.python.org/downloads/",
+      "taken": "2026-11-25",
+      "bytes": 50939,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Download Python install manager",
+          "x": 36.3,
+          "y": 47.9
+        }
+      ]
+    },
+    "python-windows-page.png": {
+      "file": "python-windows-page.png",
+      "id": "SS-W02",
+      "url": "https://www.python.org/downloads/windows/",
+      "taken": "2026-11-25",
+      "bytes": 30027,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Latest Python install manager - Python install manager 26.4",
+          "x": 33.9,
+          "y": 49.8
+        }
+      ]
+    },
+    "python-pymanager-msix.png": {
+      "file": "python-pymanager-msix.png",
+      "id": "SS-W03",
+      "url": "https://www.python.org/downloads/release/pymanager-264/",
+      "taken": "2026-11-25",
+      "bytes": 22814,
+      "clip": {
+        "x": 200,
+        "y": 11,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Download Installer (MSIX)",
+          "x": 50,
+          "y": 50
+        }
+      ]
+    },
+    "python-windows-legacy-installer.png": {
+      "file": "python-windows-legacy-installer.png",
+      "id": "SS-W05a",
+      "url": "https://www.python.org/downloads/windows/",
+      "taken": "2026-11-25",
+      "bytes": 28840,
+      "clip": {
+        "x": 0,
+        "y": 36,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Python 3.14.10 section",
+          "x": 24.8,
+          "y": 44.4
+        },
+        {
+          "n": 2,
+          "label": "Windows installer (64-bit)",
+          "x": 32.3,
+          "y": 55.5
+        }
+      ]
+    },
+    "python-macos-installer.png": {
+      "file": "python-macos-installer.png",
+      "id": "SS-M04",
+      "url": "https://www.python.org/downloads/macos/",
+      "taken": "2026-11-25",
+      "bytes": 24655,
+      "clip": {
+        "x": 0,
+        "y": 13,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Python 3.14.10",
+          "x": 24.8,
+          "y": 47.8
+        },
+        {
+          "n": 2,
+          "label": "macOS installer",
+          "x": 29.4,
+          "y": 52.2
+        }
+      ]
+    },
+    "homebrew-install-command.png": {
+      "file": "homebrew-install-command.png",
+      "id": "SS-M05",
+      "url": "https://brew.sh/",
+      "taken": "2026-11-25",
+      "bytes": 34837,
+      "clip": {
+        "x": 174,
+        "y": 10,
+        "width": 1048,
+        "height": 655
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Install command",
+          "x": 50,
+          "y": 50
+        }
+      ]
+    },
+    "vscode-download-windows.png": {
+      "file": "vscode-download-windows.png",
+      "id": "SS-W07",
+      "url": "https://code.visualstudio.com/download",
+      "taken": "2026-11-25",
+      "bytes": 53719,
+      "clip": {
+        "x": 0,
+        "y": 18,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Download for Windows x64 · User Installer",
+          "x": 38.3,
+          "y": 49.9
+        }
+      ]
+    },
+    "vscode-download-mac.png": {
+      "file": "vscode-download-mac.png",
+      "id": "SS-M06",
+      "url": "https://code.visualstudio.com/download",
+      "taken": "2026-11-25",
+      "bytes": 54338,
+      "clip": {
+        "x": 200,
+        "y": 18,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Download for macOS Universal",
+          "x": 50,
+          "y": 49.9
+        }
+      ]
+    },
+    "vscode-download-linux.png": {
+      "file": "vscode-download-linux.png",
+      "id": "SS-L02",
+      "url": "https://code.visualstudio.com/download",
+      "taken": "2026-11-25",
+      "bytes": 43823,
+      "clip": {
+        "x": 400,
+        "y": 34,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": ".deb (Debian, Ubuntu)",
+          "x": 61.7,
+          "y": 47.5
+        },
+        {
+          "n": 2,
+          "label": ".rpm (Fedora, RHEL)",
+          "x": 58.6,
+          "y": 55.2
+        }
+      ]
+    },
+    "marketplace-python-extension.png": {
+      "file": "marketplace-python-extension.png",
+      "id": "SS-W09",
+      "url": "https://marketplace.visualstudio.com/items?itemName=ms-python.python",
+      "taken": "2026-11-25",
+      "bytes": 31196,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Publisher: Microsoft",
+          "x": 34.1,
+          "y": 25.1
+        },
+        {
+          "n": 2,
+          "label": "Install",
+          "x": 36.1,
+          "y": 42
+        }
+      ]
+    },
+    "marketplace-jupyter-extension.png": {
+      "file": "marketplace-jupyter-extension.png",
+      "id": "SS-W10",
+      "url": "https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter",
+      "taken": "2026-11-25",
+      "bytes": 32272,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Publisher: Microsoft",
+          "x": 34.1,
+          "y": 25.1
+        },
+        {
+          "n": 2,
+          "label": "Install",
+          "x": 36.1,
+          "y": 42
+        }
+      ]
+    },
+    "pytorch-selector-windows-cpu.png": {
+      "file": "pytorch-selector-windows-cpu.png",
+      "id": "SS-W15",
+      "url": "https://pytorch.org/get-started/locally/",
+      "taken": "2026-11-25",
+      "bytes": 29050,
+      "clip": {
+        "x": 400,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Your OS",
+          "x": 80.5,
+          "y": 33.5
+        },
+        {
+          "n": 2,
+          "label": "Package: Pip",
+          "x": 34.5,
+          "y": 39.8
+        },
+        {
+          "n": 3,
+          "label": "Compute Platform: CPU",
+          "x": 83.4,
+          "y": 52.5
+        },
+        {
+          "n": 4,
+          "label": "Run this Command",
+          "x": 57.5,
+          "y": 62.1
+        }
+      ]
+    },
+    "pytorch-selector-windows-cuda.png": {
+      "file": "pytorch-selector-windows-cuda.png",
+      "id": "SS-W16",
+      "url": "https://pytorch.org/get-started/locally/",
+      "taken": "2026-11-25",
+      "bytes": 30280,
+      "clip": {
+        "x": 400,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Your OS",
+          "x": 80.5,
+          "y": 33.5
+        },
+        {
+          "n": 2,
+          "label": "Package: Pip",
+          "x": 34.5,
+          "y": 39.8
+        },
+        {
+          "n": 3,
+          "label": "Compute Platform: CUDA 13.2",
+          "x": 31.7,
+          "y": 52.5
+        },
+        {
+          "n": 4,
+          "label": "Run this Command",
+          "x": 57.5,
+          "y": 62.1
+        }
+      ]
+    },
+    "pytorch-selector-mac.png": {
+      "file": "pytorch-selector-mac.png",
+      "id": "SS-M07",
+      "url": "https://pytorch.org/get-started/locally/",
+      "taken": "2026-11-25",
+      "bytes": 28617,
+      "clip": {
+        "x": 400,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Your OS",
+          "x": 57.5,
+          "y": 33.5
+        },
+        {
+          "n": 2,
+          "label": "Package: Pip",
+          "x": 34.5,
+          "y": 39.8
+        },
+        {
+          "n": 3,
+          "label": "Compute Platform: Default",
+          "x": 83.4,
+          "y": 52.5
+        },
+        {
+          "n": 4,
+          "label": "Run this Command",
+          "x": 57.5,
+          "y": 62.1
+        }
+      ]
+    },
+    "pytorch-selector-linux-cpu.png": {
+      "file": "pytorch-selector-linux-cpu.png",
+      "id": "SS-L03",
+      "url": "https://pytorch.org/get-started/locally/",
+      "taken": "2026-11-25",
+      "bytes": 28445,
+      "clip": {
+        "x": 400,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Your OS",
+          "x": 34.5,
+          "y": 33.5
+        },
+        {
+          "n": 2,
+          "label": "Package: Pip",
+          "x": 34.5,
+          "y": 39.8
+        },
+        {
+          "n": 3,
+          "label": "Compute Platform: CPU",
+          "x": 83.4,
+          "y": 52.5
+        },
+        {
+          "n": 4,
+          "label": "Run this Command",
+          "x": 57.5,
+          "y": 62.1
+        }
+      ]
+    },
+    "git-for-windows-download.png": {
+      "file": "git-for-windows-download.png",
+      "id": "SS-W19",
+      "url": "https://git-scm.com/install/windows",
+      "taken": "2026-11-25",
+      "bytes": 64484,
+      "clip": {
+        "x": 102,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Download Git for Windows (x64)",
+          "x": 50,
+          "y": 37.8
+        }
+      ]
+    },
+    "github-desktop-download.png": {
+      "file": "github-desktop-download.png",
+      "id": "SS-W19b",
+      "url": "https://desktop.github.com/download/",
+      "taken": "2026-11-25",
+      "bytes": 41463,
+      "clip": {
+        "x": 175,
+        "y": 130,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "Download for Windows",
+          "x": 50,
+          "y": 50
+        }
+      ]
+    },
+    "colab-new-notebook.png": {
+      "file": "colab-new-notebook.png",
+      "id": "SS-C01",
+      "url": "https://colab.research.google.com/",
+      "taken": "2026-11-25",
+      "bytes": 36719,
+      "clip": {
+        "x": 0,
+        "y": 0,
+        "width": 1040,
+        "height": 650
+      },
+      "marks": [
+        {
+          "n": 1,
+          "label": "New notebook",
+          "x": 28.3,
+          "y": 25.5
+        }
+      ]
+    }
+  },
+  "viewport": "1440x900",
+  "generator": "scripts/capture-setup-screenshots.mjs"
+}

@@ -1,0 +1,182 @@
+---
+title: Create a project folder and a virtual environment
+slug: setup-virtual-environment
+track: setup
+level: beginner
+order: 50
+minutes: 20
+module: Your project environment
+summary: "Make a course folder outside OneDrive, create a virtual environment with python -m venv .venv, activate it on your shell (and fix PowerShell's execution-policy error), select it in VS Code and upgrade pip."
+hatnote: "Already working in an activated venv with Python 3.11+? Skip to \"Install PyTorch\"."
+prerequisites: []
+tools: [Python 3.14, venv, pip]
+outcomes:
+  - Explain what a virtual environment is and why every project gets one
+  - Create and activate .venv on your OS (and fix the PowerShell execution-policy error)
+  - Select the .venv interpreter in VS Code
+  - Upgrade pip with python -m pip
+build: An activated .venv for the course
+reviewed: 2026-11-25
+seeAlso: [setup-vscode, setup-install-pytorch, setup-troubleshooting]
+sources:
+  - id: py-venv
+    title: "venv: Creation of virtual environments"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/library/venv.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pypa-venv-guide
+    title: Install packages in a virtual environment using pip and venv
+    publisher: Python Packaging Authority
+    url: https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/
+    accessed: 2026-11-24
+    type: docs
+  - id: ps-execution-policy
+    title: about_Execution_Policies
+    publisher: Microsoft
+    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies
+    accessed: 2026-11-24
+    type: docs
+  - id: vscode-python-envs
+    title: Python environments in VS Code
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/python/environments
+    accessed: 2026-11-24
+    type: docs
+  - id: pip-user-guide
+    title: pip User Guide
+    publisher: Python Packaging Authority
+    url: https://pip.pypa.io/en/stable/user_guide/
+    accessed: 2026-11-24
+    type: docs
+  - id: pep-668
+    title: "PEP 668: Marking Python base environments as externally managed"
+    publisher: Python Software Foundation
+    url: https://peps.python.org/pep-0668/
+    accessed: 2026-11-24
+    type: docs
+  - id: py-using-windows
+    title: Using Python on Windows
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/using/windows.html
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: venv-activate-cmd
+    type: mcq
+    difficulty: easy
+    title: Activate on PowerShell
+    prompt: "You are in PowerShell inside your course folder. Which command activates the environment?"
+    options: ["source .venv/bin/activate", ".venv\\Scripts\\Activate.ps1", ".venv\\Scripts\\activate.bat", "python activate"]
+    answer: 1
+    explanation: "PowerShell runs `.venv\\Scripts\\Activate.ps1`. `activate.bat` is for the old Command Prompt (cmd.exe) and `source .venv/bin/activate` is for macOS and Linux shells."
+  - id: venv-how-to-tell
+    type: short
+    difficulty: easy
+    title: Is it active?
+    prompt: "How can you tell, just by looking, that the virtual environment is active?"
+    answer: "The prompt starts with (.venv)."
+    explanation: "Activation adds the environment's name in brackets to the start of the prompt. `python -c \"import sys; print(sys.prefix)\"` confirms it by printing a path that ends in `.venv`."
+  - id: venv-why-policy
+    type: reveal
+    difficulty: medium
+    title: Why does PowerShell refuse?
+    prompt: "Why does Set-ExecutionPolicy -Scope CurrentUser fix the activation error, and why is it reasonably safe?"
+    answer: "Windows client PCs default to the Restricted policy, which blocks all .ps1 scripts, including Activate.ps1. RemoteSigned lets local scripts run but still requires a signature for scripts downloaded from the internet, and CurrentUser changes it only for your account without administrator rights."
+    explanation: "Microsoft documents Restricted as the default on Windows clients and RemoteSigned as the default on Windows Server. The change applies to your user only and can be undone with `Set-ExecutionPolicy Undefined -Scope CurrentUser`."
+---
+
+A **<Term slug="virtual-environment" />** is a folder, by convention called `.venv`, that holds a private Python and the packages installed for one project. Each project gets its own, so installing or upgrading a package for one project can never break another.<Cite id="py-venv" /> The Python Packaging guide recommends installing packages inside one rather than into the system Python.<Cite id="pypa-venv-guide" />
+
+<Analogy breaks="Lab benches cost money and space; a virtual environment is just a folder, so you can make, delete and rebuild them freely.">
+A virtual environment is a clean lab bench for one experiment. Chemicals from one bench never contaminate another, and if a bench gets messy you clear it and set it up again from the list of what belongs there.
+</Analogy>
+
+## Step 1. Make the course folder
+
+Use a short path **outside OneDrive, Dropbox or iCloud**. A virtual environment holds thousands of small files; sync services slow it down and can corrupt it.
+
+| Windows (PowerShell) | macOS / Linux |
+|---|---|
+| `mkdir C:\dev\ai-knowledge` | `mkdir -p ~/dev/ai-knowledge` |
+| `cd C:\dev\ai-knowledge` | `cd ~/dev/ai-knowledge` |
+| `code .` | `code .` |
+
+`code .` opens the folder in VS Code. Short paths also avoid Windows' old 260-character path limit, which can break package installs.<Cite id="py-using-windows" />
+
+## Step 2. Create the environment
+
+In the terminal, inside the course folder (VS Code's own terminal works too: **Terminal → New Terminal**):
+
+| Windows | macOS / Linux |
+|---|---|
+| `python -m venv .venv` | `python3 -m venv .venv` |
+
+With the Windows install manager you can pin the version: `py -V:3.14 -m venv .venv`. The command takes a few seconds and prints nothing.<Cite id="py-venv" />
+
+**Verify it worked:** a folder named `.venv` appears (`dir` or `ls -a`; in VS Code's Explorer on the left).
+
+## Step 3. Activate it
+
+Activation makes `python` and `pip` in this terminal point at the environment. The command depends on your shell:<Cite id="py-venv" />
+
+| Shell | Command |
+|---|---|
+| **PowerShell** (Windows default) | `.venv\Scripts\Activate.ps1` |
+| Command Prompt (cmd.exe) | `.venv\Scripts\activate.bat` |
+| macOS / Linux (zsh, bash) | `source .venv/bin/activate` |
+| fish | `source .venv/bin/activate.fish` |
+
+**Verify it worked:** the prompt now starts with `(.venv)`, for example `(.venv) PS C:\dev\ai-knowledge>`. Run `python --version`: it shows the Python the environment was made with. To leave, type `deactivate`.
+
+Activation lasts only for that terminal window. **Every new terminal needs it again**; VS Code does it for you once Step 5 is done.<Cite id="vscode-python-envs" />
+
+### Windows: "running scripts is disabled on this system"
+
+On a fresh Windows PC, `Activate.ps1` usually fails with a red message ending in *"cannot be loaded because running scripts is disabled on this system"*. Windows client editions block PowerShell scripts by default.<Cite id="ps-execution-policy" /> Allow local scripts for **your user only** (no administrator needed):
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Answer **Y** if asked, then run `.venv\Scripts\Activate.ps1` again. *RemoteSigned* runs scripts made on your PC and still demands a signature for scripts downloaded from the internet.<Cite id="ps-execution-policy" />
+
+<Figure src="/screenshots/setup/ill-venv-execution-policy.svg" alt="Illustration of PowerShell: python -m venv .venv, the red 'running scripts is disabled' error, the Set-ExecutionPolicy fix, and the (.venv) prompt" caption="Illustration: (1) create the venv, (2) the error, (3) the one-time fix, (4) the active (.venv) prompt. Exact messages may differ." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies" />
+
+Two alternatives that need no policy change: use **Command Prompt** with `activate.bat`, or skip activation and call the environment's Python by its path, `.venv\Scripts\python.exe`; the venv docs note activation is optional.<Cite id="py-venv" />
+
+<Exercise id="venv-activate-cmd" />
+
+## Step 4. Upgrade pip
+
+<Term slug="pip" /> installs packages. Upgrade it first, always calling it **through Python**:
+
+```text
+python -m pip install --upgrade pip
+```
+
+`python -m pip` guarantees the packages go into the Python you are running, which is the active `.venv`.<Cite id="pip-user-guide" />
+
+**Verify it worked:** `python -m pip --version` prints `pip 26.x from …\.venv\…`. The path must contain `.venv`; if it does not, the environment is not active.
+
+<Callout type="pitfall">
+On recent Ubuntu, Debian and Fedora, installing with pip **outside** a virtual environment fails with *"externally-managed-environment"*. This is deliberate, defined in PEP 668, to protect the system's own Python.<Cite id="pep-668" /> Activate `.venv` and the error disappears.
+</Callout>
+
+## Step 5. Tell VS Code to use it
+
+1. In VS Code press **Ctrl+Shift+P** (**⌘⇧P** on macOS).
+2. Type **Python: Select Interpreter** and press Enter.
+3. Choose the entry with **`.venv`**, marked **Recommended**.<Cite id="vscode-python-envs" />
+
+<Figure src="/screenshots/setup/ill-vscode-select-interpreter.svg" alt="Illustration of the VS Code Select Interpreter list with Python 3.14.10 ('.venv': venv), marked Recommended, outlined" caption="Illustration: (1) choose the .venv interpreter. Simplified drawing of VS Code's quick pick." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://code.visualstudio.com/docs/python/environments" />
+
+**Verify it worked:** the status bar at the bottom right shows `3.14.10 ('.venv': venv)` or similar, and a **new** VS Code terminal opens with `(.venv)` already in the prompt.<Cite id="vscode-python-envs" />
+
+## Summary
+
+- One project, one `.venv`, in a short folder outside cloud sync.
+- Create: `python -m venv .venv` (macOS/Linux: `python3`). Activate: `.venv\Scripts\Activate.ps1` or `source .venv/bin/activate`.
+- PowerShell blocked? `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+- Always `python -m pip …`; check that `(.venv)` is in the prompt.
+- In VS Code: **Python: Select Interpreter → `.venv`**.

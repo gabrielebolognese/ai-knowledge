@@ -1,0 +1,168 @@
+---
+title: "No install? Use Google Colab"
+slug: setup-colab
+track: setup
+level: beginner
+order: 80
+minutes: 12
+module: Alternatives and help
+summary: "Run the whole course in the browser with Google Colab: open a new notebook, run Python, switch the runtime to a GPU, install python-chess with !pip and save your work to Google Drive. Ideal for Intel Macs, Chromebooks and locked-down PCs."
+hatnote: "Installed everything locally? You can skip this lesson."
+prerequisites: []
+tools: [Google Colab, a Google account]
+outcomes:
+  - Open a new Colab notebook and run Python in the browser
+  - Switch the runtime to a GPU and know the free-tier limits
+  - Install chess with !pip and save your work to Drive
+build: A Colab notebook that imports torch and chess
+reviewed: 2026-11-25
+seeAlso: [setup-overview, setup-install-pytorch]
+sources:
+  - id: colab
+    title: Google Colaboratory
+    publisher: Google
+    url: https://colab.research.google.com/
+    accessed: 2026-11-25
+    type: docs
+  - id: colab-faq
+    title: Colab FAQ
+    publisher: Google
+    url: https://research.google.com/colaboratory/faq.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pytorch-get-started
+    title: "PyTorch: Get Started Locally"
+    publisher: PyTorch
+    url: https://pytorch.org/get-started/locally/
+    accessed: 2026-11-25
+    type: docs
+  - id: colab-intro
+    title: Welcome to Colab (intro notebook)
+    publisher: Google
+    url: https://colab.research.google.com/notebooks/intro.ipynb
+    accessed: 2026-11-25
+    type: docs
+  - id: colab-io
+    title: "External data: local files, Drive, Sheets and Cloud Storage"
+    publisher: Google
+    url: https://colab.research.google.com/notebooks/io.ipynb
+    accessed: 2026-11-25
+    type: docs
+  - id: colab-github
+    title: Using Colab with GitHub
+    publisher: Google
+    url: https://colab.research.google.com/github/googlecolab/colabtools/blob/main/notebooks/colab-github-demo.ipynb
+    accessed: 2026-11-25
+    type: docs
+exercises:
+  - id: colab-limits
+    type: mcq
+    difficulty: easy
+    title: Free-tier limits
+    prompt: "Which statement about free Colab is true?"
+    options: ["Your files stay on the runtime forever", "GPUs are always available and sessions never end", "Sessions can time out and GPUs are not guaranteed, so save to Drive", "You must install Python on your PC first"]
+    answer: 2
+    explanation: "The Colab FAQ says free resources are not guaranteed and sessions have time limits. Files on the runtime disappear when it is recycled, so save notebooks and checkpoints to Google Drive."
+  - id: colab-bang
+    type: reveal
+    difficulty: medium
+    title: What does the ! do?
+    prompt: "Why does the install cell read `!pip install chess` rather than `pip install chess`?"
+    answer: "The ! sends the line to the runtime's shell instead of to Python. Without it, Python would read 'pip install chess' as (invalid) Python code."
+    explanation: "A notebook cell is Python by default. A leading `!` runs that line as a shell command on the Colab machine, the same as typing it in a terminal."
+---
+
+**<Term slug="google-colab" />** (Colaboratory) runs Python notebooks in your browser on Google's computers. It is free to use, needs only a Google account, and comes with PyTorch, NumPy and Matplotlib already installed.<Cite id="colab-faq" /> It is the quickest way into the course, and the right one for Intel Macs, Chromebooks and computers where you cannot install software.
+
+## Step 1. Open a new notebook
+
+1. Open [colab.research.google.com](https://colab.research.google.com/).<Cite id="colab" />
+2. Click **Sign in** (top right) and log in with a Google account.
+3. Click **+ New notebook**. (From inside an open notebook: **File → New notebook**.)
+
+<Screenshot src="/screenshots/setup/colab-new-notebook.png" alt="Google Colab start page with the '+ New notebook' button outlined" caption="colab.research.google.com before signing in. After signing in the same page also lists your recent notebooks." source="https://colab.research.google.com/" taken="2026-11-25" pins={[{ label: 'Click **+ New notebook** (sign in first, top right).' }]} />
+
+A notebook named `Untitled0.ipynb` opens with one empty **code cell**. If you have never used a <Term slug="jupyter-notebook">notebook</Term>, Google's [Welcome to Colab](https://colab.research.google.com/notebooks/intro.ipynb) notebook is a five-minute tour.<Cite id="colab-intro" />
+
+## Step 2. Run your first cell
+
+Click in the cell, type the line below, and press **Shift+Enter** (or click the **▶** button left of the cell):
+
+```python
+import torch
+print(torch.__version__, torch.cuda.is_available())
+```
+
+The first run takes a few seconds while Colab connects you to a machine, called a *runtime*.
+
+**Verify it worked:** under the cell you see a version such as `2.x.x+cu12x False`. `False` means you are on a CPU runtime, which is fine for every project. The exact version is whatever Google currently pre-installs, so it may differ from the local-install lessons.<Cite id="colab-faq" />
+
+## Step 3. Install python-chess
+
+PyTorch, NumPy, Matplotlib, Pillow and tqdm are pre-installed. The chess project also needs the `chess` package, which is not.<Cite id="colab-faq" /> Add a cell with:
+
+```python
+!pip install chess
+```
+
+The `!` sends the line to the runtime's shell instead of to Python. Packages installed this way last **only for the current session**: run the cell again after every reconnect.
+
+<Figure src="/screenshots/setup/ill-colab-verify.svg" alt="Illustration of two Colab cells: !pip install chess with its success message, and import torch with output showing True for CUDA" caption="Illustration: (1) install chess for this session, (2) check PyTorch; True appears only on a GPU runtime. Versions will differ." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://research.google.com/colaboratory/faq.html" />
+
+## Step 4 (optional). Switch to a GPU
+
+1. Open the **Runtime** menu.
+2. Click **Change runtime type**.
+3. Under **Hardware accelerator**, choose a **GPU** (on the free tier usually a **T4 GPU**), then **Save**.
+
+<Figure src="/screenshots/setup/ill-colab-runtime.svg" alt="Illustration of the Colab Runtime menu with Change runtime type highlighted, and the dialog with the T4 GPU hardware accelerator selected" caption="Illustration: (1) Runtime menu, (2) Change runtime type, (3) pick a GPU. Menu labels and GPU names change over time; Colab's FAQ calls these the runtime type and hardware accelerator." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://research.google.com/colaboratory/faq.html" />
+
+Changing the runtime restarts it, so re-run your cells, including `!pip install chess`. Run the Step 2 cell again: it should now end in `True`.
+
+<Callout type="warning">
+Free GPUs are **not guaranteed**: availability and session length vary, and idle sessions are disconnected.<Cite id="colab-faq" /> The course's projects all train on a CPU, so a GPU is a bonus, not a requirement. Switch back to CPU when you do not need it.
+</Callout>
+
+## Step 5. Save your work
+
+Files on the runtime vanish when the session ends. Two habits keep your work:
+
+- **Notebooks:** **File → Save a copy in Drive** stores the notebook in your Google Drive (folder *Colab Notebooks*).
+- **Data and model files:** mount Drive and write to it:<Cite id="colab-io" />
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+# then save to e.g. /content/drive/MyDrive/ai-knowledge/
+```
+
+Colab asks for permission the first time. Files saved under `/content/drive/MyDrive/` stay after the session ends.
+
+<Analogy breaks="A hotel room is only yours while you pay; Colab is free, but it can still reclaim the machine whenever it needs to.">
+Colab is like a hotel room: fully equipped and ready when you arrive, but the room is cleaned when you leave, so take your belongings (save to Drive) before you check out.
+</Analogy>
+
+## Opening the course notebooks in Colab
+
+Colab can open any notebook stored in a public GitHub repository through a URL of the form `colab.research.google.com/github/<user>/<repo>/blob/<branch>/<path>.ipynb`.<Cite id="colab-github" /> Where a project ships a notebook, its lesson shows an **Open in Colab** link built this way. For plain `.py` scripts, upload the file with the folder icon in the left sidebar, or paste its code into a cell.
+
+<Exercise id="colab-limits" />
+
+## Colab or local?
+
+| | Colab | Local install |
+|---|---|---|
+| Setup time | 2 minutes | about 45 minutes once |
+| Works offline | No | Yes |
+| GPU | Sometimes, free tier | Only with your own NVIDIA card or Apple silicon |
+| Files persist | Only in Drive | Yes |
+| Runs on Intel Mac, Chromebook | Yes | No (current PyTorch) |
+
+Many learners start on Colab and install locally later; the lessons work identically.<Cite id="pytorch-get-started" />
+
+## Summary
+
+- [colab.research.google.com](https://colab.research.google.com/) → **Sign in** → **+ New notebook**.
+- PyTorch and NumPy are pre-installed; run `!pip install chess` once per session.
+- **Runtime → Change runtime type → GPU** is optional; free GPUs are not guaranteed.
+- Save notebooks with **File → Save a copy in Drive** and data under `/content/drive/MyDrive/`.

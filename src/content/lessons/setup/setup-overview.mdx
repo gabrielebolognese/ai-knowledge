@@ -1,0 +1,164 @@
+---
+title: "Choose your path: skip setup, use Colab or install locally"
+slug: setup-overview
+track: setup
+level: beginner
+order: 10
+minutes: 10
+module: Get ready
+summary: The course runs on Python and PyTorch. Skip setup if you already have them, use Google Colab in the browser with zero installs, or follow the full local install on Windows, macOS or Linux (about 45 minutes the first time).
+hatnote: "This whole track is optional. Nothing outside it lists a setup lesson as a prerequisite."
+prerequisites: []
+tools: [A web browser]
+outcomes:
+  - Name the tools the course uses (terminal, Python, VS Code, a virtual environment, PyTorch) and what each one is for
+  - Choose between a local install and Google Colab
+  - Decide which setup lessons you can skip
+build: A plan for your own setup route
+reviewed: 2026-11-25
+seeAlso: [setup-colab, setup-install-python, setup-troubleshooting]
+sources:
+  - id: py-downloads
+    title: Download Python
+    publisher: Python Software Foundation
+    url: https://www.python.org/downloads/
+    accessed: 2026-11-25
+    type: docs
+  - id: pytorch-get-started
+    title: "PyTorch: Get Started Locally"
+    publisher: PyTorch
+    url: https://pytorch.org/get-started/locally/
+    accessed: 2026-11-25
+    type: docs
+  - id: vscode-download
+    title: Download Visual Studio Code
+    publisher: Microsoft
+    url: https://code.visualstudio.com/download
+    accessed: 2026-11-25
+    type: docs
+  - id: colab-faq
+    title: Colab FAQ
+    publisher: Google
+    url: https://research.google.com/colaboratory/faq.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pypi-torch
+    title: torch on PyPI
+    publisher: Python Package Index
+    url: https://pypi.org/project/torch/
+    accessed: 2026-11-25
+    type: docs
+  - id: py-venv
+    title: "venv: Creation of virtual environments"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/library/venv.html
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: setup-path-intel-mac
+    type: mcq
+    difficulty: easy
+    title: Which route?
+    prompt: "A learner has a 2019 Intel MacBook and wants to start today. Which route fits best?"
+    options: ["Full local install with PyTorch 2.15", "Google Colab in the browser", "Install the Windows version of Python", "Skip Python entirely"]
+    answer: 1
+    explanation: "PyTorch 2.15 publishes macOS wheels only for Apple silicon (macOS 14 or later), so an Intel Mac cannot install the current release locally. **Google Colab** runs in the browser with PyTorch pre-installed."
+  - id: setup-path-skip
+    type: mcq
+    difficulty: easy
+    title: Can you skip?
+    prompt: "You already run Python 3.12 with PyTorch in a virtual environment and use VS Code daily. What should you do with the setup track?"
+    options: ["Read every lesson anyway, it is required for the certificate", "Skip it and start the Beginner track", "Uninstall Python and start again with 3.14", "Only read the Colab lesson"]
+    answer: 1
+    explanation: "Python 3.11 or newer with PyTorch is enough, and the certificate never requires the setup track. Skip it. Run `python code/setup/verify_setup.py` once if you want a quick check."
+  - id: setup-path-tools
+    type: reveal
+    difficulty: medium
+    title: Match tool to job
+    prompt: "In one line each, what job do the terminal, Python, VS Code, the virtual environment and PyTorch do?"
+    answer: "Terminal: where you type commands. Python: runs the code. VS Code: where you write and read code. Virtual environment: a private package folder for one project. PyTorch: the neural-network library."
+    explanation: "The workshop analogy in this lesson maps them to the room, the power supply, the workbench, the toolbox and the power tools."
+---
+
+The course's code runs on **Python** with the **PyTorch** library, so you need somewhere to run it. There are three routes: skip setup because you already have the tools, use **Google Colab** in a browser with nothing to install, or do a **full local install** on your own computer.<Cite id="colab-faq" /><Cite id="pytorch-get-started" /> This lesson helps you pick one in two minutes.
+
+## The three routes
+
+| Route | Pick it if | Time | Next lesson |
+|---|---|---|---|
+| **Skip setup** | You already have Python 3.11+ with PyTorch, an editor and a virtual environment | 0 min | The course dashboard at [/course/](/course/) |
+| **Google Colab** | Intel Mac, Chromebook, school or work PC where you cannot install software, or you want to start right now | 5 min | [No install? Use Google Colab](/course/setup/setup-colab/) |
+| **Full local install** | You want everything on your own Windows, macOS or Linux computer | about 45 min | [Open a terminal](/course/setup/setup-terminal/) |
+
+Colab is free, runs in the browser and comes with PyTorch, NumPy and Matplotlib already installed. The trade-offs are that sessions time out and free GPUs are not guaranteed.<Cite id="colab-faq" /> A local install takes longer once but then works offline, keeps your files and has no time limits.
+
+<Callout type="tip">
+Not sure? Start with Colab today and do the local install later. Every lesson works with both.
+</Callout>
+
+### Check whether you can skip
+
+You can skip the whole track if a terminal command `python --version` (on macOS and Linux, `python3 --version`) prints **3.11 or newer** and `python -c "import torch; print(torch.__version__)"` prints a version number. PyTorch 2.15, the current release, requires Python 3.11 or later.<Cite id="pypi-torch" /> Nothing outside this track lists a setup lesson as a prerequisite, and the certificate never requires it.
+
+## What the local install gives you
+
+The full install sets up five things, always in this order.<Cite id="py-downloads" /><Cite id="vscode-download" />
+
+1. **A <Term slug="terminal" />**: the text window where you type commands. Already on every computer.
+2. **Python 3.14**: the language the course uses, from [python.org/downloads](https://www.python.org/downloads/). Versions 3.12 to 3.15 also work.
+3. **VS Code**: a free editor for reading and running code, from [code.visualstudio.com/download](https://code.visualstudio.com/download).
+4. **A <Term slug="virtual-environment" />** called `.venv`: a private folder of packages that belongs to this course only.<Cite id="py-venv" />
+5. **PyTorch and friends**: the neural-network library plus NumPy, Matplotlib, Jupyter and python-chess, installed with <Term slug="pip" />.
+
+<Analogy breaks="A real workshop has one toolbox per room; a computer can have many virtual environments side by side, and creating a new one costs nothing.">
+Think of a workshop. The terminal is the room you work in, Python is the power supply, VS Code is the workbench, the virtual environment is a toolbox that belongs to one project, and PyTorch is the set of power tools inside it.
+</Analogy>
+
+### The install order at a glance
+
+```text
+Terminal → Python 3.14 → VS Code (+ Python and Jupyter extensions)
+        → project folder → .venv → activate → upgrade pip
+        → PyTorch (CPU) → requirements.txt → verify_setup.py
+```
+
+Each step in the next lessons has the same three parts: the **direct link**, the **exact button or command**, and a **"Verify it worked"** check with the output you should see.
+
+## What your computer needs
+
+| | Minimum for the course |
+|---|---|
+| Windows | Windows 10 or 11, 64-bit |
+| macOS | Apple silicon (M1 or newer) on macOS 14 Sonoma or later; Intel Macs use Colab |
+| Linux | Any current 64-bit distribution with glibc 2.28 or newer (Ubuntu 22.04+, Debian 12+, Fedora) |
+| Disk | About 3 GB free (CPU install) |
+| GPU | Not needed. Every project trains on a laptop CPU |
+
+PyTorch 2.15's macOS wheels are built only for Apple silicon on macOS 14 or newer, which is why Intel Macs are sent to Colab.<Cite id="pypi-torch" /> The [PyTorch selector page](https://pytorch.org/get-started/locally/) lists the Linux minimums.<Cite id="pytorch-get-started" />
+
+<Callout type="note">
+The course recommends **Python 3.14** because every package it uses publishes ready-made files for it today. Python 3.15 is newer but only a few weeks old. Avoid exactly **3.14.1**, which torchvision refuses to install on.
+</Callout>
+
+## The setup track, lesson by lesson
+
+| # | Lesson | Skip it if |
+|---|---|---|
+| 1 | This page | — |
+| 2 | [Open a terminal](/course/setup/setup-terminal/) | You already use a terminal |
+| 3 | [Install Python](/course/setup/setup-install-python/) | `python --version` shows 3.11 or newer |
+| 4 | [Install VS Code](/course/setup/setup-vscode/) | You have an editor you like |
+| 5 | [Project folder and virtual environment](/course/setup/setup-virtual-environment/) | You already work in a venv |
+| 6 | [Install PyTorch](/course/setup/setup-install-pytorch/) | `import torch` works |
+| 7 | [Other libraries and verify](/course/setup/setup-libraries-verify/) | `verify_setup.py` passes |
+| 8 | [Google Colab](/course/setup/setup-colab/) | You installed locally |
+| 9 | [Troubleshooting, Git and next steps](/course/setup/setup-troubleshooting/) | Nothing went wrong |
+
+Already have Python 3.11 or newer? Jump straight to [lesson 5](/course/setup/setup-virtual-environment/).
+
+## Summary
+
+- Three routes: **skip**, **Colab** (zero install) or **local install** (about 45 minutes once).
+- The local install is terminal → Python 3.14 → VS Code → `.venv` → PyTorch → libraries → verify.
+- No GPU is needed; Intel Macs and locked-down PCs should use Colab.
+- The setup track is optional and never required for the certificate.

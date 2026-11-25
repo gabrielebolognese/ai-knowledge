@@ -1,0 +1,263 @@
+---
+title: Install Python 3.14 on Windows, macOS or Linux
+slug: setup-install-python
+track: setup
+level: beginner
+order: 30
+minutes: 25
+module: Install Python and an editor
+summary: "Install Python 3.14 with the official Python install manager on Windows, the python.org installer or Homebrew on macOS, or apt/dnf on Linux, then verify it with python --version. Includes the legacy Windows installer and the Microsoft Store alias trap."
+hatnote: "If python --version already prints 3.11 or newer, skip to \"Install VS Code\"."
+prerequisites: []
+tools: [Python install manager 26.4, Python 3.14.10]
+outcomes:
+  - Install Python 3.14 with the Python install manager (Windows), the python.org installer or Homebrew (macOS), or apt/dnf (Linux)
+  - Avoid the Microsoft Store "python" alias trap and the deprecated-installer pitfalls
+  - Verify the install with python --version / py --version
+build: A working Python 3.14 on your computer
+reviewed: 2026-11-25
+seeAlso: [setup-terminal, setup-vscode, setup-troubleshooting]
+sources:
+  - id: py-downloads-windows
+    title: Python Releases for Windows
+    publisher: Python Software Foundation
+    url: https://www.python.org/downloads/windows/
+    accessed: 2026-11-25
+    type: docs
+  - id: pymanager-264
+    title: Python install manager 26.4
+    publisher: Python Software Foundation
+    url: https://www.python.org/downloads/release/pymanager-264/
+    accessed: 2026-11-25
+    type: docs
+  - id: py-3-14-10
+    title: Python 3.14.10 release page
+    publisher: Python Software Foundation
+    url: https://www.python.org/downloads/release/python-31410/
+    accessed: 2026-11-24
+    type: docs
+  - id: py-using-windows
+    title: Using Python on Windows
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/using/windows.html
+    accessed: 2026-11-24
+    type: docs
+  - id: py-downloads-macos
+    title: Python Releases for macOS
+    publisher: Python Software Foundation
+    url: https://www.python.org/downloads/macos/
+    accessed: 2026-11-25
+    type: docs
+  - id: py-using-mac
+    title: Using Python on macOS
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/using/mac.html
+    accessed: 2026-11-24
+    type: docs
+  - id: py-using-unix
+    title: Using Python on Unix platforms
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/using/unix.html
+    accessed: 2026-11-24
+    type: docs
+  - id: brew
+    title: Homebrew
+    publisher: Homebrew
+    url: https://brew.sh/
+    accessed: 2026-11-25
+    type: docs
+  - id: py-downloads
+    title: Download Python
+    publisher: Python Software Foundation
+    url: https://www.python.org/downloads/
+    accessed: 2026-11-25
+    type: docs
+  - id: pypi-torchvision
+    title: torchvision on PyPI
+    publisher: Python Package Index
+    url: https://pypi.org/project/torchvision/
+    accessed: 2026-11-25
+    type: docs
+  - id: ubuntu-python3
+    title: "Ubuntu packages: python3 (resolute)"
+    publisher: Canonical
+    url: https://packages.ubuntu.com/resolute/python3
+    accessed: 2026-11-24
+    type: docs
+  - id: deadsnakes
+    title: deadsnakes PPA
+    publisher: Launchpad
+    url: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: python-route-a
+    type: mcq
+    difficulty: easy
+    title: The recommended Windows route
+    prompt: "Which download does this course recommend for Windows?"
+    options: ["The Microsoft Store app called just \"Python\" that opens when you type python", "The Python install manager (MSIX) from python.org, then py install 3.14", "The 32-bit Windows installer", "Python 3.10, because tutorials use it"]
+    answer: 1
+    explanation: "The Python docs now name the **Python install manager** as the way to get Python on Windows; the classic `.exe` installer is marked deprecated. 32-bit Python cannot run PyTorch, and 3.10 reached end of life on 2026-10-01."
+  - id: python-store-trap
+    type: mcq
+    difficulty: medium
+    title: The Store opened
+    prompt: "You installed Python with the legacy .exe installer but forgot to tick Add python.exe to PATH. Typing python opens the Microsoft Store. What is the quickest correct fix?"
+    options: ["Install the Store app as well", "Re-run the installer, choose Modify, tick Add Python to environment variables, then open a new terminal", "Rename python.exe to python3.exe", "Restart the computer three times"]
+    answer: 1
+    explanation: "The Store opens because Windows' own *app execution alias* answers when no real `python` is on PATH. Adding Python to PATH (Modify → Advanced Options → **Add Python to environment variables**) and opening a **new** terminal fixes it. You can also switch the Store alias off in **Manage app execution aliases**."
+  - id: python-mac-command
+    type: short
+    difficulty: easy
+    title: The macOS command
+    prompt: "On macOS, outside a virtual environment, which command prints the Python version you just installed?"
+    answer: ["python3 --version", "python3 -V"]
+    explanation: "macOS installs the command as `python3` (and `pip3`). Inside an activated virtual environment, plain `python` works too."
+---
+
+**Python** is the programming language used throughout the course. This lesson installs **Python 3.14**, the version the course is tested on, from official sources only, then checks it with one command.<Cite id="py-downloads" /> Pick your operating system below and follow only that section.
+
+<Callout type="note">
+**Which version?** Python 3.14 (currently 3.14.10). Versions 3.12, 3.13 and 3.15 also work. Avoid **3.10** (end of life) and exactly **3.14.1**, which torchvision refuses to install on.<Cite id="pypi-torchvision" />
+</Callout>
+
+## Windows
+
+Windows does not come with Python, so it has to be installed once. Windows now has a new official installer, the **Python install manager**. The Python documentation names it as the way to get Python on Windows and marks the classic `.exe` installer and the old `py.exe` launcher as deprecated.<Cite id="py-using-windows" /> Use **route A** below; route B is the fallback.
+
+### Route A (recommended): the Python install manager
+
+**Step 1. Download the install manager.** Open [python.org/downloads](https://www.python.org/downloads/) and click the yellow **Download Python install manager** button.<Cite id="py-downloads" />
+
+<Screenshot src="/screenshots/setup/python-downloads-install-manager.png" alt="python.org downloads page with the yellow 'Download Python install manager' button outlined and numbered 1" caption="python.org/downloads on Windows." source="https://www.python.org/downloads/" taken="2026-11-25" pins={[{ label: 'Click **Download Python install manager**. It downloads `python-manager-26.4.msix`.' }]} />
+
+The same file is listed on [python.org/downloads/windows](https://www.python.org/downloads/windows/) under **Latest Python install manager – Python install manager 26.4**, which leads to its release page.<Cite id="py-downloads-windows" /> There, the button is called **Download Installer (MSIX)**.<Cite id="pymanager-264" />
+
+<Screenshot src="/screenshots/setup/python-pymanager-msix.png" alt="Python install manager 26.4 release page with the 'Download Installer (MSIX)' button outlined" caption="The install manager's release page, if you came via the Windows downloads list." source="https://www.python.org/downloads/release/pymanager-264/" taken="2026-11-25" pins={[{ label: 'Click **Download Installer (MSIX)**. Direct link: `python.org/ftp/python/pymanager/python-manager-26.4.msix`.' }]} />
+
+**Step 2. Install it.** Open your **Downloads** folder, double-click `python-manager-26.4.msix`, then click **Install**.<Cite id="py-using-windows" />
+
+<Figure src="/screenshots/setup/ill-msix-install.svg" alt="Illustration of the Windows App Installer dialog for the Python install manager with the Install button outlined" caption="Illustration: the App Installer dialog. Click (1) Install. Wording may differ slightly on your PC." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://docs.python.org/3/using/windows.html" />
+
+The same app is also in the Microsoft Store under the name **Python install manager**; the docs say the two are identical.<Cite id="py-using-windows" />
+
+**Step 3. Install Python 3.14.** **Close any open terminal, open a new one**, and type:
+
+```powershell
+py install 3.14
+```
+
+The manager downloads and installs the newest 3.14 release. If it asks whether to add a folder to your PATH, either answer is fine for this course: the docs describe it as optional if you use the `py` command.<Cite id="py-using-windows" />
+
+**Verify it worked:**
+
+```powershell
+py list
+python --version
+```
+
+Expected: `py list` shows a line with **3.14**, and `python --version` prints `Python 3.14.10` (or a newer 3.14.x).
+
+<Figure src="/screenshots/setup/ill-py-install-terminal.svg" alt="Illustration of PowerShell running py install 3.14, py list and python --version, which prints Python 3.14.10" caption="Illustration: (1) install the runtime, (2) list runtimes, (3) check the version. Exact messages may differ." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://docs.python.org/3/using/windows.html" />
+
+<Callout type="tip">
+Both `python` and `py` work after route A: the manager registers both commands. `py install --update` later updates your installed runtimes.<Cite id="py-using-windows" />
+</Callout>
+
+### Route B (fallback): the classic installer
+
+Use this only if route A is blocked, for example on a work PC that refuses MSIX packages. The installer itself warns that it is being retired after Python 3.15.<Cite id="py-using-windows" />
+
+1. Open [python.org/downloads/windows](https://www.python.org/downloads/windows/). Under **Python 3.14.10**, click **Windows installer (64-bit)**, about 32 MB.<Cite id="py-downloads-windows" /><Cite id="py-3-14-10" /> On a Windows-on-ARM laptop pick **Windows installer (ARM64)** instead.
+2. Run the downloaded `python-3.14.10-amd64.exe`.
+3. At the bottom of the first window, **tick "Add python.exe to PATH"**. This is the step most people miss.
+4. Click **Install Now**. If the last page offers **Disable path length limit**, click it.
+5. Open a **new** terminal and run `python --version`. Expected: `Python 3.14.10`.
+
+<Screenshot src="/screenshots/setup/python-windows-legacy-installer.png" alt="Python Releases for Windows page with the Python 3.14.10 heading and its 'Windows installer (64-bit)' link outlined" caption="Route B: the classic 64-bit installer for 3.14.10." source="https://www.python.org/downloads/windows/" taken="2026-11-25" pins={[{ label: 'Find the **Python 3.14.10** section (newest at the top of Stable Releases).' }, { label: 'Click **Windows installer (64-bit)**. Not 32-bit, not "embeddable".' }]} />
+
+<Figure src="/screenshots/setup/ill-legacy-installer.svg" alt="Illustration of the Python 3.14.10 setup window with the 'Add python.exe to PATH' checkbox ticked and outlined, and the Install Now button outlined" caption="Illustration of the classic installer: (1) tick Add python.exe to PATH, (2) click Install Now. Labels match the installer's own text; layout simplified." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://www.python.org/downloads/release/python-31410/" />
+
+### The Microsoft Store trap
+
+If typing `python` **opens the Microsoft Store** or prints *"Python was not found; run without arguments to install from the Microsoft Store"*, a built-in Windows shortcut is answering instead of a real Python.<Cite id="py-using-windows" />
+
+1. Click **Start**, type **Manage app execution aliases**, open it.
+2. Route A: make sure **Python (default)** and **Python install manager** are **On** (switch them off and on again to refresh).
+3. Route B: switch **off** the entries that point to the Store's *App Installer* python.
+4. Open a **new** terminal and run `python --version` again.
+
+<Figure src="/screenshots/setup/ill-app-execution-aliases.svg" alt="Illustration of the Windows App execution aliases settings page with the Python (default) toggle switched on and outlined" caption="Illustration of Settings → Apps → Advanced app settings → App execution aliases: (1) Python (default) switched On for route A. Simplified drawing." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://docs.python.org/3/using/windows.html" />
+
+<Exercise id="python-store-trap" />
+
+## macOS
+
+PyTorch 2.15 runs on Apple-silicon Macs (M1 or newer) with macOS 14 or later. On an Intel Mac, install Python if you like, but use [Google Colab](/course/setup/setup-colab/) for the course.
+
+### Option A (recommended): the python.org installer
+
+1. Open [python.org/downloads/macos](https://www.python.org/downloads/macos/). Under **Python 3.14.10**, click **macOS installer** (`python-3.14.10-macos11.pkg`).<Cite id="py-downloads-macos" />
+2. Double-click the `.pkg`. Click **Continue** through the pages, **Agree** to the licence, then **Install**, and enter your Mac password.<Cite id="py-using-mac" />
+3. A Finder window opens. **Double-click `Install Certificates.command`.** It installs the security certificates Python uses for downloads, which prevents `CERTIFICATE_VERIFY_FAILED` errors later.<Cite id="py-using-mac" />
+
+<Screenshot src="/screenshots/setup/python-macos-installer.png" alt="Python Releases for macOS page with Python 3.14.10 and its 'macOS installer' link outlined" caption="python.org/downloads/macos." source="https://www.python.org/downloads/macos/" taken="2026-11-25" pins={[{ label: 'Find **Python 3.14.10**.' }, { label: 'Click **macOS installer**.' }]} />
+
+<Figure src="/screenshots/setup/ill-mac-certificates.svg" alt="Illustration of the Finder window for Python 3.14 with Install Certificates.command outlined" caption="Illustration of /Applications/Python 3.14: (1) double-click Install Certificates.command once. Simplified drawing." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://docs.python.org/3/using/mac.html" />
+
+**Verify it worked:** open a new Terminal window and run `python3 --version`. Expected: `Python 3.14.10`. On macOS the commands are `python3` and `pip3`; inside a virtual environment plain `python` works.<Cite id="py-using-mac" />
+
+### Option B: Homebrew
+
+If you already use [Homebrew](https://brew.sh/), or want to, install it with the command on its home page, then Python:<Cite id="brew" />
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install python@3.14
+python3.14 --version
+```
+
+Follow the "Next steps" the Homebrew installer prints, which add `brew` to your PATH. Expected final output: `Python 3.14.10`.
+
+<Screenshot src="/screenshots/setup/homebrew-install-command.png" alt="brew.sh home page with the Install Homebrew command box outlined" caption="brew.sh: the one-line install command." source="https://brew.sh/" taken="2026-11-25" pins={[{ label: 'Copy this command into Terminal and press Return. Homebrew explains each step and pauses before it starts.' }]} />
+
+## Linux
+
+Most current distributions already ship a suitable Python 3; you mainly need the `venv` and `pip` pieces.<Cite id="py-using-unix" />
+
+**Ubuntu and Debian:**
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip
+python3 --version
+```
+
+Ubuntu 26.04 ships Python 3.14.3 and Ubuntu 24.04 ships 3.12.3; both work.<Cite id="ubuntu-python3" /> On Debian and Ubuntu, `python3-venv` is a separate package, so do not skip it.
+
+<Figure src="/screenshots/setup/ill-linux-apt.svg" alt="Illustration of a Linux terminal running sudo apt update, sudo apt install python3 python3-venv python3-pip and python3 --version" caption="Illustration: (1) refresh the package list, (2) install Python with venv and pip, (3) check the version. The version depends on your distribution." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://docs.python.org/3/using/unix.html" />
+
+**Ubuntu 22.04** ships Python 3.10, which is too old for PyTorch 2.15. Use the community-run **deadsnakes** PPA (third-party, not part of Ubuntu) to add a newer one:<Cite id="deadsnakes" />
+
+```bash
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.13 python3.13-venv
+```
+
+**Fedora:** `sudo dnf install python3.14`, which includes `venv` and `pip`.
+
+**Verify it worked:** `python3 --version` prints 3.11 or newer.
+
+<Analogy breaks="Unlike a power supply, you can have several Python versions installed side by side; the py command and virtual environments choose between them.">
+Installing Python is like wiring a power supply into the workshop: nothing visible happens yet, but every tool you add later plugs into it.
+</Analogy>
+
+## Summary
+
+- **Windows:** install manager from [python.org/downloads](https://www.python.org/downloads/) → **Install** → new terminal → `py install 3.14` → `python --version`.
+- **Fallback:** the classic 64-bit installer, with **Add python.exe to PATH** ticked.
+- **Store opens?** Fix it in **Manage app execution aliases**, then open a new terminal.
+- **macOS:** python.org `.pkg` plus **Install Certificates.command**, or `brew install python@3.14`; the command is `python3`.
+- **Linux:** `sudo apt install python3 python3-venv python3-pip`; check with `python3 --version`.

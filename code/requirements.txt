@@ -1,0 +1,26 @@
+# AI Knowledge: Python packages for every lesson and project.
+# Install inside an activated virtual environment:
+#
+#   1. PyTorch first, from the command the selector at https://pytorch.org/get-started/locally/ gives you.
+#      CPU build (the course default, works on any laptop):
+#        python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#      On macOS (Apple silicon) the default build already includes the Apple GPU (MPS):
+#        python -m pip install torch torchvision
+#   2. Then everything else:
+#        python -m pip install -r code/requirements.txt
+#
+# torch / torchvision are listed below too, so step 2 alone also works; on Linux, though, plain
+# PyPI pulls the large CUDA build, which is why step 1 comes first. Tested with Python 3.12-3.15
+# (3.14 recommended; avoid exactly 3.14.1, which torchvision excludes). Versions are lower bounds
+# checked on 2026-11-24; newer releases should work.
+
+torch>=2.14             # neural networks (all projects)
+torchvision>=0.29       # MNIST / EMNIST datasets and image transforms (digits and letters)
+numpy>=2.0              # arrays (every lesson)
+matplotlib>=3.9         # plots and image grids
+pillow>=10.0            # loading and resizing images (doodles, your own handwriting)
+tqdm>=4.66              # progress bars during training
+chess>=1.11             # the python-chess library (import chess). Not "python-chess": that name is an old redirect.
+zstandard>=0.22         # reads the compressed Lichess evaluation file (chess project, data.py)
+jupyterlab>=4.2         # browser notebooks: python -m jupyter lab
+ipykernel>=6.29         # lets VS Code run notebooks in this environment

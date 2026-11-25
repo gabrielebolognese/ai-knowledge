@@ -1,0 +1,265 @@
+---
+title: Troubleshooting, Git and next steps
+slug: setup-troubleshooting
+track: setup
+level: beginner
+order: 90
+minutes: 15
+module: Alternatives and help
+summary: "Fix the common setup errors (python not found, the Microsoft Store alias, pip not found, scripts disabled, SSL, no matching torch, wrong interpreter, long paths), optionally install Git or GitHub Desktop, and decide whether WSL2 is worth it."
+hatnote: "Everything worked? Skip to the Beginner track from the course dashboard."
+prerequisites: []
+tools: [Git for Windows, GitHub Desktop]
+outcomes:
+  - Fix the most common setup errors with the FAQ (python not found, pip not found, SSL, execution policy, wrong interpreter)
+  - Optionally install Git and GitHub Desktop to download the companion code
+  - Know when WSL2 is worth it and when it is not
+build: A working setup, and Git if you want it
+reviewed: 2026-11-25
+seeAlso: [setup-install-python, setup-virtual-environment, setup-colab]
+sources:
+  - id: py-using-windows
+    title: Using Python on Windows
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/using/windows.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pip-user-guide
+    title: pip User Guide
+    publisher: Python Packaging Authority
+    url: https://pip.pypa.io/en/stable/user_guide/
+    accessed: 2026-11-24
+    type: docs
+  - id: git-windows
+    title: Install Git on Windows
+    publisher: Git project
+    url: https://git-scm.com/install/windows
+    accessed: 2026-11-25
+    type: docs
+  - id: github-desktop
+    title: Download GitHub Desktop
+    publisher: GitHub
+    url: https://desktop.github.com/download/
+    accessed: 2026-11-25
+    type: docs
+  - id: wsl-install
+    title: Install WSL
+    publisher: Microsoft
+    url: https://learn.microsoft.com/en-us/windows/wsl/install
+    accessed: 2026-11-24
+    type: docs
+  - id: ps-execution-policy
+    title: about_Execution_Policies
+    publisher: Microsoft
+    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies
+    accessed: 2026-11-24
+    type: docs
+  - id: pip-install
+    title: "pip documentation: Installation"
+    publisher: Python Packaging Authority
+    url: https://pip.pypa.io/en/stable/installation/
+    accessed: 2026-11-24
+    type: docs
+  - id: py-using-mac
+    title: Using Python on macOS
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/using/mac.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pypi-torch
+    title: torch on PyPI
+    publisher: Python Package Index
+    url: https://pypi.org/project/torch/
+    accessed: 2026-11-25
+    type: docs
+  - id: vscode-python-envs
+    title: Python environments in VS Code
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/python/environments
+    accessed: 2026-11-24
+    type: docs
+  - id: pep-668
+    title: "PEP 668: Marking Python base environments as externally managed"
+    publisher: Python Software Foundation
+    url: https://peps.python.org/pep-0668/
+    accessed: 2026-11-24
+    type: docs
+  - id: gh-desktop-docs
+    title: Installing GitHub Desktop
+    publisher: GitHub Docs
+    url: https://docs.github.com/en/desktop/installing-and-authenticating-to-github-desktop/installing-github-desktop
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: trouble-pip-not-found
+    type: mcq
+    difficulty: easy
+    title: pip is not recognized
+    prompt: "`pip install numpy` says *pip is not recognized*, but `python --version` works. What should you type instead?"
+    options: ["pip3 install numpy --force", "python -m pip install numpy", "Reinstall Windows", "sudo pip install numpy"]
+    answer: 1
+    explanation: "`python -m pip` runs pip through the Python that already works, so it never depends on PATH and always installs into that Python (your active `.venv`)."
+  - id: trouble-new-terminal
+    type: mcq
+    difficulty: easy
+    title: The first fix to try
+    prompt: "You just installed Python, but the terminal says `python` is not recognized. What is the first thing to try?"
+    options: ["Close the terminal and open a new one", "Install Python again", "Restart the router", "Delete the .venv folder"]
+    answer: 0
+    explanation: "A terminal reads PATH only when it starts. A terminal opened **before** the install cannot see the new program. Open a new one and try again before anything else."
+  - id: trouble-squiggles
+    type: reveal
+    difficulty: medium
+    title: Red squiggles under import torch
+    prompt: "The script runs fine in your activated terminal, but VS Code underlines `import torch` in red. Why, and what is the fix?"
+    answer: "VS Code is using a different interpreter (for example the global Python) that has no torch. Fix: Ctrl+Shift+P → Python: Select Interpreter → choose the .venv entry."
+    explanation: "The terminal and the editor can point at different Pythons. The interpreter shown in VS Code's status bar must be the `.venv` one."
+---
+
+Most setup problems come from a handful of causes: a terminal that was opened **before** an install, the wrong Python answering, or an environment that is not active. This lesson lists the common error messages with their fixes, then covers the optional extras: **Git**, **GitHub Desktop** and **WSL2**.<Cite id="py-using-windows" />
+
+<Callout type="tip">
+Before anything else: **close the terminal, open a new one**, activate `.venv`, and try again. A terminal reads the <Term slug="path-variable">PATH</Term> only when it starts.
+</Callout>
+
+## First, diagnose
+
+These three commands tell you which Python is answering and whether the environment is active:
+
+```text
+python --version
+python -c "import sys; print(sys.executable)"
+python -m pip --version
+```
+
+Inside an active environment, the second and third lines show a path containing **`.venv`**. On Windows, `py list` shows every runtime the install manager knows about, with the default marked.<Cite id="py-using-windows" />
+
+## Windows
+
+### `python` opens the Microsoft Store, or says "Python was not found"
+
+Windows ships a shortcut, an *app execution alias*, that answers `python` with the Store when no real Python is found.<Cite id="py-using-windows" />
+
+1. **Start** → type **Manage app execution aliases** → open it.
+2. **Install manager users:** make sure **Python (default)** and **Python install manager** are **On**; toggle them off and on to refresh.
+3. **Classic installer users:** switch **off** the aliases that point to the Store's *App Installer*.
+4. Open a **new** terminal.
+
+See the illustration in [Install Python](/course/setup/setup-install-python/).
+
+### `python` or `py` is "not recognized"
+
+- Open a new terminal (see the tip above).
+- **Install manager:** check that `py` and `pymanager` work; confirm that `%UserProfile%\AppData\Local\Microsoft\WindowsApps` is on PATH.<Cite id="py-using-windows" />
+- **Classic installer:** re-run the installer, choose **Modify → Next**, tick **Add Python to environment variables**, then **Install**.
+- **Edit PATH by hand:** **Start** → **Edit environment variables for your account** → select **Path** → **Edit** → **New**, add the folder, click **OK**, open a new terminal.
+
+### `py` says "can't open file", or `python` and `py` run different versions
+
+An older *Python launcher* from a classic install is taking priority. Remove it in **Settings → Apps → Installed apps** (entry **Python Launcher**), and uninstall Python versions you no longer use.<Cite id="py-using-windows" />
+
+### "Running scripts is disabled on this system"
+
+PowerShell blocks `Activate.ps1` by default. Run this once, then activate again:<Cite id="ps-execution-policy" />
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+No-change alternatives: use **Command Prompt** with `.venv\Scripts\activate.bat`, or call `.venv\Scripts\python.exe` directly.
+
+### "Path too long", `WinError 206` or install failures in deep folders
+
+Windows has a historic 260-character path limit. Keep the course in a short folder such as `C:\dev\ai-knowledge`. To lift the limit (administrator, then restart), set the registry value `LongPathsEnabled` to `1` under `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem`, or click **Disable path length limit** at the end of the classic installer.<Cite id="py-using-windows" />
+
+### Very slow or broken `.venv` inside OneDrive
+
+Sync services struggle with the thousands of small files in an environment. Move the project to `C:\dev\ai-knowledge`, delete the old `.venv` folder and create it again (lesson 5).
+
+## All systems
+
+### "pip is not recognized" / "command not found: pip"
+
+Use **`python -m pip`** (macOS/Linux outside a venv: `python3 -m pip`). It runs pip through the Python that already works.<Cite id="pip-user-guide" /> If pip is missing entirely, `python -m ensurepip --upgrade` restores it.<Cite id="pip-install" />
+
+### "ERROR: No matching distribution found for torch"
+
+Almost always the Python version or architecture. PyTorch 2.15 needs **64-bit Python 3.11 or newer**.<Cite id="pypi-torch" /> Check with:
+
+```text
+python --version
+python -c "import struct; print(struct.calcsize('P') * 8)"
+```
+
+The second line must print `64`. On an **Intel Mac** there is no current PyTorch build: use [Google Colab](/course/setup/setup-colab/). On exactly Python **3.14.1**, torchvision refuses to install: upgrade to the latest 3.14.
+
+### `torch.cuda.is_available()` is `False`
+
+Expected with the CPU build (version ends in `+cpu`). With a CUDA build, run `nvidia-smi`: the driver must be 580 or newer for CUDA 13. See [Install PyTorch](/course/setup/setup-install-pytorch/).
+
+### "SSL: CERTIFICATE_VERIFY_FAILED" or pip cannot connect
+
+- **macOS:** double-click **Install Certificates.command** in `/Applications/Python 3.14/`.<Cite id="py-using-mac" />
+- **School or work network:** a proxy may be in the way. pip accepts `--proxy http://host:port`.<Cite id="pip-user-guide" /> If the network inspects HTTPS, ask IT for its certificate file and pass it with `--cert`. Do not make `--trusted-host` a habit, since it skips security checks. The easy way out is [Colab](/course/setup/setup-colab/).
+
+### "externally-managed-environment" (Linux, Homebrew)
+
+The system Python refuses pip installs by design (PEP 668).<Cite id="pep-668" /> Activate your `.venv`. On Debian/Ubuntu, *"ensurepip is not available"* means `sudo apt install python3-venv` is missing.
+
+### A package is installed but its command is "not found" (e.g. `jupyter`)
+
+Activate the environment, or run it as a module: `python -m jupyter lab`.
+
+### VS Code underlines `import torch` in red, or a notebook asks for a kernel
+
+VS Code is using another Python. **Ctrl+Shift+P → Python: Select Interpreter → `.venv`**. In a notebook, click **Select Kernel → Python Environments… → `.venv`**, and accept if VS Code offers to install `ipykernel`.<Cite id="vscode-python-envs" />
+
+### `UnicodeDecodeError` when reading a text file on Windows
+
+Open files with `open(path, encoding="utf-8")`. Python 3.15 makes UTF-8 the default, but 3.14 on Windows does not.<Cite id="py-using-windows" />
+
+<Exercise id="trouble-pip-not-found" />
+
+<Analogy breaks="A doctor examines you; here you run the three diagnose commands yourself, and most fixes take under a minute.">
+Troubleshooting is like a doctor's triage: check the vital signs first (which Python, is `.venv` active, which pip) before trying any treatment.
+</Analogy>
+
+## Optional: Git and GitHub Desktop
+
+The course is read-only, and **Download ZIP** from GitHub is enough to get the code. Git is useful if you want to pull updates or track your own changes.
+
+### Git for Windows
+
+Open [git-scm.com/install/windows](https://git-scm.com/install/windows) and click **Click here to download** (the latest 64-bit installer). Run it and accept the defaults.<Cite id="git-windows" />
+
+<Screenshot src="/screenshots/setup/git-for-windows-download.png" alt="git-scm.com Install for Windows page with the 'Click here to download' link outlined" caption="git-scm.com/install/windows. The page also lists ARM64, portable and winget options." source="https://git-scm.com/install/windows" taken="2026-11-25" pins={[{ label: 'Click **Click here to download** for the latest x64 Git for Windows.' }]} />
+
+**Verify it worked:** in a new terminal, `git --version` prints `git version 2.56.1.windows.1` or newer. Then get the course code:
+
+```text
+cd C:\dev
+git clone https://github.com/gabrielebolognese/ai-knowledge.git
+```
+
+On macOS, typing `git --version` in Terminal offers to install Apple's command-line tools, which include Git. On Linux, `sudo apt install git` or `sudo dnf install git`.
+
+### GitHub Desktop
+
+Prefer buttons to commands? Open [desktop.github.com/download](https://desktop.github.com/download/) and click **Download for Windows** (or macOS).<Cite id="github-desktop" /> Sign in with a GitHub account, then use **File → Clone repository → URL** and paste `https://github.com/gabrielebolognese/ai-knowledge`.<Cite id="gh-desktop-docs" />
+
+<Screenshot src="/screenshots/setup/github-desktop-download.png" alt="GitHub Desktop download page with the green 'Download for Windows' button outlined" caption="desktop.github.com/download. The arrow next to the button offers the macOS and other builds." source="https://desktop.github.com/download/" taken="2026-11-25" pins={[{ label: 'Click **Download for Windows**.' }]} />
+
+## Optional: WSL2 (advanced)
+
+The **Windows Subsystem for Linux** runs a real Linux, such as Ubuntu, inside Windows; install it with `wsl --install` in an administrator terminal.<Cite id="wsl-install" /> It helps if you already prefer Linux tools or follow Linux-only guides. It is **not needed** for this course: every lesson works in normal Windows PowerShell, and WSL adds a second set of files and Pythons to keep track of.
+
+## You are ready
+
+If `verify_setup.py` prints **All checks passed.**, head to the [course dashboard](/course/) and start the Beginner track, or jump straight to a project such as the [mini chess engine](/course/project-chess/chess-board-moves/).
+
+## Summary
+
+- First fix: **new terminal**, activate `.venv`, retry. Diagnose with `sys.executable` and `python -m pip --version`.
+- Store opens → **Manage app execution aliases**. Scripts disabled → `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+- pip missing → `python -m pip`. No torch for your Python → 64-bit Python 3.11+ (not 3.14.1), or Colab.
+- Git ([git-scm.com/install/windows](https://git-scm.com/install/windows)), GitHub Desktop and WSL2 are optional.

@@ -1,0 +1,176 @@
+---
+title: "Install PyTorch: CPU or GPU"
+slug: setup-install-pytorch
+track: setup
+level: beginner
+order: 60
+minutes: 15
+module: Your project environment
+summary: "Decide between the CPU build (the course default) and an NVIDIA CUDA build, copy the matching command from the PyTorch selector, install it into your .venv and check torch.__version__ and torch.cuda.is_available()."
+hatnote: "Using Google Colab? PyTorch is already installed there; see \"No install? Use Google Colab\"."
+prerequisites: []
+tools: [PyTorch 2.15, torchvision]
+outcomes:
+  - Decide between CPU and CUDA builds with the decision flowchart (NVIDIA GPU, driver >= 580)
+  - Copy the right command from the PyTorch selector
+  - Check torch.__version__ and torch.cuda.is_available()
+build: PyTorch installed in your .venv
+reviewed: 2026-11-25
+seeAlso: [setup-virtual-environment, setup-libraries-verify, setup-colab]
+sources:
+  - id: pytorch-get-started
+    title: "PyTorch: Get Started Locally"
+    publisher: PyTorch
+    url: https://pytorch.org/get-started/locally/
+    accessed: 2026-11-25
+    type: docs
+  - id: pypi-torch
+    title: torch on PyPI
+    publisher: Python Package Index
+    url: https://pypi.org/project/torch/
+    accessed: 2026-11-25
+    type: docs
+  - id: pypi-torchvision
+    title: torchvision on PyPI
+    publisher: Python Package Index
+    url: https://pypi.org/project/torchvision/
+    accessed: 2026-11-25
+    type: docs
+  - id: nvidia-drivers
+    title: NVIDIA driver downloads
+    publisher: NVIDIA
+    url: https://www.nvidia.com/en-us/drivers/
+    accessed: 2026-11-24
+    type: docs
+  - id: cuda-release-notes
+    title: CUDA Toolkit release notes
+    publisher: NVIDIA
+    url: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pt-mps
+    title: MPS backend (Apple silicon)
+    publisher: PyTorch
+    url: https://docs.pytorch.org/docs/stable/notes/mps.html
+    accessed: 2026-11-24
+    type: docs
+  - id: pt-wheel-cpu
+    title: PyTorch CPU wheel index
+    publisher: PyTorch
+    url: https://download.pytorch.org/whl/cpu/torch/
+    accessed: 2026-11-24
+    type: docs
+exercises:
+  - id: pytorch-which-build
+    type: mcq
+    difficulty: easy
+    title: Which build?
+    prompt: "Your laptop has Intel integrated graphics and no NVIDIA card. Which PyTorch build should you install?"
+    options: ["CUDA 13.2", "CUDA 13.4", "CPU", "ROCm 10.0"]
+    answer: 2
+    explanation: "CUDA builds need an **NVIDIA** GPU, and ROCm is for AMD GPUs on Linux. Without an NVIDIA card, choose **CPU**. Every project in the course trains on a laptop CPU."
+  - id: pytorch-false-ok
+    type: mcq
+    difficulty: medium
+    title: Is False a problem?
+    prompt: "After a CPU install, `torch.cuda.is_available()` prints `False`. What does that mean?"
+    options: ["The install is broken; reinstall", "Normal: the CPU build has no GPU support, and the course works on CPU", "You must install the CUDA Toolkit separately", "Python is the wrong version"]
+    answer: 1
+    explanation: "`False` simply says PyTorch cannot see a usable NVIDIA GPU, which is expected for a CPU build. If you *did* install a CUDA build on an NVIDIA PC, check the driver with `nvidia-smi`: CUDA 13 builds need driver 580 or newer."
+---
+
+**<Term slug="pytorch" />** is the deep-learning library every project in the course uses. It comes in builds for the CPU, which works on any computer, and for graphics cards via NVIDIA's <Term slug="cuda" />, which can train much faster on an NVIDIA GPU.<Cite id="pytorch-get-started" /> The course default is the **CPU build**: all six projects are sized to train on a laptop CPU.
+
+<Callout type="note">
+Activate your environment first (lesson 5). The prompt must start with `(.venv)`, otherwise PyTorch lands in the wrong Python.
+</Callout>
+
+## Step 1. Decide: CPU or GPU?
+
+```text
+Do you have an NVIDIA graphics card?
+├─ No / not sure ──────────────────────────────► CPU
+└─ Yes → run  nvidia-smi  → driver version ≥ 580?
+          ├─ No → update the driver, or use CPU
+          └─ Yes ──────────────────────────────► CUDA 13.2
+Apple-silicon Mac ─────────────────────────────► the default macOS build (includes the Apple GPU)
+Intel Mac ─────────────────────────────────────► Google Colab
+```
+
+- **CUDA builds** need an NVIDIA GPU and an NVIDIA driver new enough for CUDA 13, which means version **580 or later**.<Cite id="cuda-release-notes" /> You do **not** need to install the CUDA Toolkit: the PyTorch packages bundle what they need; only the driver matters. Update it from [nvidia.com/drivers](https://www.nvidia.com/en-us/drivers/).<Cite id="nvidia-drivers" />
+- **AMD or Intel graphics on Windows:** use CPU.
+- **Download size:** about 120 MB for the CPU build, about 2 GB for a CUDA build.<Cite id="pt-wheel-cpu" />
+
+<Analogy breaks="A van and a truck carry the same cargo; CPU and GPU PyTorch also give the same results, only the speed differs.">
+The CPU build is a reliable van that fits in any garage; the CUDA build is a lorry that is much faster on the motorway but only drives if you own the right road, an NVIDIA card.
+</Analogy>
+
+## Step 2. Get the command from the selector
+
+Open [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/) and scroll to the grid of tiles. Click, row by row: **Stable**, **your OS**, **Pip**, **Python**, and the **Compute Platform**. The box **Run this Command** shows the command to copy.<Cite id="pytorch-get-started" />
+
+<Screenshot src="/screenshots/setup/pytorch-selector-windows-cpu.png" alt="PyTorch Start Locally selector with Stable, Windows, Pip, Python and CPU selected and the Run this Command box outlined, showing pip3 install torch torchvision" caption="The selector for Windows + CPU." source="https://pytorch.org/get-started/locally/" taken="2026-11-25" pins={[{ label: 'Your OS: **Windows**.' }, { label: 'Package: **Pip**.' }, { label: 'Compute Platform: **CPU**.' }, { label: '**Run this Command** shows `pip3 install torch torchvision`.' }]} />
+
+<Screenshot src="/screenshots/setup/pytorch-selector-windows-cuda.png" alt="PyTorch selector with Windows, Pip and CUDA 13.2 selected; the command ends in --index-url https://download.pytorch.org/whl/cu132" caption="Windows + NVIDIA GPU (CUDA 13.2)." source="https://pytorch.org/get-started/locally/" taken="2026-11-25" pins={[{ label: '**Windows**.' }, { label: '**Pip**.' }, { label: '**CUDA 13.2**. Only with an NVIDIA GPU and driver 580+.' }, { label: 'The command adds `--index-url https://download.pytorch.org/whl/cu132`.' }]} />
+
+<Screenshot src="/screenshots/setup/pytorch-selector-mac.png" alt="PyTorch selector with Mac, Pip and the Default compute platform selected; command pip3 install torch torchvision" caption="macOS: there is a single build, labelled Default." source="https://pytorch.org/get-started/locally/" taken="2026-11-25" pins={[{ label: '**Mac**.' }, { label: '**Pip**.' }, { label: 'Compute Platform: **Default** (CUDA and ROCm are greyed out on macOS).' }, { label: 'Command: `pip3 install torch torchvision`.' }]} />
+
+<Screenshot src="/screenshots/setup/pytorch-selector-linux-cpu.png" alt="PyTorch selector with Linux, Pip and CPU selected; command ends in --index-url https://download.pytorch.org/whl/cpu" caption="Linux + CPU. On Linux the CPU command needs the extra --index-url." source="https://pytorch.org/get-started/locally/" taken="2026-11-25" pins={[{ label: '**Linux**.' }, { label: '**Pip**.' }, { label: '**CPU**.' }, { label: 'Command ends in `--index-url https://download.pytorch.org/whl/cpu`.' }]} />
+
+<Callout type="pitfall">
+On **Linux**, plain `pip install torch` downloads the large CUDA build even on a computer without a GPU. Use the CPU command with `--index-url …/whl/cpu` unless you have an NVIDIA card.<Cite id="pytorch-get-started" />
+</Callout>
+
+## Step 3. Install it
+
+The selector writes `pip3`. Inside the environment, use the safer `python -m pip` form with the same arguments:
+
+| Your choice | Command |
+|---|---|
+| **CPU, any OS** (course default) | `python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu` |
+| Apple-silicon Mac | `python -m pip install torch torchvision` |
+| NVIDIA GPU, Windows or Linux | `python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu132` |
+
+The explicit CPU index works on Windows, macOS and Linux, so one command covers everyone.<Cite id="pt-wheel-cpu" /> The download takes a few minutes; the last line reads `Successfully installed … torch-2.15.0 …`.
+
+PyTorch 2.15 needs **64-bit Python 3.11 or newer**,<Cite id="pypi-torch" /> and torchvision excludes exactly Python 3.14.1.<Cite id="pypi-torchvision" /> If pip says *"No matching distribution found for torch"*, check `python --version` first.
+
+## Step 4. Verify it worked
+
+```text
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+| You see | Meaning |
+|---|---|
+| `2.15.0+cpu False` | CPU build on Windows or Linux. **Correct for the course.** |
+| `2.15.0 False` | macOS build (check the Apple GPU below) |
+| `2.15.0+cu132 True` | CUDA build that can see your NVIDIA GPU |
+| `2.15.0+cu132 False` | CUDA build but no usable GPU: update the driver (`nvidia-smi`) |
+
+The PyTorch page suggests one more check, creating a random tensor:<Cite id="pytorch-get-started" />
+
+```text
+python -c "import torch; print(torch.rand(5, 3))"
+```
+
+Expected: a 5 × 3 grid of numbers between 0 and 1.
+
+### Apple-silicon Macs: the GPU (MPS)
+
+On M-series Macs, PyTorch can use the Apple GPU through its **MPS** backend:<Cite id="pt-mps" />
+
+```bash
+python -c "import torch; print(torch.backends.mps.is_available())"
+```
+
+`True` means it is available. The course trains on the CPU by default; a few operations are not yet supported on MPS and may need to run on the CPU instead.<Cite id="pt-mps" />
+
+<Exercise id="pytorch-false-ok" />
+
+## Summary
+
+- **CPU** is the course default; choose **CUDA 13.2** only with an NVIDIA GPU and driver ≥ 580.
+- The selector at [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/): Stable → OS → Pip → Python → Compute Platform.
+- Install inside `(.venv)` with `python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu`.
+- `2.15.0+cpu False` is a correct CPU result; Apple-silicon Macs can check `torch.backends.mps.is_available()`.

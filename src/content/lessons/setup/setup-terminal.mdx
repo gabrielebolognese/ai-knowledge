@@ -1,0 +1,186 @@
+---
+title: Open a terminal and run your first commands
+slug: setup-terminal
+track: setup
+level: beginner
+order: 20
+minutes: 12
+module: Get ready
+summary: Open Windows Terminal, the macOS Terminal or a Linux terminal, run cd, dir/ls and python --version, and learn to tell the shell prompt apart from the Python prompt.
+hatnote: "Already comfortable in a terminal? Skip to \"Install Python 3.14\"."
+prerequisites: []
+tools: [Windows Terminal, macOS Terminal, Linux terminal]
+outcomes:
+  - Open a terminal on Windows, macOS or Linux
+  - Run cd, ls/dir and python --version and read the output
+  - Tell the shell prompt apart from the Python prompt
+build: Your first three commands
+reviewed: 2026-11-25
+seeAlso: [setup-install-python, setup-troubleshooting]
+sources:
+  - id: ms-terminal
+    title: Install Windows Terminal
+    publisher: Microsoft
+    url: https://learn.microsoft.com/en-us/windows/terminal/install
+    accessed: 2026-11-24
+    type: docs
+  - id: apple-terminal
+    title: Terminal User Guide for Mac
+    publisher: Apple
+    url: https://support.apple.com/guide/terminal/welcome/mac
+    accessed: 2026-11-24
+    type: docs
+  - id: py-using-windows
+    title: Using Python on Windows
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/using/windows.html
+    accessed: 2026-11-24
+    type: docs
+  - id: py-tutorial-interpreter
+    title: "The Python Tutorial: Using the Python Interpreter"
+    publisher: Python Software Foundation
+    url: https://docs.python.org/3/tutorial/interpreter.html
+    accessed: 2026-11-25
+    type: docs
+  - id: ubuntu-terminal
+    title: "The Linux command line for beginners"
+    publisher: Canonical (Ubuntu tutorials)
+    url: https://ubuntu.com/tutorials/command-line-for-beginners
+    accessed: 2026-11-25
+    type: course
+  - id: ms-ps-location
+    title: "Set-Location (cd) and Get-ChildItem (dir, ls)"
+    publisher: Microsoft
+    url: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/get-childitem
+    accessed: 2026-11-25
+    type: docs
+exercises:
+  - id: terminal-which-prompt
+    type: mcq
+    difficulty: easy
+    title: Which prompt is this?
+    prompt: "Your window shows `>>>` before the cursor. You type `pip install numpy` and get a `SyntaxError`. Why?"
+    options: ["pip is not installed", "You are inside the Python prompt, not the shell", "numpy does not exist", "The terminal needs administrator rights"]
+    answer: 1
+    explanation: "`>>>` is the **Python** prompt: it only understands Python code. Commands such as `pip` belong to the **shell**. Type `exit()` and press Enter to get back to the shell prompt (`PS C:\\...>` or `you@Mac ~ %`), then run the command again."
+  - id: terminal-cd-meaning
+    type: short
+    difficulty: easy
+    title: Read a prompt
+    prompt: "After running `cd Desktop` your prompt reads `PS C:\\Users\\you\\Desktop>`. In one sentence, what changed?"
+    answer: "The current folder (working directory) is now the Desktop folder, so commands run there."
+    explanation: "The path in the prompt is the *current working directory*. `cd` (change directory) moves you; `cd ..` goes up one level."
+  - id: terminal-not-recognized
+    type: reveal
+    difficulty: medium
+    title: Not recognized
+    prompt: "You type `python --version` on a new Windows PC and see an error, or the Microsoft Store opens. Has the terminal failed?"
+    answer: "No. The terminal works; Python simply is not installed yet (or a Store alias is catching the name). Install it in the next lesson."
+    explanation: "The error means the shell searched every folder on PATH and found no real Python. The next lesson installs it, and the troubleshooting lesson covers the Store alias."
+---
+
+A **<Term slug="terminal" />** is a window where you type a command, press **Enter**, and read the answer as text. Every install step in this track, and every "run this script" in the course, happens there.<Cite id="ms-terminal" /> This lesson opens it on your system and runs three harmless commands.
+
+## Open a terminal
+
+### Windows 11
+
+1. Press the **Windows** key.
+2. Type `terminal`.
+3. Press **Enter**. *Windows Terminal* opens with a **PowerShell** tab.
+
+Alternative: right-click the **Start** button and choose **Terminal**. Windows Terminal is built into Windows 11.<Cite id="ms-terminal" />
+
+### Windows 10
+
+Press **Windows**, type `PowerShell`, press **Enter**. You can also install *Windows Terminal* for free from the Microsoft Store, as described on [Microsoft's install page](https://learn.microsoft.com/en-us/windows/terminal/install).<Cite id="ms-terminal" />
+
+<Figure src="/screenshots/setup/ill-windows-terminal.svg" alt="Illustration of the Windows Start menu with 'terminal' typed in the search box, the Terminal app as best match, and a PowerShell window running echo hello" caption="Illustration: (1) type terminal in Start, (2) open the Terminal result, (3) run echo hello. Simplified drawing, your screen may differ." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://learn.microsoft.com/en-us/windows/terminal/install" />
+
+### macOS
+
+1. Press **⌘ Command + Space** to open Spotlight.
+2. Type `Terminal`.
+3. Press **Return**.
+
+Terminal also lives in **Applications → Utilities**.<Cite id="apple-terminal" />
+
+<Figure src="/screenshots/setup/ill-mac-terminal.svg" alt="Illustration of macOS Spotlight with 'Terminal' typed, and a Terminal window running python3 --version" caption="Illustration: (1) Spotlight search for Terminal, (2) a first command. Simplified drawing." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://support.apple.com/guide/terminal/welcome/mac" />
+
+### Linux
+
+On Ubuntu press **Ctrl + Alt + T**, or open **Activities** and type `Terminal`. Other desktops call it *Terminal* or *Console* in the app menu.<Cite id="ubuntu-terminal" />
+
+## Your first three commands
+
+Type each line exactly, then press **Enter**.
+
+**1. Say hello**
+
+```text
+echo hello
+```
+
+**Verify it worked:** the next line shows `hello`. This proves the terminal reads your commands.
+
+**2. See where you are and what is here**
+
+| | Windows (PowerShell) | macOS / Linux |
+|---|---|---|
+| List the files here | `dir` (or `ls`) | `ls` |
+| Go into a folder | `cd Desktop` | `cd Desktop` |
+| Go up one folder | `cd ..` | `cd ..` |
+| Show the current folder | `pwd` | `pwd` |
+
+In PowerShell, `dir` and `ls` are both short names for the same command, `Get-ChildItem`, and `cd` is short for `Set-Location`.<Cite id="ms-ps-location" /> On macOS and Linux, `ls` and `cd` are the standard commands.<Cite id="ubuntu-terminal" />
+
+**Verify it worked:** after `cd Desktop`, the prompt ends in `Desktop`. Type `cd ..` to go back.
+
+**3. Ask for Python's version**
+
+```text
+python --version
+```
+
+On macOS and Linux type `python3 --version` instead. If Python is installed you see something like `Python 3.14.10`. On a new computer you will probably see an error such as *"not recognized"*, or on Windows the Microsoft Store may open.<Cite id="py-using-windows" /> **That is expected**: the next lesson installs Python.
+
+<Analogy breaks="A receptionist can guess what you mean; a shell cannot. One wrong letter and it answers with an error.">
+The terminal is like a receptionist who only accepts written requests. You hand over one line, they carry it out and hand back a reply, and the prompt is them saying "next, please".
+</Analogy>
+
+## Reading the prompt
+
+The text before the cursor is the **prompt**. It tells you two things: which program is listening, and which folder you are in.
+
+| Prompt | Meaning |
+|---|---|
+| `PS C:\Users\you>` | Windows PowerShell, in your home folder |
+| `you@Mac ~ %` | macOS (zsh), `~` means your home folder |
+| `you@host:~$` | Linux (bash) |
+| `(.venv) PS C:\dev\ai-knowledge>` | Same shell, with a virtual environment switched on (lesson 5) |
+| `>>>` | **Not** the shell: this is Python's own prompt |
+
+### Shell prompt or Python prompt?
+
+Typing `python` (or `python3`) **on its own** starts the <Term slug="python-interpreter">Python interpreter</Term> and changes the prompt to `>>>`.<Cite id="py-tutorial-interpreter" /> There you type Python code, such as `2 + 2`, not shell commands. Leave it with `exit()` and Enter, or with **Ctrl+Z then Enter** on Windows and **Ctrl+D** on macOS and Linux.<Cite id="py-tutorial-interpreter" />
+
+<Callout type="pitfall">
+Running `pip install ...` or `python script.py` at the `>>>` prompt gives a `SyntaxError`. Type `exit()` first, then run the command at the shell prompt.
+</Callout>
+
+<Exercise id="terminal-which-prompt" />
+
+## Terminal habits that save time
+
+- **Copy and paste work.** In Windows Terminal, paste with **Ctrl+V** or a right-click; on macOS, **⌘V**; in most Linux terminals, **Ctrl+Shift+V**.<Cite id="ms-terminal" />
+- **Up arrow** recalls the previous command, so you can fix a typo and press Enter again.
+- **Tab** completes folder and file names: type `cd Desk` and press Tab.
+- **Ctrl+C** stops a running command (for example a training run you want to cancel).
+- **Open a new terminal after installing anything.** A terminal reads its list of program folders, the <Term slug="path-variable">PATH</Term>, only when it starts.<Cite id="py-using-windows" />
+
+## Summary
+
+- Windows: **Win → `terminal` → Enter** (PowerShell). macOS: **⌘ Space → `Terminal`**. Linux: **Ctrl+Alt+T**.
+- `echo hello`, `cd`, `dir`/`ls` and `python --version` are your first commands.
+- `PS C:\...>`, `%` or `$` is the shell; `>>>` is Python. Use `exit()` to go back.
+- After installing anything, open a **new** terminal so it sees the new program.

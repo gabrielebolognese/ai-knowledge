@@ -1,0 +1,196 @@
+---
+title: Install the other libraries and verify your setup
+slug: setup-libraries-verify
+track: setup
+level: beginner
+order: 70
+minutes: 15
+module: Your project environment
+summary: "Get the course code, install NumPy, Matplotlib, Pillow, tqdm, python-chess and Jupyter from code/requirements.txt in one command, then run verify_setup.py and read every line of its output."
+hatnote: "Using Colab? Only python-chess is missing there; see \"No install? Use Google Colab\"."
+prerequisites: []
+tools: [pip, requirements.txt]
+outcomes:
+  - Install NumPy, Matplotlib, Jupyter, tqdm, Pillow and chess from requirements.txt
+  - Run verify_setup.py and read every line of its output
+  - Know why the package is called chess, not python-chess
+build: A verified environment that prints "All checks passed."
+reviewed: 2026-11-25
+seeAlso: [setup-install-pytorch, setup-troubleshooting]
+sources:
+  - id: pypi-numpy
+    title: numpy on PyPI
+    publisher: Python Package Index
+    url: https://pypi.org/project/numpy/
+    accessed: 2026-11-24
+    type: docs
+  - id: pypi-matplotlib
+    title: matplotlib on PyPI
+    publisher: Python Package Index
+    url: https://pypi.org/project/matplotlib/
+    accessed: 2026-11-25
+    type: docs
+  - id: pypi-chess
+    title: chess on PyPI
+    publisher: Python Package Index
+    url: https://pypi.org/project/chess/
+    accessed: 2026-11-24
+    type: docs
+  - id: pypi-python-chess
+    title: python-chess on PyPI (redirect package)
+    publisher: Python Package Index
+    url: https://pypi.org/project/python-chess/
+    accessed: 2026-11-24
+    type: docs
+  - id: jupyter-install
+    title: Installing Jupyter
+    publisher: Project Jupyter
+    url: https://jupyter.org/install
+    accessed: 2026-11-24
+    type: docs
+  - id: numpy-install
+    title: Installing NumPy
+    publisher: NumPy
+    url: https://numpy.org/install/
+    accessed: 2026-11-24
+    type: docs
+  - id: pip-requirements
+    title: "pip User Guide: Requirements files"
+    publisher: Python Packaging Authority
+    url: https://pip.pypa.io/en/stable/user_guide/#requirements-files
+    accessed: 2026-11-25
+    type: docs
+  - id: vscode-jupyter
+    title: Jupyter Notebooks in VS Code
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/datascience/jupyter-notebooks
+    accessed: 2026-11-24
+    type: docs
+  - id: gh-download-zip
+    title: Downloading source code archives
+    publisher: GitHub Docs
+    url: https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives
+    accessed: 2026-11-25
+    type: docs
+exercises:
+  - id: libs-chess-name
+    type: mcq
+    difficulty: easy
+    title: The chess package name
+    prompt: "Which command installs the python-chess library used by the chess project?"
+    options: ["python -m pip install python-chess", "python -m pip install chess", "python -m pip install pychess", "python -m pip install stockfish"]
+    answer: 1
+    explanation: "The library is published on PyPI as **chess** and imported with `import chess`. The old name `python-chess` now only points to `chess`, so the course installs `chess` directly."
+  - id: libs-read-output
+    type: short
+    difficulty: medium
+    title: Read the verify output
+    prompt: "verify_setup.py prints `torchvision  : MISSING` and ends with `Not ready yet. Fix: torchvision`. What do you run?"
+    answer: ["python -m pip install torchvision --index-url https://download.pytorch.org/whl/cpu", "python -m pip install -r code/requirements.txt"]
+    explanation: "Install the missing package into the active `.venv`, then run the script again. Re-running the requirements file is also fine: pip skips what is already installed."
+---
+
+PyTorch handles the neural networks; a handful of other libraries handle arrays, plots, images, progress bars, chess rules and notebooks. A **requirements file** lists them all, so <Term slug="pip" /> can install everything with one command.<Cite id="pip-requirements" /> A short script then checks every piece and prints *"All checks passed."*
+
+## Step 1. Get the course code
+
+The companion code, including `code/requirements.txt` and `code/setup/verify_setup.py`, lives in the course's GitHub repository.
+
+1. Open [github.com/gabrielebolognese/ai-knowledge](https://github.com/gabrielebolognese/ai-knowledge).
+2. Click the green **Code** button, then **Download ZIP**.<Cite id="gh-download-zip" />
+3. Unzip it and copy the **`code`** folder into your course folder, so you have `C:\dev\ai-knowledge\code\requirements.txt` (macOS/Linux: `~/dev/ai-knowledge/code/requirements.txt`).
+
+Prefer Git? The [troubleshooting lesson](/course/setup/setup-troubleshooting/) shows how to clone the repository instead. No download possible? Create `code\requirements.txt` yourself and paste in the file shown in Step 2.
+
+## Step 2. What gets installed
+
+<CodeFile path="code/requirements.txt" lines="17-26" title="code/requirements.txt (the package list)" />
+
+| Package | What it does in the course |
+|---|---|
+| **numpy** | Fast arrays; every model starts as NumPy maths.<Cite id="numpy-install" /> |
+| **matplotlib** | Plots: loss curves, image grids, confusion matrices.<Cite id="pypi-matplotlib" /> |
+| **pillow** | Opens and resizes images, such as your own handwritten digits |
+| **tqdm** | Progress bars while training |
+| **chess** | The *python-chess* library: board, legal moves, FEN, UCI |
+| **zstandard** | Reads the compressed Lichess file in the chess project |
+| **jupyterlab**, **ipykernel** | <Term slug="jupyter-notebook">Notebooks</Term> in the browser and in VS Code |
+
+NumPy 2.5 needs Python 3.12 or newer, one more reason the course recommends 3.14.<Cite id="pypi-numpy" />
+
+<Callout type="note">
+**Why `chess` and not `python-chess`?** The library's PyPI name is **chess** (version 1.11.2), imported as `import chess`.<Cite id="pypi-chess" /> The name `python-chess` still exists on PyPI, but only as a placeholder release that installs `chess`.<Cite id="pypi-python-chess" />
+</Callout>
+
+## Step 3. Install them
+
+Make sure the prompt starts with `(.venv)`, that you are in the course folder, and that PyTorch is installed (lesson 6). Then:
+
+```text
+python -m pip install -r code/requirements.txt
+```
+
+On Windows `code\requirements.txt` works too. pip downloads each package and its dependencies; this takes one to three minutes. Packages already installed, such as torch, are skipped.<Cite id="pip-requirements" />
+
+**Verify it worked:** the last line starts with `Successfully installed` and lists `chess-1.11.2`, `matplotlib-…`, `jupyterlab-…` and others. No line starts with `ERROR`.
+
+<Figure src="/screenshots/setup/ill-pip-install.svg" alt="Illustration of PowerShell running python -m pip install -r code\requirements.txt and ending with Successfully installed chess, jupyterlab, matplotlib, numpy" caption="Illustration: (1) the install command, (2) the final 'Successfully installed' line. Versions and lines will differ." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://pip.pypa.io/en/stable/user_guide/#requirements-files" />
+
+<Callout type="tip">
+Seen *"Defaulting to user installation because normal site-packages is not writeable"* or *"externally-managed-environment"*? The environment is not active. Run the activate command from lesson 5 and try again.
+</Callout>
+
+## Step 4. Run the verification script
+
+```text
+python code/setup/verify_setup.py
+```
+
+The script imports every package, prints its version, creates a small tensor and checks for a GPU:
+
+<CodeFile path="code/setup/verify_setup.py" lines="17-53" highlight="46-53" title="code/setup/verify_setup.py (the checks)" />
+
+**Expected output** on a Windows laptop with the CPU build (versions may be newer):
+
+```text
+Python       : 3.14.10 Windows-11-10.0.26200-SP0
+numpy        : 2.5.5
+matplotlib   : 3.11.2
+pillow       : 13.0.0
+tqdm         : 4.70.1
+python-chess : 1.11.2
+torch        : 2.15.0+cpu
+torchvision  : 0.29.2+cpu
+CUDA GPU     : False  (normal on a CPU install)
+Apple MPS    : False
+tensor OK    : (5, 3)
+venv active  : True  (C:\dev\ai-knowledge\.venv)
+All checks passed.
+```
+
+<Figure src="/screenshots/setup/ill-verify-output.svg" alt="Illustration of PowerShell showing verify_setup.py output with the Python line, CUDA GPU False marked as normal, and All checks passed highlighted" caption="Illustration: (1) your Python version, (2) CUDA False is normal on CPU, (3) the success line. Versions will differ." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://pytorch.org/get-started/locally/" />
+
+### Reading each line
+
+- **Python**: should be 3.11 or newer. The script stops with a message if not.
+- **MISSING** next to a package: install it into the active environment (the line says how).
+- **CUDA GPU : False**: correct for a CPU install. `True` plus your card's name means a working CUDA build.
+- **Apple MPS : True** on an Apple-silicon Mac means the Apple GPU is available.
+- **venv active : False**: you are using the system Python. Activate `.venv` and run again.
+
+<Analogy breaks="A pre-flight checklist is done by a person; this script checks itself, but only what it was written to check.">
+The script is a pre-flight checklist: each line is one instrument, and *"All checks passed."* is clearance for take-off.
+</Analogy>
+
+## Step 5 (optional). Try a notebook
+
+In VS Code, **File → New File… → Jupyter Notebook**. Click **Select Kernel** at the top right, choose **Python Environments…**, then your `.venv`.<Cite id="vscode-jupyter" /> Type `import torch; torch.rand(2, 2)` in the first cell and press **Shift+Enter**: a 2 × 2 tensor appears under the cell. Prefer the browser? Run `python -m jupyter lab`.<Cite id="jupyter-install" />
+
+<Exercise id="libs-chess-name" />
+
+## Summary
+
+- Download the course code (**Code → Download ZIP**) and put the `code` folder in your course folder.
+- In `(.venv)`: `python -m pip install -r code/requirements.txt`.
+- Install **`chess`**, not `python-chess`.
+- `python code/setup/verify_setup.py` must end with **All checks passed.**

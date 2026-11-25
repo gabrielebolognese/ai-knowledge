@@ -1,0 +1,188 @@
+---
+title: Install VS Code with the Python and Jupyter extensions
+slug: setup-vscode
+track: setup
+level: beginner
+order: 40
+minutes: 15
+module: Install Python and an editor
+summary: Download Visual Studio Code for your system, keep "Add to PATH" ticked, install Microsoft's Python and Jupyter extensions from the verified publisher, and run a one-line Python file.
+hatnote: "Prefer another editor (PyCharm, Vim, Zed)? Any editor works; skip to \"Create a project folder and a virtual environment\"."
+prerequisites: []
+tools: [Visual Studio Code, Python extension, Jupyter extension]
+outcomes:
+  - Download and install VS Code for your OS
+  - Install the Microsoft Python and Jupyter extensions and recognise the verified publisher
+  - Open a folder and run a one-line Python file
+build: A hello.py that runs inside VS Code
+reviewed: 2026-11-25
+seeAlso: [setup-install-python, setup-virtual-environment]
+sources:
+  - id: vscode-download
+    title: Download Visual Studio Code
+    publisher: Microsoft
+    url: https://code.visualstudio.com/download
+    accessed: 2026-11-25
+    type: docs
+  - id: vscode-windows
+    title: Visual Studio Code on Windows
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/setup/windows
+    accessed: 2026-11-24
+    type: docs
+  - id: mkt-python
+    title: Python extension for Visual Studio Code
+    publisher: Microsoft (Visual Studio Marketplace)
+    url: https://marketplace.visualstudio.com/items?itemName=ms-python.python
+    accessed: 2026-11-25
+    type: docs
+  - id: mkt-jupyter
+    title: Jupyter extension for Visual Studio Code
+    publisher: Microsoft (Visual Studio Marketplace)
+    url: https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter
+    accessed: 2026-11-25
+    type: docs
+  - id: vscode-python-quickstart
+    title: Quick Start Guide for Python in VS Code
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/python/python-quick-start
+    accessed: 2026-11-24
+    type: docs
+  - id: vscode-mac
+    title: Visual Studio Code on macOS
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/setup/mac
+    accessed: 2026-11-24
+    type: docs
+  - id: vscode-linux
+    title: Visual Studio Code on Linux
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/setup/linux
+    accessed: 2026-11-24
+    type: docs
+  - id: vscode-trust
+    title: Workspace Trust
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/editing/workspaces/workspace-trust
+    accessed: 2026-11-25
+    type: docs
+  - id: vscode-publisher-trust
+    title: "Extension runtime security: publisher trust"
+    publisher: Microsoft
+    url: https://code.visualstudio.com/docs/configure/extensions/extension-runtime-security
+    accessed: 2026-11-25
+    type: docs
+exercises:
+  - id: vscode-right-extension
+    type: mcq
+    difficulty: easy
+    title: Pick the right extension
+    prompt: "Searching the Extensions view for \"Python\" shows several results. Which one should you install?"
+    options: ["The one with the most stars, whoever published it", "Python, published by Microsoft with the verified-publisher check mark (ID ms-python.python)", "Any extension whose name contains Python", "None; VS Code runs Python without extensions"]
+    answer: 1
+    explanation: "The official extension is **ms-python.python** by **Microsoft**, shown with a blue verified check mark. Copycat extensions with similar names exist, so checking the publisher matters."
+  - id: vscode-why-path
+    type: reveal
+    difficulty: medium
+    title: Why keep "Add to PATH"?
+    prompt: "What would stop working if you unticked **Add to PATH** in the Windows installer?"
+    answer: "Typing code . (or code --install-extension …) in a terminal would fail with 'not recognized', because the terminal could not find the code command."
+    explanation: "PATH is the list of folders a terminal searches for commands. VS Code itself would still open from the Start menu; only the `code` command in terminals would be missing."
+---
+
+**Visual Studio Code** (VS Code) is a free code editor from Microsoft. With two extensions, **Python** and **Jupyter**, it can edit and run Python files and notebooks, show errors as you type, and switch between virtual environments.<Cite id="vscode-python-quickstart" /> The course uses it in every screenshot, but any editor works.
+
+## Step 1. Download VS Code
+
+Open [code.visualstudio.com/download](https://code.visualstudio.com/download). The page shows one card per operating system.<Cite id="vscode-download" />
+
+### Windows
+
+Click the blue **Download** button under **Windows** (labelled *x64 · User Installer*). On an ARM laptop, click **Arm64** under *Other builds*.
+
+<Screenshot src="/screenshots/setup/vscode-download-windows.png" alt="VS Code download page with the Windows 'Download, x64 User Installer' button outlined" caption="code.visualstudio.com/download, Windows card." source="https://code.visualstudio.com/download" taken="2026-11-25" pins={[{ label: 'Click **Download** under **Windows** (x64 · User Installer). The *User* installer needs no administrator rights.' }]} />
+
+### macOS
+
+Click **Download** under **macOS** (*Universal · .dmg*), which runs on both Apple-silicon and Intel Macs.
+
+<Screenshot src="/screenshots/setup/vscode-download-mac.png" alt="VS Code download page with the macOS 'Download, Universal .dmg' button outlined" caption="code.visualstudio.com/download, macOS card." source="https://code.visualstudio.com/download" taken="2026-11-25" pins={[{ label: 'Click **Download** under **macOS** (Universal · .dmg).' }]} />
+
+### Linux
+
+Click **Download** under **Linux** for the **.deb** (Debian, Ubuntu), or click **.rpm** under *Other builds* (Fedora, RHEL).
+
+<Screenshot src="/screenshots/setup/vscode-download-linux.png" alt="VS Code download page with the Linux .deb download button and the .rpm link outlined" caption="code.visualstudio.com/download, Linux card." source="https://code.visualstudio.com/download" taken="2026-11-25" pins={[{ label: 'Ubuntu or Debian: click **Download** (x64 · .deb).' }, { label: 'Fedora or RHEL: click **.rpm**.' }]} />
+
+## Step 2. Install it
+
+### Windows
+
+1. Run the downloaded `VSCodeUserSetup-x64-….exe`.
+2. Select **I accept the agreement**, then **Next**.
+3. On **Select Additional Tasks**, keep **Add to PATH (requires shell restart)** ticked. It is on by default; Microsoft's setup guide says to check it.<Cite id="vscode-windows" /> Optionally tick the two **Add "Open with Code" action** boxes.
+4. Click **Next**, then **Install**, then **Finish** with **Launch Visual Studio Code** ticked.
+
+<Figure src="/screenshots/setup/ill-vscode-setup-tasks.svg" alt="Illustration of the VS Code installer's Select Additional Tasks page with 'Add to PATH (requires shell restart)' ticked and outlined, and the Next button outlined" caption="Illustration of the installer: (1) keep Add to PATH ticked, (2) click Next. Simplified drawing; your installer may differ slightly." credit="Own work (illustration)" license="CC BY 4.0" licenseUrl="https://creativecommons.org/licenses/by/4.0/" sourceUrl="https://code.visualstudio.com/docs/setup/windows" />
+
+### macOS
+
+Open the downloaded `.dmg` and drag **Visual Studio Code** into **Applications**. Open it from Launchpad; if macOS asks whether to open an app downloaded from the internet, click **Open**.<Cite id="vscode-mac" /> To get the `code` command, press **⌘⇧P**, type **Shell Command: Install 'code' command in PATH**, and press Return.<Cite id="vscode-mac" />
+
+### Linux
+
+In a terminal, in your Downloads folder: `sudo apt install ./code_*.deb` (Debian/Ubuntu) or `sudo dnf install ./code-*.rpm` (Fedora). Installing the `.deb` also adds Microsoft's package repository so VS Code updates with the rest of the system.<Cite id="vscode-linux" />
+
+**Verify it worked:** open a **new** terminal and run `code --version`. Expected: a version number such as `1.147.0` followed by two more lines.
+
+## Step 3. Install the Python and Jupyter extensions
+
+1. In VS Code, click the **Extensions** icon in the left bar (four squares) or press **Ctrl+Shift+X** (**⌘⇧X** on macOS).
+2. Type `Python`. Click the result named **Python** whose publisher is **Microsoft**, then **Install**. It also installs Pylance and the Python Debugger.<Cite id="mkt-python" />
+3. Type `Jupyter`. Install **Jupyter** by **Microsoft**.<Cite id="mkt-jupyter" />
+
+You can also click **Install** on the Marketplace pages; the browser then asks to open VS Code.
+
+<Screenshot src="/screenshots/setup/marketplace-python-extension.png" alt="Visual Studio Marketplace page for the Python extension with the publisher name Microsoft and the Install button outlined" caption="The official Python extension on the Visual Studio Marketplace. Note the blue verified check mark next to Microsoft and about 247 million installs." source="https://marketplace.visualstudio.com/items?itemName=ms-python.python" taken="2026-11-25" pins={[{ label: 'Check the publisher: **Microsoft** with the blue verified check mark.' }, { label: 'Click **Install**.' }]} />
+
+<Screenshot src="/screenshots/setup/marketplace-jupyter-extension.png" alt="Visual Studio Marketplace page for the Jupyter extension with the publisher Microsoft and the Install button outlined" caption="The official Jupyter extension (ID ms-toolsai.jupyter)." source="https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter" taken="2026-11-25" pins={[{ label: 'Publisher: **Microsoft**, verified.' }, { label: 'Click **Install**.' }]} />
+
+<Callout type="warning">
+Extensions can run code on your computer. Install only from verified publishers you recognise; the blue check mark means the Marketplace has verified that the publisher owns its domain.<Cite id="vscode-publisher-trust" />
+</Callout>
+
+**Terminal shortcut** (works because of Add to PATH):
+
+```text
+code --install-extension ms-python.python
+code --install-extension ms-toolsai.jupyter
+```
+
+**Verify it worked:** `code --list-extensions` lists `ms-python.python` and `ms-toolsai.jupyter`.
+
+<Exercise id="vscode-right-extension" />
+
+## Step 4. Run a one-line Python file
+
+1. Make a folder for the course, for example `C:\dev\ai-knowledge` (Windows) or `~/dev/ai-knowledge` (macOS, Linux). Keep it **outside OneDrive or iCloud**; lesson 5 explains why.
+2. In VS Code choose **File → Open Folder…** and pick it. If asked **Do you trust the authors of the files in this folder?**, click **Yes, I trust the authors**: it is your own folder.<Cite id="vscode-trust" />
+3. **File → New File…**, name it `hello.py`, and type:
+
+```python
+print("Hello from Python")
+```
+
+4. Click the **▷ Run Python File** button at the top right of the editor.<Cite id="vscode-python-quickstart" />
+
+**Verify it worked:** the terminal panel at the bottom prints `Hello from Python`.
+
+<Analogy breaks="A workbench is passive; VS Code also checks your code as you type and underlines mistakes.">
+VS Code is the workbench: Python does the work, but the bench is where you lay out the parts, see them clearly and keep the tools within reach.
+</Analogy>
+
+## Summary
+
+- Download from [code.visualstudio.com/download](https://code.visualstudio.com/download): Windows **User Installer x64**, macOS **Universal**, Linux **.deb**/**.rpm**.
+- On Windows keep **Add to PATH** ticked so `code` works in terminals.
+- Install **Python** (`ms-python.python`) and **Jupyter** (`ms-toolsai.jupyter`), both by **Microsoft**, verified.
+- Open a folder outside OneDrive, trust it, and run `hello.py` with **▷**.

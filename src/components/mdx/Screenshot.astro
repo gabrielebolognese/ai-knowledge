@@ -7,8 +7,10 @@
  *     caption="The Python downloads page" source="https://www.python.org/downloads/" taken="2026-11-24"
  *     pins={[{ x: 22, y: 41, label: 'Click **Download Python 3.x**' }]} />
  * x / y are percentages of the image width / height. Labels accept **bold** and `code`.
+ * Omit x / y when the numbered badges are already drawn into the image (the setup captures from
+ * scripts/capture-setup-screenshots.mjs do this): the numbered list is still rendered underneath.
  */
-interface Pin { x: number; y: number; label: string; }
+interface Pin { x?: number; y?: number; label: string; }
 interface Props { src: string; alt: string; caption: string; pins?: Pin[]; source?: string; taken?: string; }
 const { src, alt, caption, pins = [], source, taken } = Astro.props;
 const md = (s: string) =>
@@ -18,7 +20,7 @@ const host = source ? source.replace(/^https?:\/\//, '').replace(/\/$/, '') : ''
 <figure class="figure screenshot">
   <div class="screenshot__frame">
     <img src={src} alt={alt} loading="lazy" />
-    {pins.map((p, i) => (
+    {pins.map((p, i) => (typeof p.x === 'number' && typeof p.y === 'number') && (
       <span class="screenshot__pin" style={`left:${p.x}%;top:${p.y}%`} aria-hidden="true">{i + 1}</span>
     ))}
   </div>

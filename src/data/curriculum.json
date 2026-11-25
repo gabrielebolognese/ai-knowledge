@@ -127,7 +127,7 @@
           "lessons": [
             {
               "slug": "setup-overview",
-              "title": "Before you start: what we install and why",
+              "title": "Choose your path: skip setup, use Colab or install locally",
               "track": "setup",
               "module": "Get ready",
               "level": "beginner",
@@ -508,7 +508,7 @@
                 ]
               },
               "codeFiles": [
-                "code/setup/requirements.txt",
+                "code/requirements.txt",
                 "code/setup/verify_setup.py"
               ],
               "screenshots": [
